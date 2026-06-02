@@ -8,6 +8,7 @@ import {
   FlatList,
   Image,
   Animated,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -19,43 +20,22 @@ import { StaggeredListWrapper } from '../../constants/motion/StaggeredListWrappe
 import { SectionHeader } from '../../components/ui/SectionHeader'; 
 import { SectionTitle } from '../../components/ui/SectionTitle';
 
+// Supabase client instance integration
+import { supabase } from '../../lib/supabase';
+
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 44) / 2;
 
-const GARMENTS_DATA = [
-  {
-    id: '1',
-    name: 'White Linen Shirt',
-    category: 'Tops',
-    brand: 'Zara',
-    color: '#FFFFFF',
-    image: 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=300&h=400&fit=crop',
-  },
-  {
-    id: '2',
-    name: 'Blue Denim Jeans',
-    category: 'Bottoms',
-    brand: "Levi's",
-    color: '#0000FF',
-    image: 'https://images.unsplash.com/photo-1542272604-787c3835535d?w=300&h=400&fit=crop',
-  },
-  {
-    id: '3',
-    name: 'Black Blazer',
-    category: 'Tops',
-    brand: 'H&M',
-    color: '#000000',
-    image: 'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=300&h=400&fit=crop',
-  },
-  {
-    id: '4',
-    name: 'Summer Dress',
-    category: 'Dresses',
-    brand: 'Mango',
-    color: '#FF3366',
-    image: 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=300&h=400&fit=crop',
-  },
-];
+// Explicit TypeScript type definition mapped directly from our Supabase Database Schema
+interface ClothingItem {
+  id: string;
+  name: string;
+  category: string;
+  brand: string;
+  color: string;
+  image_url: string; // Adapted schema field matching remote postgres column naming
+  created_at?: string;
+}
 
 const CATEGORIES = [
   { id: 'All', label: 'All', icon: 'shopping' },
@@ -67,6 +47,11 @@ const CATEGORIES = [
 export default function ClosetScreen() {
   const [activeCategory, setActiveCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Async data layer state primitives
+  const [garments, setGarments] = useState<ClothingItem[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Top header elements animation tokens
   const entryHeaderOpacity = useRef(new Animated.Value(0)).current;
@@ -82,11 +67,43 @@ export default function ClosetScreen() {
   const emptyScaleAnim = useRef(new Animated.Value(0.95)).current;
   const emptyOpacityAnim = useRef(new Animated.Value(0)).current;
 
-  // Dynamic search and filter processing mapping
-  const filteredGarments = GARMENTS_DATA.filter((garment) => {
+  // Optimized async worker querying remote Supabase Postgres DB engine
+  const loadGarments = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const { data, error: supabaseError } = await supabase
+        .from('clothing_items')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (supabaseError) {
+        throw supabaseError;
+      }
+
+      if (data) {
+        setGarments(data as ClothingItem[]);
+      }
+    } catch (err: any) {
+      console.error('Error fetching garments from Supabase:', err);
+      setError(err.message || 'An error occurred while loading your closet.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Lifecycle initialization hook pulling down production database items
+  useEffect(() => {
+    loadGarments();
+  }, []);
+
+  // Dynamic search and filter processing mapping computed against runtime state array
+  const filteredGarments = garments.filter((garment) => {
     const matchesCategory = activeCategory === 'All' || garment.category === activeCategory;
-    const matchesQuery = garment.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                         garment.brand.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesQuery = 
+      (garment.name?.toLowerCase().includes(searchQuery.toLowerCase()) || false) || 
+      (garment.brand?.toLowerCase().includes(searchQuery.toLowerCase()) || false);
     return matchesCategory && matchesQuery;
   });
 
@@ -110,7 +127,8 @@ export default function ClosetScreen() {
 
   // Trigger smooth arrival metrics when empty configuration states map true
   useEffect(() => {
-    if (filteredGarments.length === 0) {
+    // Only execute structural empty states if loading is clean
+    if (!isLoading && filteredGarments.length === 0) {
       Animated.parallel([
         Animated.timing(emptyOpacityAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
         Animated.spring(emptyScaleAnim, { toValue: 1, tension: 25, friction: 7, useNativeDriver: true }),
@@ -119,9 +137,9 @@ export default function ClosetScreen() {
       emptyOpacityAnim.setValue(0);
       emptyScaleAnim.setValue(0.95);
     }
-  }, [filteredGarments.length]);
+  }, [filteredGarments.length, isLoading]);
 
-  const renderItem = ({ item, index }: { item: typeof GARMENTS_DATA[0]; index: number }) => (
+  const renderItem = ({ item, index }: { item: ClothingItem; index: number }) => (
     <StaggeredListWrapper index={index}>
       <PremiumCard 
         style={styles.card}
@@ -133,15 +151,15 @@ export default function ClosetScreen() {
               name: item.name,
               brand: item.brand,
               category: item.category,
-              image: item.image,
+              image: item.image_url, // Adjusted param target safely mapped to dynamic field
               color: item.color,
             },
           })
         }
       >
         <View style={styles.imageWrapper}>
-          <Image source={{ uri: item.image }} style={styles.imageGarmentImage} />
-          <View style={[styles.colorIndicator, { backgroundColor: item.color }]} />
+          <Image source={{ uri: item.image_url }} style={styles.imageGarmentImage} />
+          <View style={[styles.colorIndicator, { backgroundColor: item.color || '#CCCCCC' }]} />
         </View>
 
         <View style={styles.cardInfo}>
@@ -171,7 +189,6 @@ export default function ClosetScreen() {
         columnWrapperStyle={styles.gridRow}
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
-        // Forces re-stagger layout recalculation gracefully when structural categories flip
         extraData={activeCategory} 
         ListHeaderComponent={
           <View style={styles.headerStack}>
@@ -182,7 +199,7 @@ export default function ClosetScreen() {
             ]}>
               <SectionHeader 
                 title="My Closet" 
-                subtitle={`${GARMENTS_DATA.length} items catalogued`}
+                subtitle={isLoading ? "Loading closet..." : `${garments.length} items catalogued`}
                 style={styles.headerFlexOverride}
               />
               <PremiumTouchable style={styles.actionAddButton} onPress={() => console.log('Add Item')}>
@@ -251,18 +268,33 @@ export default function ClosetScreen() {
           </View>
         }
         ListEmptyComponent={
-          <Animated.View style={[
-            styles.emptyStateContainer, 
-            { opacity: emptyOpacityAnim, transform: [{ scale: emptyScaleAnim }] }
-          ]}>
-            <View style={styles.emptyIconCircle}>
-              <MaterialCommunityIcons name="hanger" size={28} color="#78716C" />
+          isLoading ? (
+            <View style={styles.centeredStateFrame}>
+              <ActivityIndicator size="small" color="#1C1917" />
             </View>
-            <Text style={styles.emptyStateTitle}>No pieces match</Text>
-            <Text style={styles.emptyStateSubtitle}>
-              Try re-adjusting your active text queries or structural tags.
-            </Text>
-          </Animated.View>
+          ) : error ? (
+            <View style={styles.centeredStateFrame}>
+              <MaterialCommunityIcons name="alert-circle-outline" size={32} color="#EF4444" style={styles.errorIcon} />
+              <Text style={styles.errorTextHeading}>Failed to load items</Text>
+              <Text style={styles.errorTextSubtitle}>{error}</Text>
+              <PremiumTouchable style={styles.retryButton} onPress={loadGarments}>
+                <Text style={styles.retryButtonText}>Retry Connection</Text>
+              </PremiumTouchable>
+            </View>
+          ) : (
+            <Animated.View style={[
+              styles.emptyStateContainer, 
+              { opacity: emptyOpacityAnim, transform: [{ scale: emptyScaleAnim }] }
+            ]}>
+              <View style={styles.emptyIconCircle}>
+                <MaterialCommunityIcons name="hanger" size={28} color="#78716C" />
+              </View>
+              <Text style={styles.emptyStateTitle}>No pieces match</Text>
+              <Text style={styles.emptyStateSubtitle}>
+                Try re-adjusting your active text queries or structural tags.
+              </Text>
+            </Animated.View>
+          )
         }
       />
     </PremiumScreen>
@@ -457,5 +489,38 @@ const styles = StyleSheet.create({
     color: '#78716C',
     textAlign: 'center',
     lineHeight: 18,
+  },
+  centeredStateFrame: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 80,
+    paddingHorizontal: 32,
+  },
+  errorIcon: {
+    marginBottom: 12,
+  },
+  errorTextHeading: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1C1917',
+    marginBottom: 4,
+  },
+  errorTextSubtitle: {
+    fontSize: 13,
+    color: '#78716C',
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 18,
+  },
+  retryButton: {
+    backgroundColor: '#1C1917',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  retryButtonText: {
+    color: '#FAFAF9',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });
