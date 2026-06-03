@@ -3,14 +3,13 @@ import {
   StyleSheet,
   Text,
   View,
-  TextInput,
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Link, router } from 'expo-router';
+import { useRouter } from 'expo-router';
 import VyraLogo from '../../components/branding/VyraLogo';
 import { PremiumButton } from '../../components/ui/PremiumButton'; 
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
@@ -19,21 +18,59 @@ import { SectionHeader } from '../../components/ui/SectionHeader';
 import { SectionTitle } from '../../components/ui/SectionTitle';
 import { PremiumLoader } from '../../components/ui/PremiumLoader';
 
+import { supabase } from '../../lib/supabase';
+
 export default function LoginScreen() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSignIn = () => {
+  // Validate basic form input before network processing
+  const validateForm = (): boolean => {
+    if (!email.trim() || !password.trim()) {
+      Alert.alert('Validation Error', 'Please fill in all security fields.');
+      return false;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      Alert.alert('Invalid Email', 'Please enter a valid email address structure.');
+      return false;
+    }
+    return true;
+  };
+
+  const handleSignIn = async () => {
     if (isLoading) return;
+    if (!validateForm()) return;
     
     setIsLoading(true);
+    console.log(`[Auth Login] Attempting credentials pass for identifier: ${email.trim().toLowerCase()}`);
     
-    // Simulate authentication timing before navigating
-    setTimeout(() => {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password: password,
+      });
+
+      if (error) throw error;
+
+      if (data?.user) {
+        console.log('[Auth Login] Sign-In successful. Routing user session onto primary dashboard layout.');
+        router.replace('/(tabs)/home');
+      }
+    } catch (error: any) {
+      console.error('[Auth Login] Supabase authentication server error response:', error);
+      Alert.alert('Authentication Failed', error.message || 'Invalid email or password combination.');
+    } finally {
       setIsLoading(false);
-      router.replace('/(tabs)/home');
-    }, 2000);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    if (isLoading) return;
+    console.log('[Auth OAuth] Initializing Google identity token request pipeline.');
+    Alert.alert('Google Auth', 'Third-party single sign-on services can be integrated via Native Credentials here.');
   };
 
   return (
@@ -67,6 +104,7 @@ export default function LoginScreen() {
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
+              autoCapitalize="none"
               editable={!isLoading}
             />
 
@@ -76,6 +114,7 @@ export default function LoginScreen() {
               value={password}
               onChangeText={setPassword}
               secureTextEntry
+              autoCapitalize="none"
               editable={!isLoading}
             />
             
@@ -100,7 +139,7 @@ export default function LoginScreen() {
           <TouchableOpacity 
             style={[styles.googleButton, isLoading && styles.disabledElement]} 
             activeOpacity={0.8}
-            onPress={handleSignIn}
+            onPress={handleGoogleSignIn}
             disabled={isLoading}
           >
             <View style={styles.googleContent}>
@@ -114,11 +153,13 @@ export default function LoginScreen() {
           {/* Footer Section */}
           <View style={[styles.footerContainer, isLoading && styles.disabledElement]}>
             <Text style={styles.footerText}>Don't have an account? </Text>
-            <Link href="/auth/signup" asChild disabled={isLoading}>
-              <TouchableOpacity activeOpacity={0.7} disabled={isLoading}>
-                <Text style={styles.signUpText}>Sign up</Text>
-              </TouchableOpacity>
-            </Link>
+            <TouchableOpacity 
+              activeOpacity={0.7} 
+              onPress={() => !isLoading && router.push('/auth/register')}
+              disabled={isLoading}
+            >
+              <Text style={styles.signUpText}>Sign up</Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -127,10 +168,6 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FAFAFA',
-  },
   keyboardView: {
     flex: 1,
   },
@@ -165,24 +202,9 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   loaderButtonPlaceholder: {
-    height: 52, // Explicitly balances the exact spatial height footprint of PremiumButton
+    height: 52,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#000000',
-    marginBottom: 8,
-    marginTop: 16,
-  },
-  input: {
-    height: 52,
-    backgroundColor: '#F5F5F5',
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    fontSize: 15,
-    color: '#000000',
   },
   dividerContainer: {
     flexDirection: 'row',

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,158 +8,395 @@ import {
   Image,
   Switch,
   Dimensions,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { SectionTitle } from '../../components/ui/SectionTitle';
 
+// Supabase client instance integration
+import { supabase } from '../../lib/supabase';
+
 const { width } = Dimensions.get('window');
 
-// Mock data strictly matching the schema and text metrics of the Figma model export
-const STATS = [
-  { id: 1, label: 'Garments', value: '48', icon: 'hanger' },
-  { id: 2, label: 'Outfits', value: '23', icon: 'sparkles' },
-  { id: 3, label: 'This Week', value: '7', icon: 'calendar-blank' },
-];
+interface UserProfileState {
+  id: string;
+  username: string | null;
+  avatar_url: string | null;
+  birth_date: string | null;
+  gender: string | null;
+  created_at: string | null;
+  email: string;
+}
 
-const STYLE_PREFERENCES = ['Minimalist', 'Casual', 'Elegant', 'Street Style'];
-
+// Fixed: Defined the missing static menu architecture constant
 const MENU_SECTIONS = [
-  {
-    title: 'Preferences',
-    items: [
-      { id: 1, label: 'Style Quiz', icon: 'sparkles', type: 'chevron' },
-      { id: 2, label: 'Notifications', icon: 'bell-outline', type: 'chevron' },
-      { id: 3, label: 'Dark Mode', icon: 'moon-waning-crescent', type: 'toggle' },
-    ],
-  },
   {
     title: 'My Activity',
     items: [
-      { id: 4, label: 'Favorites', icon: 'heart-outline', type: 'chevron', badge: '12' },
-      { id: 5, label: 'Sharing History', icon: 'share-variant-outline', type: 'chevron' },
+      { id: 'favs', label: 'Favorites', icon: 'heart-outline', type: 'chevron', badge: '0' },
+      { id: 'history', label: 'History Log', icon: 'history', type: 'chevron' },
     ],
   },
   {
-    title: 'Support',
+    title: 'Preferences',
     items: [
-      { id: 6, label: 'Help & Feedback', icon: 'help-circle-outline', type: 'chevron' },
-      { id: 7, label: 'Log Out', icon: 'logout', type: 'action', danger: true },
+      { id: 'dark_mode', label: 'Dark Mode', icon: 'theme-light-dark', type: 'toggle' },
+      { id: 'notifications', label: 'Push Notifications', icon: 'bell-outline', type: 'chevron' },
+    ],
+  },
+  {
+    title: 'Account & Security',
+    items: [
+      { id: 'edit_prof', label: 'Edit Profile', icon: 'account-edit-outline', type: 'chevron' },
+      { id: 'logout', label: 'Log Out', icon: 'logout', type: 'action', danger: true },
     ],
   },
 ];
 
 export default function ProfileScreen() {
   const [isDarkMode, setIsDarkMode] = useState(false);
+  
+  // State variables for managing loading, error, and profile parameters
+  const [profile, setProfile] = useState<UserProfileState | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Asynchronous database aggregate metrics states
+  const [garmentsCount, setGarmentsCount] = useState<number>(0);
+  const [favoritesCount, setFavoritesCount] = useState<number>(0);
+  const [outfitsCount, setOutfitsCount] = useState<number>(0);
+  const [weeklyCount, setWeeklyCount] = useState<number>(0);
+  const [stylePreferences, setStylePreferences] = useState<string[]>([]);
+
+  const fetchActiveUserProfileAndMetrics = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      console.log('[Profile Sync] Resolving secure active authentication token...');
+
+      // 1. Fetch current authenticated identity context parameters
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+      if (authError || !user) {
+        console.error('[Profile Sync Error] User token evaluation failed or session missing:', authError);
+        setError('No active credentials verified.');
+        setIsLoading(false);
+        return;
+      }
+
+      console.log(`[Profile Sync Data] Token verification pass. User ID target resolved: ${user.id}`);
+      console.log(`[Profile Sync Data] Querying database record where public.profiles.id = ${user.id}`);
+
+      // 2. Fetch profile data from database matching user identity token coordinates
+      const { data: dbProfile, error: dbError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (dbError) {
+        console.error('[Profile Sync Database Failure] Query returned a bad schema response:', dbError);
+        throw dbError;
+      }
+
+      console.log('[Profile Sync Complete] Payload matched. Username:', dbProfile?.username);
+      
+      // Merge secure auth credentials metadata with public profiles relational record
+      setProfile({
+        id: user.id,
+        username: dbProfile?.username || 'Vyra Curator',
+        avatar_url: dbProfile?.avatar_url,
+        birth_date: dbProfile?.birth_date,
+        gender: dbProfile?.gender,
+        created_at: dbProfile?.created_at,
+        email: user.email || 'unassigned@vyra.app',
+      });
+
+      // 3. System Statistics Queries execution pipeline
+      console.log('[Statistics Async Engine] Launching parallel analytical aggregation sequences...');
+
+      // A. Calculate Total Garments Count
+      const { count: totalGarments, error: garmentsErr } = await supabase
+        .from('clothing_items')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id);
+
+      if (garmentsErr) console.error('[Stats Failure] Total garments count trace failed:', garmentsErr);
+      const stableGarmentsCount = totalGarments || 0;
+      setGarmentsCount(stableGarmentsCount);
+
+      // B. Calculate Favorites Count
+      const { count: totalFavorites, error: favoritesErr } = await supabase
+        .from('clothing_items')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('is_favorite', true);
+
+      if (favoritesErr) console.error('[Stats Failure] Favorites count trace failed:', favoritesErr);
+      setFavoritesCount(totalFavorites || 0);
+
+      // C. Calculate Items Catalogued This Week (Past 7 Days rolling)
+      const sevenDaysAgoISO = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const { count: recentGarments, error: weeklyErr } = await supabase
+        .from('clothing_items')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .gte('created_at', sevenDaysAgoISO);
+
+      if (weeklyErr) console.error('[Stats Failure] Weekly accumulation trace failed:', weeklyErr);
+      setWeeklyCount(recentGarments || 0);
+
+      // D. Outfits Aggregator Integration Hook
+      console.log('[Stats Notice] Outfits schema unavailable. Setting layout default fallback representation to: 0');
+      setOutfitsCount(0);
+
+      // E. Dynamic Style Profile Preference Chip Engine Generation
+      if (stableGarmentsCount > 0) {
+        console.log('[Style Analyzer Engine] Wardrobe entries identified. Processing tag distribution weights...');
+        const { data: garmentPool, error: poolErr } = await supabase
+          .from('clothing_items')
+          .select('category, tags')
+          .eq('user_id', user.id);
+
+        if (!poolErr && garmentPool) {
+          const contentMap: { [key: string]: number } = {};
+          
+          garmentPool.forEach(item => {
+            if (item.category) {
+              contentMap[item.category] = (contentMap[item.category] || 0) + 2; // Category weights
+            }
+            if (item.tags && Array.isArray(item.tags)) {
+              item.tags.forEach((tag: string) => {
+                contentMap[tag] = (contentMap[tag] || 0) + 1; // Explicit user tags weight
+              });
+            }
+          });
+
+          const sortedPreferences = Object.keys(contentMap)
+            .sort((a, b) => contentMap[b] - contentMap[a])
+            .slice(0, 4); // Capture topmost unique identifiers
+
+          setStylePreferences(sortedPreferences.length > 0 ? sortedPreferences : ['Wardrobe Fresh']);
+        } else {
+          setStylePreferences(['Minimalist', 'Casual']);
+        }
+      } else {
+        setStylePreferences([]);
+      }
+
+      console.log(`[Statistics Diagnostics] Complete metrics loaded: Garments: ${stableGarmentsCount}, Favorites: ${totalFavorites || 0}, Weekly: ${recentGarments || 0}, Outfits: 0`);
+
+    } catch (err: any) {
+      console.error('[Profile Processing Breakdown Exception]:', err);
+      setError(err.message || 'An unhandled exception occurred while assembling profile attributes.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchActiveUserProfileAndMetrics();
+  }, []);
+
+  const handleSystemSignOutRequest = () => {
+    console.log('[Logout Flow] User initiated sign out request confirmation sequence.');
+    Alert.alert(
+      'Log Out Account',
+      'Are you sure you want to log out of your Vyra profile session?',
+      [
+        { text: 'Cancel', style: 'cancel', onPress: () => console.log('[Logout Flow] Request cancelled by user.') },
+        { 
+          text: 'Log Out', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              console.log('[Logout Flow] Access token eviction sequence executed. Clearing cookies...');
+              const { error: logOutError } = await supabase.auth.signOut();
+              
+              if (logOutError) {
+                console.error('[Logout Flow] Supabase auth subsystem rejected signOut request:', logOutError);
+                throw logOutError;
+              }
+              
+              console.log('[Logout Flow] Eviction success. Breaking down router state. Hard redirecting view...');
+              router.replace('/auth/login');
+            } catch (err: any) {
+              console.error('[Logout Flow] Crash detected during terminal exit execution pipeline:', err);
+              Alert.alert('Session Error', 'An unexpected error occurred while processing your log-out request.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleItemNavigationTriggers = (item: any) => {
+    if (item.type === 'action' && item.label === 'Log Out') {
+      handleSystemSignOutRequest();
+    } else {
+      console.log(`Navigation link processing redirected for action item: ${item.label}`);
+    }
+  };
+
+  const resolveProfileAvatarSource = () => {
+    if (profile?.avatar_url) {
+      return { uri: profile.avatar_url };
+    }
+    const cleanLabelFallback = profile?.username || 'User';
+    return { uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(cleanLabelFallback)}&background=F5F5F4&color=1C1917&size=200` };
+  };
+
+  const DYNAMIC_STATS = [
+    { id: 1, label: 'Garments', value: String(garmentsCount), icon: 'hanger' },
+    { id: 2, label: 'Outfits', value: String(outfitsCount), icon: 'sparkles' },
+    { id: 3, label: 'This Week', value: String(weeklyCount), icon: 'calendar-blank' },
+  ];
+
+  const DYNAMIC_MENU_SECTIONS = MENU_SECTIONS.map(section => {
+    if (section.title === 'My Activity') {
+      return {
+        ...section,
+        items: section.items.map(item => 
+          item.label === 'Favorites' ? { ...item, badge: String(favoritesCount) } : item
+        )
+      };
+    }
+    return section;
+  });
 
   return (
     <PremiumScreen>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         
-        {/* Header Block Frame Layout */}
         <View style={styles.headerRow}>
           <SectionHeader 
             title="Profile" 
             style={styles.headerFlexOverride}
           />
-          <TouchableOpacity style={styles.settingsIconButton} activeOpacity={0.7}>
+          <TouchableOpacity 
+            style={styles.settingsIconButton} 
+            activeOpacity={0.7}
+            onPress={() => console.log('Settings Interaction Link Activated')}
+          >
             <Ionicons name="settings-outline" size={22} color="#1C1917" />
           </TouchableOpacity>
         </View>
 
-        {/* User Card Identity Layout Block */}
-        <View style={styles.profileHero}>
-          <Image
-            source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop' }}
-            style={styles.avatarImage}
-          />
-          <Text style={styles.profileName}>Sarah Jenkins</Text>
-          <Text style={styles.profileEmail}>sarah.jenkins@stylesync.app</Text>
-        </View>
-
-        {/* Stats Shelf Layout Framework */}
-        <View style={styles.statsRowGrid}>
-          {STATS.map((stat) => (
-            <View key={stat.id} style={styles.statMiniCard}>
-              <MaterialCommunityIcons name={stat.icon as any} size={20} color="#78716C" style={styles.statIcon} />
-              <Text style={styles.statValueText}>{stat.value}</Text>
-              <Text style={styles.statLabelText}>{stat.label}</Text>
+        {isLoading ? (
+          <View style={styles.stateCenterLoaderFrame}>
+            <ActivityIndicator size="small" color="#1C1917" />
+            <Text style={styles.loadingTypographySubtitle}>Syncing profile files...</Text>
+          </View>
+        ) : error ? (
+          <View style={styles.stateCenterLoaderFrame}>
+            <MaterialCommunityIcons name="cloud-off-outline" size={32} color="#EF4444" />
+            <Text style={styles.errorHeaderTypography}>Profile Load Fault</Text>
+            <Text style={styles.errorSubTypography}>{error}</Text>
+            <TouchableOpacity style={styles.retryControlActionButton} onPress={fetchActiveUserProfileAndMetrics}>
+              <Text style={styles.retryButtonLabelText}>Retry Connection</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <>
+            <View style={styles.profileHero}>
+              <Image
+                source={resolveProfileAvatarSource()}
+                style={styles.avatarImage}
+              />
+              <Text style={styles.profileName}>{profile?.username}</Text>
+              <Text style={styles.profileEmail}>{profile?.email}</Text>
             </View>
-          ))}
-        </View>
 
-        {/* Style Tag Preferences Layout Section */}
-        <View style={styles.sectionBlock}>
-          <SectionTitle withBottomMargin>Style Preferences</SectionTitle>
-          <View style={styles.tagsContainerRow}>
-            {STYLE_PREFERENCES.map((preference, index) => (
-              <View key={index} style={styles.preferenceTagBadge}>
-                <Text style={styles.preferenceTagText}>{preference}</Text>
+            <View style={styles.statsRowGrid}>
+              {DYNAMIC_STATS.map((stat) => (
+                <View key={stat.id} style={styles.statMiniCard}>
+                  <MaterialCommunityIcons name={stat.icon as any} size={20} color="#78716C" style={styles.statIcon} />
+                  <Text style={styles.statValueText}>{stat.value}</Text>
+                  <Text style={styles.statLabelText}>{stat.label}</Text>
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.sectionBlock}>
+              <SectionTitle withBottomMargin>Style Preferences</SectionTitle>
+              <View style={styles.tagsContainerRow}>
+                {stylePreferences.length > 0 ? (
+                  stylePreferences.map((preference, index) => (
+                    <View key={index} style={styles.preferenceTagBadge}>
+                      <Text style={styles.preferenceTagText}>{preference}</Text>
+                    </View>
+                  ))
+                ) : (
+                  <View style={styles.emptyPreferencesTagBadge}>
+                    <Text style={styles.emptyPreferencesTagText}>No style profile generated yet</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+
+            {DYNAMIC_MENU_SECTIONS.map((section, sectionIdx) => (
+              <View key={sectionIdx} style={styles.sectionBlock}>
+                <SectionTitle withBottomMargin>{section.title}</SectionTitle>
+                <View style={styles.menuGroupCard}>
+                  {section.items.map((item, itemIdx) => {
+                    const isLastItem = itemIdx === section.items.length - 1;
+                    return (
+                      <View key={item.id}>
+                        <TouchableOpacity
+                          activeOpacity={item.type === 'toggle' ? 1 : 0.7}
+                          style={styles.menuRowItem}
+                          onPress={() => handleItemNavigationTriggers(item)}
+                        >
+                          <View style={styles.menuRowLeftBlock}>
+                            <MaterialCommunityIcons
+                              name={item.icon as any}
+                              size={20}
+                              color={item.danger ? '#DC2626' : '#78716C'}
+                              style={styles.menuItemIcon}
+                            />
+                            <Text style={[styles.menuItemLabel, item.danger && styles.dangerItemLabel]}>
+                              {item.label}
+                            </Text>
+                            {item.badge && (
+                              <View style={styles.counterBadge}>
+                                <Text style={styles.counterBadgeText}>{item.badge}</Text>
+                              </View>
+                            )}
+                          </View>
+
+                          {item.type === 'toggle' && (
+                            <Switch
+                              value={isDarkMode}
+                              onValueChange={setIsDarkMode}
+                              trackColor={{ false: '#D6D3D1', true: '#1C1917' }}
+                              thumbColor="#FFFFFF"
+                              ios_backgroundColor="#D6D3D1"
+                            />
+                          )}
+
+                          {item.type === 'chevron' && (
+                            <Ionicons name="chevron-forward" size={18} color="#78716C" />
+                          )}
+                        </TouchableOpacity>
+                        {!isLastItem && <View style={styles.rowDividerSeparator} />}
+                      </View>
+                    );
+                  })}
+                </View>
               </View>
             ))}
-          </View>
-        </View>
 
-        {/* Options List Group Navigation Menus */}
-        {MENU_SECTIONS.map((section, sectionIdx) => (
-          <View key={sectionIdx} style={styles.sectionBlock}>
-            <SectionTitle withBottomMargin>{section.title}</SectionTitle>
-            <View style={styles.menuGroupCard}>
-              {section.items.map((item, itemIdx) => {
-                const isLastItem = itemIdx === section.items.length - 1;
-                return (
-                  <View key={item.id}>
-                    <TouchableOpacity
-                      activeOpacity={item.type === 'toggle' ? 1 : 0.7}
-                      style={styles.menuRowItem}
-                    >
-                      <View style={styles.menuRowLeftBlock}>
-                        <MaterialCommunityIcons
-                          name={item.icon as any}
-                          size={20}
-                          color={item.danger ? '#DC2626' : '#78716C'}
-                          style={styles.menuItemIcon}
-                        />
-                        <Text style={[styles.menuItemLabel, item.danger && styles.dangerItemLabel]}>
-                          {item.label}
-                        </Text>
-                        {item.badge && (
-                          <View style={styles.counterBadge}>
-                            <Text style={styles.counterBadgeText}>{item.badge}</Text>
-                          </View>
-                        )}
-                      </View>
-
-                      {item.type === 'toggle' && (
-                        <Switch
-                          value={isDarkMode}
-                          onValueChange={setIsDarkMode}
-                          trackColor={{ false: '#D6D3D1', true: '#1C1917' }}
-                          thumbColor="#FFFFFF"
-                          ios_backgroundColor="#D6D3D1"
-                        />
-                      )}
-
-                      {item.type === 'chevron' && (
-                        <Ionicons name="chevron-forward" size={18} color="#78716C" />
-                      )}
-                    </TouchableOpacity>
-                    {!isLastItem && <View style={styles.rowDividerSeparator} />}
-                  </View>
-                );
-              })}
+            <View style={styles.appFooterDetailsContainer}>
+              <Text style={styles.footerBrandText}>VYRA v1.0.0</Text>
+              <Text style={styles.footerSecondaryText}>Made with love for fashion lovers</Text>
             </View>
-          </View>
-        ))}
-
-        {/* Continuous App Platform Brand Footer Layout */}
-        <View style={styles.appFooterDetailsContainer}>
-          <Text style={styles.footerBrandText}>VYRA v1.0.0</Text>
-          <Text style={styles.footerSecondaryText}>Made with love for fashion lovers</Text>
-        </View>
-
+          </>
+        )}
       </ScrollView>
     </PremiumScreen>
   );
@@ -268,6 +505,14 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#1C1917',
   },
+  emptyPreferencesTagBadge: {
+    paddingVertical: 4,
+  },
+  emptyPreferencesTagText: {
+    fontSize: 13,
+    color: '#78716C',
+    fontStyle: 'italic',
+  },
   menuGroupCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
@@ -338,5 +583,42 @@ const styles = StyleSheet.create({
     color: '#78716C',
     opacity: 0.8,
     marginTop: 4,
+  },
+  stateCenterLoaderFrame: {
+    height: 300,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  loadingTypographySubtitle: {
+    fontSize: 13,
+    color: '#78716C',
+    marginTop: 12,
+    fontWeight: '400',
+  },
+  errorHeaderTypography: {
+    fontSize: 16,
+    color: '#1C1917',
+    fontWeight: '600',
+    marginTop: 14,
+    marginBottom: 4,
+  },
+  errorSubTypography: {
+    fontSize: 13,
+    color: '#78716C',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  retryControlActionButton: {
+    backgroundColor: '#1C1917',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
+  },
+  retryButtonLabelText: {
+    fontSize: 13,
+    color: '#FAFAF9',
+    fontWeight: '600',
   },
 });

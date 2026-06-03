@@ -98,65 +98,99 @@ export default function AddGarmentScreen() {
 
     try {
       setIsSaving(true);
+      console.log('[Add Garment] Starting form submission flow...');
 
-      // 1. Parse file extension and set robust fallback types
+      // 1. Fetch and verify current authenticated user session
+      console.log('[Add Garment Check] Verifying active session with Supabase Auth...');
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+      if (authError || !user) {
+        console.error('[Add Garment Failure] User identity context missing or session expired:', authError);
+        Alert.alert(
+          'Authentication Required',
+          'Your active security token has expired. Please log out and authenticate again to update your closet storage.'
+        );
+        return;
+      }
+      
+      console.log(`[Add Garment Log] Session valid. Authenticated User Identity: ${user.id}`);
+
+      // 2. Parse file extension and set robust fallback types
       const fileExtension = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
       const cleanExtension = ['jpg', 'jpeg', 'png', 'heic'].includes(fileExtension) ? fileExtension : 'jpg';
       const mimeType = cleanExtension === 'png' ? 'image/png' : 'image/jpeg';
       
       const storageFileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${cleanExtension}`;
-
-      // 2. Build standard native multi-platform FormData payload
-      const formData = new FormData();
       
-      // We append a pseudo file object mapping the file system URI directly
+      // Isolate image path inside user-specific storage directory string matching RLS constraints
+      const parameterizedStoragePath = `${user.id}/${storageFileName}`;
+      console.log(`[Add Garment Path Build] Generated secure asset target path: garments/${parameterizedStoragePath}`);
+
+      // 3. Build standard native multi-platform FormData payload
+      const formData = new FormData();
       formData.append('file', {
         uri: imageUri,
         name: storageFileName,
         type: mimeType,
       } as any);
 
-      // 3. Execute binary upload over native bridges directly to Supabase Storage
-      const { error: uploadError } = await supabase.storage
+      // 4. Execute binary upload over native bridges directly to isolated user folder
+      console.log('[Add Garment Storage Request] Dispatching file payload directly to Supabase storage bucket...');
+      const { data: uploadData, error: uploadError } = await supabase.storage
         .from('garments')
-        .upload(storageFileName, formData, {
+        .upload(parameterizedStoragePath, formData, {
           contentType: mimeType,
           upsert: false,
         });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error('[Add Garment Storage Error] Storage binary push operation failed:', uploadError);
+        throw uploadError;
+      }
+      console.log('[Add Garment Storage Response] Binary trace saved securely:', JSON.stringify(uploadData));
 
-      // 4. Extract fully accessible absolute remote bucket resource paths
+      // 5. Extract accessible absolute remote bucket resource paths
       const { data: publicUrlData } = supabase.storage
         .from('garments')
-        .getPublicUrl(storageFileName);
+        .getPublicUrl(parameterizedStoragePath);
 
       const finalStoragePublicUrl = publicUrlData.publicUrl;
+      console.log(`[Add Garment CDN Resolution] Created image endpoint resolution map: ${finalStoragePublicUrl}`);
 
-      // 5. Commit relational row attributes directly into Postgres
-      const { error: databaseInsertError } = await supabase
+      // 6. Commit relational row attributes with explicit user ownership link into Postgres
+      console.log(`[Add Garment DB Write] Transmitting relational data row targeting user row link ID: ${user.id}`);
+      const { data: databaseInsertResult, error: databaseInsertError } = await supabase
         .from('clothing_items')
         .insert([
           {
+            user_id: user.id, // Explicit binding variable enforcing data layer row ownership
             name: name.trim(),
             brand: brand.trim() || 'Unbranded',
             category: selectedCategory,
             color: selectedColor,
             image_url: finalStoragePublicUrl,
+            is_favorite: false, // Ensures default state fallback properties are explicitly set
           },
-        ]);
+        ])
+        .select();
 
-      if (databaseInsertError) throw databaseInsertError;
+      if (databaseInsertError) {
+        console.error('[Add Garment DB Error] Row creation transaction rejected by Database or RLS:', databaseInsertError);
+        throw databaseInsertError;
+      }
+      
+      console.log('[Add Garment DB Response] Successfully committed entry row parameters:', JSON.stringify(databaseInsertResult));
 
-      // 6. Route back and trigger refresh via cache breaking query strings
+      // 7. Route back and trigger refresh via cache breaking query strings
+      console.log('[Add Garment Navigation] Form processing complete. Redirecting layout focusing back to Closet context view.');
       router.replace({
         pathname: '/(tabs)/closet',
         params: { refresh: `${Date.now()}` },
       });
 
     } catch (error: any) {
-      console.error('Add Garment Flow Breakdown Error:', error);
-      Alert.alert('Transaction Failure', error.message || 'An unexpected database error occurred.');
+      console.error('[Add Garment Flow Exception] Global processing system collapse:', error);
+      Alert.alert('Transaction Failure', error.message || 'An unexpected database error occurred while registering garment profiles.');
     } finally {
       setIsSaving(false);
     }

@@ -28,6 +28,7 @@ const CARD_WIDTH = (width - 44) / 2;
 
 interface ClothingItem {
   id: string;
+  user_id: string; // Enforce local explicit interface mapping parameter
   name: string;
   category: string;
   brand: string;
@@ -74,20 +75,39 @@ export default function ClosetScreen() {
       setIsLoading(true);
       setError(null);
 
+      console.log('[Closet Context Fetch] Resolving secure active user authentication token state...');
+      
+      // Resolve identity validation via internal cryptographic token check
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+      if (authError || !user) {
+        console.error('[Closet Context Fetch Failure] Identification mapping failed or session expired:', authError);
+        setError('Your active session token expired. Please authenticate through login window again.');
+        setIsLoading(false);
+        return;
+      }
+
+      console.log(`[Closet Context Query Execution] Security validation pass. User ID target parsed: ${user.id}`);
+      console.log(`[Closet Context Query Execution] Executing explicit row criteria call targeting: clothing_items WHERE user_id = ${user.id}`);
+
+      // Query database table filtering rows exclusively mapping to current authenticated session ID
       const { data, error: supabaseError } = await supabase
         .from('clothing_items')
         .select('*')
+        .eq('user_id', user.id) // Essential filtering line isolating data rows perfectly
         .order('created_at', { ascending: false });
 
       if (supabaseError) {
+        console.error('[Closet Context Fetch Failure] Supabase engine returned query error:', supabaseError);
         throw supabaseError;
       }
 
       if (data) {
+        console.log(`[Closet Context Diagnostics] Query transaction success. Records fetched total: ${data.length} garments.`);
         setGarments(data as ClothingItem[]);
       }
     } catch (err: any) {
-      console.error('Error fetching garments from Supabase:', err);
+      console.error('[Closet Fatal Context Collapse Error]:', err);
       setError(err.message || 'An error occurred while loading your closet.');
     } finally {
       setIsLoading(false);
@@ -195,7 +215,7 @@ export default function ClosetScreen() {
             ]}>
               <SectionHeader 
                 title="My Closet" 
-                subtitle={isLoading ? "Loading closet..." : `${garments.length} items catalogued`}
+                subtitle={isLoading ? "Loading closet..." : `${filteredGarments.length} items catalogued`}
                 style={styles.headerFlexOverride}
               />
               <PremiumTouchable 
