@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { PremiumCard } from '../../components/ui/PremiumCard';
 import { PremiumTouchable } from '../../components/ui/PremiumTouchable';
@@ -26,14 +26,13 @@ import { supabase } from '../../lib/supabase';
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 44) / 2;
 
-// Explicit TypeScript type definition mapped directly from our Supabase Database Schema
 interface ClothingItem {
   id: string;
   name: string;
   category: string;
   brand: string;
   color: string;
-  image_url: string; // Adapted schema field matching remote postgres column naming
+  image_url: string; 
   created_at?: string;
 }
 
@@ -53,6 +52,9 @@ export default function ClosetScreen() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Read router params to catch automated invalidation refresh requests
+  const params = useLocalSearchParams<{ refresh?: string }>();
+
   // Top header elements animation tokens
   const entryHeaderOpacity = useRef(new Animated.Value(0)).current;
   const entryHeaderTranslateY = useRef(new Animated.Value(-10)).current;
@@ -67,7 +69,6 @@ export default function ClosetScreen() {
   const emptyScaleAnim = useRef(new Animated.Value(0.95)).current;
   const emptyOpacityAnim = useRef(new Animated.Value(0)).current;
 
-  // Optimized async worker querying remote Supabase Postgres DB engine
   const loadGarments = async () => {
     try {
       setIsLoading(true);
@@ -93,12 +94,11 @@ export default function ClosetScreen() {
     }
   };
 
-  // Lifecycle initialization hook pulling down production database items
+  // Run on initial initialization, AND when a fresh mutations token payload arrives via Expo Router params
   useEffect(() => {
     loadGarments();
-  }, []);
+  }, [params.refresh]);
 
-  // Dynamic search and filter processing mapping computed against runtime state array
   const filteredGarments = garments.filter((garment) => {
     const matchesCategory = activeCategory === 'All' || garment.category === activeCategory;
     const matchesQuery = 
@@ -108,7 +108,6 @@ export default function ClosetScreen() {
   });
 
   useEffect(() => {
-    // Structural layout entrance stagger chain
     Animated.stagger(90, [
       Animated.parallel([
         Animated.timing(entryHeaderOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
@@ -125,9 +124,7 @@ export default function ClosetScreen() {
     ]).start();
   }, []);
 
-  // Trigger smooth arrival metrics when empty configuration states map true
   useEffect(() => {
-    // Only execute structural empty states if loading is clean
     if (!isLoading && filteredGarments.length === 0) {
       Animated.parallel([
         Animated.timing(emptyOpacityAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
@@ -151,7 +148,7 @@ export default function ClosetScreen() {
               name: item.name,
               brand: item.brand,
               category: item.category,
-              image: item.image_url, // Adjusted param target safely mapped to dynamic field
+              image: item.image_url, 
               color: item.color,
             },
           })
@@ -192,7 +189,6 @@ export default function ClosetScreen() {
         extraData={activeCategory} 
         ListHeaderComponent={
           <View style={styles.headerStack}>
-            {/* Title Block Area with Premium Layout System */}
             <Animated.View style={[
               styles.titleRow,
               { opacity: entryHeaderOpacity, transform: [{ translateY: entryHeaderTranslateY }] }
@@ -202,12 +198,14 @@ export default function ClosetScreen() {
                 subtitle={isLoading ? "Loading closet..." : `${garments.length} items catalogued`}
                 style={styles.headerFlexOverride}
               />
-              <PremiumTouchable style={styles.actionAddButton} onPress={() => console.log('Add Item')}>
+              <PremiumTouchable 
+                style={styles.actionAddButton} 
+                onPress={() => router.push('../clothing/add-garment')}
+              >
                 <Feather name="plus" size={22} color="#FAFAF9" />
               </PremiumTouchable>
             </Animated.View>
 
-            {/* Global Input Controller Framework */}
             <Animated.View style={[
               styles.searchContainer,
               { opacity: searchBarOpacity, transform: [{ translateY: searchBarTranslateY }] }
@@ -225,7 +223,6 @@ export default function ClosetScreen() {
               </PremiumTouchable>
             </Animated.View>
 
-            {/* Horizontal Filter Row Layout */}
             <Animated.View style={[
               styles.categoryScroller,
               { opacity: filtersOpacity, transform: [{ translateY: filtersTranslateY }] }
@@ -302,225 +299,42 @@ export default function ClosetScreen() {
 }
 
 const styles = StyleSheet.create({
-  listContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 32,
-  },
-  headerStack: {
-    marginBottom: 8,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingVertical: 16,
-  },
-  headerFlexOverride: {
-    flex: 1,
-    paddingVertical: 0,
-  },
-  actionAddButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#1C1917',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 16,
-    marginTop: 2, 
-    shadowColor: '#1C1917',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F5F5F4',
-    borderRadius: 16,
-    height: 48,
-    paddingHorizontal: 14,
-    marginVertical: 12,
-  },
-  searchIcon: {
-    marginRight: 10,
-  },
-  textInput: {
-    flex: 1,
-    fontSize: 15,
-    color: '#1C1917',
-  },
-  filterButton: {
-    padding: 6,
-  },
-  categoryScroller: {
-    marginHorizontal: -16,
-    marginBottom: 16,
-  },
-  categoriesContent: {
-    paddingHorizontal: 16,
-    gap: 8,
-    paddingVertical: 4,
-  },
-  categoryTab: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 24,
-    borderWidth: 1,
-  },
-  categoryTabActive: {
-    backgroundColor: '#1C1917',
-    borderColor: '#1C1917',
-  },
-  categoryTabInactive: {
-    backgroundColor: 'transparent',
-    borderColor: '#E7E5E4',
-  },
-  categoryIcon: {
-    marginRight: 6,
-  },
-  categoryLabel: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  categoryLabelActive: {
-    color: '#FAFAF9',
-  },
-  categoryLabelInactive: {
-    color: '#1C1917',
-  },
-  gridRow: {
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  card: {
-    width: CARD_WIDTH,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#F5F5F4',
-    padding: 0,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  imageWrapper: {
-    width: '100%',
-    height: CARD_WIDTH * 1.28,
-    backgroundColor: '#F5F5F4',
-    position: 'relative',
-  },
-  imageGarmentImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
-  },
-  colorIndicator: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  cardInfo: {
-    padding: 12,
-  },
-  garmentName: {
-    fontSize: 14,
-    fontWeight: '400',
-    color: '#1C1917',
-    marginBottom: 8,
-  },
-  rowMetadata: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  badge: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: '#E7E5E4',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: '500',
-    color: '#78716C',
-  },
-  emptyStateContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 64,
-    paddingHorizontal: 32,
-  },
-  emptyIconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#F5F5F4',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  emptyStateTitle: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: '#1C1917',
-    marginBottom: 6,
-  },
-  emptyStateSubtitle: {
-    fontSize: 13,
-    color: '#78716C',
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  centeredStateFrame: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 80,
-    paddingHorizontal: 32,
-  },
-  errorIcon: {
-    marginBottom: 12,
-  },
-  errorTextHeading: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1C1917',
-    marginBottom: 4,
-  },
-  errorTextSubtitle: {
-    fontSize: 13,
-    color: '#78716C',
-    textAlign: 'center',
-    marginBottom: 20,
-    lineHeight: 18,
-  },
-  retryButton: {
-    backgroundColor: '#1C1917',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
-  retryButtonText: {
-    color: '#FAFAF9',
-    fontSize: 13,
-    fontWeight: '600',
-  },
+  listContainer: { paddingHorizontal: 16, paddingBottom: 32 },
+  headerStack: { marginBottom: 8 },
+  titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingVertical: 16 },
+  headerFlexOverride: { flex: 1, paddingVertical: 0 },
+  actionAddButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#1C1917', justifyContent: 'center', alignItems: 'center', marginLeft: 16, marginTop: 2, shadowColor: '#1C1917', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 3 },
+  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F4', borderRadius: 16, height: 48, paddingHorizontal: 14, marginVertical: 12 },
+  searchIcon: { marginRight: 10 },
+  textInput: { flex: 1, fontSize: 15, color: '#1C1917' },
+  filterButton: { padding: 6 },
+  categoryScroller: { marginHorizontal: -16, marginBottom: 16 },
+  categoriesContent: { paddingHorizontal: 16, gap: 8, paddingVertical: 4 },
+  categoryTab: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 24, borderWidth: 1 },
+  categoryTabActive: { backgroundColor: '#1C1917', borderColor: '#1C1917' },
+  categoryTabInactive: { backgroundColor: 'transparent', borderColor: '#E7E5E4' },
+  categoryIcon: { marginRight: 6 },
+  categoryLabel: { fontSize: 13, fontWeight: '500' },
+  categoryLabelActive: { color: '#FAFAF9' },
+  categoryLabelInactive: { color: '#1C1917' },
+  gridRow: { justifyContent: 'space-between', marginBottom: 16 },
+  card: { width: CARD_WIDTH, backgroundColor: '#FFFFFF', borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#F5F5F4', padding: 0, shadowColor: '#000000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 3, elevation: 1 },
+  imageWrapper: { width: '100%', height: CARD_WIDTH * 1.28, backgroundColor: '#F5F5F4', position: 'relative' },
+  imageGarmentImage: { width: '100%', height: '100%', resizeMode: 'cover' },
+  colorIndicator: { position: 'absolute', top: 10, right: 10, width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: '#FFFFFF', shadowColor: '#000000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 2, elevation: 2 },
+  cardInfo: { padding: 12 },
+  garmentName: { fontSize: 14, fontWeight: '400', color: '#1C1917', marginBottom: 8 },
+  rowMetadata: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  badge: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#E7E5E4', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
+  badgeText: { fontSize: 10, fontWeight: '500', color: '#78716C' },
+  emptyStateContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 64, paddingHorizontal: 32 },
+  emptyIconCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#F5F5F4', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  emptyStateTitle: { fontSize: 15, fontWeight: '500', color: '#1C1917', marginBottom: 6 },
+  emptyStateSubtitle: { fontSize: 13, color: '#78716C', textAlign: 'center', lineHeight: 18 },
+  centeredStateFrame: { alignItems: 'center', justifyContent: 'center', paddingVertical: 80, paddingHorizontal: 32 },
+  errorIcon: { marginBottom: 12 },
+  errorTextHeading: { fontSize: 16, fontWeight: '600', color: '#1C1917', marginBottom: 4 },
+  errorTextSubtitle: { fontSize: 13, color: '#78716C', textAlign: 'center', marginBottom: 20, lineHeight: 18 },
+  retryButton: { backgroundColor: '#1C1917', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 },
+  retryButtonText: { color: '#FAFAF9', fontSize: 13, fontWeight: '600' },
 });
