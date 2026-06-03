@@ -8,8 +8,12 @@ useEffect(() => {
       .from('clothing_items')
       .select('*');
 
-    console.log('DATA:', data);
-    console.log('ERROR:', error);
+    // test the connection by logging the data or error
+    if (error) {
+      console.error('Error connecting to Supabase:', error);
+    } else {
+      console.log('Successfully connected to Supabase. Data:');
+    }
   };
 
   testConnection();

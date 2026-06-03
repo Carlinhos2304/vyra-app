@@ -13,8 +13,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
-import { decode } from 'base64-arraybuffer';
 
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { PremiumTouchable } from '../../components/ui/PremiumTouchable';
@@ -43,7 +41,7 @@ export default function AddGarmentScreen() {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Request media library and hardware camera configurations cleanly
+  // Request media library permissions and open image gallery
   const pickImageFromGallery = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
@@ -63,6 +61,7 @@ export default function AddGarmentScreen() {
     }
   };
 
+  // Request camera permissions and snap photo
   const capturePhotoFromCamera = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
@@ -71,6 +70,7 @@ export default function AddGarmentScreen() {
     }
 
     const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [3, 4],
       quality: 0.8,
@@ -99,30 +99,41 @@ export default function AddGarmentScreen() {
     try {
       setIsSaving(true);
 
-      // Process file definitions for multiplatform blob arrays
-      const fileExtension = imageUri.split('.').pop() || 'jpg';
-      const storageFileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExtension}`;
+      // 1. Parse file extension and set robust fallback types
+      const fileExtension = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
+      const cleanExtension = ['jpg', 'jpeg', 'png', 'heic'].includes(fileExtension) ? fileExtension : 'jpg';
+      const mimeType = cleanExtension === 'png' ? 'image/png' : 'image/jpeg';
       
-      const response = await fetch(imageUri);
-        const blob = await response.blob();
+      const storageFileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${cleanExtension}`;
 
-        const { data: uploadData, error: uploadError } = await supabase.storage
+      // 2. Build standard native multi-platform FormData payload
+      const formData = new FormData();
+      
+      // We append a pseudo file object mapping the file system URI directly
+      formData.append('file', {
+        uri: imageUri,
+        name: storageFileName,
+        type: mimeType,
+      } as any);
+
+      // 3. Execute binary upload over native bridges directly to Supabase Storage
+      const { error: uploadError } = await supabase.storage
         .from('garments')
-        .upload(storageFileName, blob, {
-            contentType: `image/${fileExtension}`,
-            upsert: false,
+        .upload(storageFileName, formData, {
+          contentType: mimeType,
+          upsert: false,
         });
 
       if (uploadError) throw uploadError;
 
-      // Extract fully accessible absolute remote bucket resource paths
+      // 4. Extract fully accessible absolute remote bucket resource paths
       const { data: publicUrlData } = supabase.storage
         .from('garments')
         .getPublicUrl(storageFileName);
 
       const finalStoragePublicUrl = publicUrlData.publicUrl;
 
-      // Commit relational row attributes directly into Postgres
+      // 5. Commit relational row attributes directly into Postgres
       const { error: databaseInsertError } = await supabase
         .from('clothing_items')
         .insert([
@@ -137,7 +148,7 @@ export default function AddGarmentScreen() {
 
       if (databaseInsertError) throw databaseInsertError;
 
-      // Route imperatively with custom cache breaking query strings appended to parameter queues
+      // 6. Route back and trigger refresh via cache breaking query strings
       router.replace({
         pathname: '/(tabs)/closet',
         params: { refresh: `${Date.now()}` },
