@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { PremiumCard } from '../../components/ui/PremiumCard';
 import { PremiumTouchable } from '../../components/ui/PremiumTouchable';
@@ -25,16 +25,29 @@ import { supabase } from '../../lib/supabase';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 44) / 2;
+const TAB_WIDTH = (width - 32) / 2; // Screen width minus padding divided by two options
+
+type ClosetTab = 'Garments' | 'Outfits';
 
 interface ClothingItem {
   id: string;
-  user_id: string; // Enforce local explicit interface mapping parameter
+  user_id: string;
   name: string;
   category: string;
   brand: string;
   color: string;
   image_url: string; 
   created_at?: string;
+}
+
+// Requirement 6: New Type-Safe Clean Domain Interface Design
+interface OutfitCard {
+  id: string;
+  name: string;
+  occasion: string | null;
+  coverImage: string | null;
+  garmentCount: number;
+  created_at: string;
 }
 
 const CATEGORIES = [
@@ -45,79 +58,130 @@ const CATEGORIES = [
 ];
 
 export default function ClosetScreen() {
+  const [activeTab, setActiveTab] = useState<ClosetTab>('Garments');
   const [activeCategory, setActiveCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Async data layer state primitives
   const [garments, setGarments] = useState<ClothingItem[]>([]);
+  // Swapped basic schema model with high-performance client-side optimized presentation structure
+  const [outfits, setOutfits] = useState<OutfitCard[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Read router params to catch automated invalidation refresh requests
   const params = useLocalSearchParams<{ refresh?: string }>();
 
-  // Top header elements animation tokens
+  // Entry Transition Animation Nodes
   const entryHeaderOpacity = useRef(new Animated.Value(0)).current;
-  const entryHeaderTranslateY = useRef(new Animated.Value(-10)).current;
+  const entryHeaderTranslateY = useRef(new Animated.Value(-8)).current;
   
   const searchBarOpacity = useRef(new Animated.Value(0)).current;
-  const searchBarTranslateY = useRef(new Animated.Value(12)).current;
+  const searchBarTranslateY = useRef(new Animated.Value(8)).current;
 
   const filtersOpacity = useRef(new Animated.Value(0)).current;
-  const filtersTranslateY = useRef(new Animated.Value(8)).current;
+  const filtersTranslateY = useRef(new Animated.Value(6)).current;
 
-  // Empty state scale tracking
-  const emptyScaleAnim = useRef(new Animated.Value(0.95)).current;
+  // Empty state micro-scaling nodes
+  const emptyScaleAnim = useRef(new Animated.Value(0.96)).current;
   const emptyOpacityAnim = useRef(new Animated.Value(0)).current;
 
-  const loadGarments = async () => {
+  // iOS-Style Minimal Underline Segment Interpolation Node
+  const tabUnderlineX = useRef(new Animated.Value(0)).current;
+
+  // Handles smooth horizontal transition for the active tab underline
+  useEffect(() => {
+    Animated.timing(tabUnderlineX, {
+      toValue: activeTab === 'Garments' ? 0 : TAB_WIDTH,
+      duration: 250,
+      useNativeDriver: true,
+    }).start();
+  }, [activeTab]);
+
+  // Requirements 1, 5, 9 & 10: Single-Request Performance Relational Join Strategy
+  const synchronizeClosetDataStore = async () => {
     try {
       setIsLoading(true);
       setError(null);
 
-      console.log('[Closet Context Fetch] Resolving secure active user authentication token state...');
-      
-      // Resolve identity validation via internal cryptographic token check
       const { data: { user }, error: authError } = await supabase.auth.getUser();
 
       if (authError || !user) {
-        console.error('[Closet Context Fetch Failure] Identification mapping failed or session expired:', authError);
         setError('Your active session token expired. Please authenticate through login window again.');
         setIsLoading(false);
         return;
       }
 
-      console.log(`[Closet Context Query Execution] Security validation pass. User ID target parsed: ${user.id}`);
-      console.log(`[Closet Context Query Execution] Executing explicit row criteria call targeting: clothing_items WHERE user_id = ${user.id}`);
+      if (activeTab === 'Garments') {
+        const { data, error: garmentQueryErr } = await supabase
+          .from('clothing_items')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
 
-      // Query database table filtering rows exclusively mapping to current authenticated session ID
-      const { data, error: supabaseError } = await supabase
-        .from('clothing_items')
-        .select('*')
-        .eq('user_id', user.id) // Essential filtering line isolating data rows perfectly
-        .order('created_at', { ascending: false });
+        if (garmentQueryErr) throw garmentQueryErr;
+        setGarments((data as ClothingItem[]) || []);
+      } else {
+        console.log('[Closet Core Pipeline] Syncing Outfits Lookbooks using embedded joins...');
+        
+        // Single batch fetch retrieving parent data together with child records to dodge N+1 leaks
+        const { data: rawOutfitsData, error: outfitQueryErr } = await supabase
+          .from('outfits')
+          .select(`
+            id,
+            name,
+            occasion,
+            created_at,
+            outfit_items (
+              clothing_items (
+                image_url
+              )
+            )
+          `)
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
 
-      if (supabaseError) {
-        console.error('[Closet Context Fetch Failure] Supabase engine returned query error:', supabaseError);
-        throw supabaseError;
-      }
+        if (outfitQueryErr) throw outfitQueryErr;
+        
+        console.log(`[Closet Core Pipeline Debug] Raw outfits fetched: ${rawOutfitsData?.length || 0}`);
 
-      if (data) {
-        console.log(`[Closet Context Diagnostics] Query transaction success. Records fetched total: ${data.length} garments.`);
-        setGarments(data as ClothingItem[]);
+        // Requirements 2, 3 & 9: Array mapping logic to select cover image and calculate asset volume metrics
+        const transformedOutfits: OutfitCard[] = (rawOutfitsData || []).map((outfit: any) => {
+          const itemsArray = outfit.outfit_items || [];
+          const garmentCount = itemsArray.length;
+          
+          // Pull first valid nested asset url string element or drop to fallback
+          let coverImage: string | null = null;
+          if (garmentCount > 0 && itemsArray[0].clothing_items) {
+            coverImage = itemsArray[0].clothing_items.image_url || null;
+          }
+
+          console.log(`[Closet Processing Debug] Outfit: "${outfit.name}" | Garments count: ${garmentCount} | Selected Cover Image: ${coverImage}`);
+
+          return {
+            id: outfit.id,
+            name: outfit.name,
+            occasion: outfit.occasion,
+            coverImage: coverImage,
+            garmentCount: garmentCount,
+            created_at: outfit.created_at,
+          };
+        });
+
+        setOutfits(transformedOutfits);
       }
     } catch (err: any) {
-      console.error('[Closet Fatal Context Collapse Error]:', err);
-      setError(err.message || 'An error occurred while loading your closet.');
+      console.error('[Closet Refactored Pipeline Crash]:', err);
+      setError(err.message || 'An error occurred while synchronizing database entities.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Run on initial initialization, AND when a fresh mutations token payload arrives via Expo Router params
-  useEffect(() => {
-    loadGarments();
-  }, [params.refresh]);
+  useFocusEffect(
+    useCallback(() => {
+      synchronizeClosetDataStore();
+    }, [activeTab, params.refresh])
+  );
 
   const filteredGarments = garments.filter((garment) => {
     const matchesCategory = activeCategory === 'All' || garment.category === activeCategory;
@@ -127,161 +191,272 @@ export default function ClosetScreen() {
     return matchesCategory && matchesQuery;
   });
 
+  const filteredOutfits = outfits.filter((outfit) => {
+    return (
+      (outfit.name?.toLowerCase().includes(searchQuery.toLowerCase()) || false) ||
+      (outfit.occasion?.toLowerCase().includes(searchQuery.toLowerCase()) || false)
+    );
+  });
+
+  const activeRenderDataset = activeTab === 'Garments' ? filteredGarments : filteredOutfits;
+
   useEffect(() => {
-    Animated.stagger(90, [
+    Animated.stagger(70, [
       Animated.parallel([
-        Animated.timing(entryHeaderOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
-        Animated.timing(entryHeaderTranslateY, { toValue: 0, duration: 400, useNativeDriver: true }),
+        Animated.timing(entryHeaderOpacity, { toValue: 1, duration: 350, useNativeDriver: true }),
+        Animated.timing(entryHeaderTranslateY, { toValue: 0, duration: 350, useNativeDriver: true }),
       ]),
       Animated.parallel([
-        Animated.timing(searchBarOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
-        Animated.timing(searchBarTranslateY, { toValue: 0, duration: 400, useNativeDriver: true }),
+        Animated.timing(searchBarOpacity, { toValue: 1, duration: 350, useNativeDriver: true }),
+        Animated.timing(searchBarTranslateY, { toValue: 0, duration: 350, useNativeDriver: true }),
       ]),
       Animated.parallel([
-        Animated.timing(filtersOpacity, { toValue: 1, duration: 350, useNativeDriver: true }),
-        Animated.timing(filtersTranslateY, { toValue: 0, duration: 350, useNativeDriver: true }),
+        Animated.timing(filtersOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(filtersTranslateY, { toValue: 0, duration: 300, useNativeDriver: true }),
       ]),
     ]).start();
   }, []);
 
   useEffect(() => {
-    if (!isLoading && filteredGarments.length === 0) {
+    if (!isLoading && activeRenderDataset.length === 0) {
       Animated.parallel([
-        Animated.timing(emptyOpacityAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
-        Animated.spring(emptyScaleAnim, { toValue: 1, tension: 25, friction: 7, useNativeDriver: true }),
+        Animated.timing(emptyOpacityAnim, { toValue: 1, duration: 350, useNativeDriver: true }),
+        Animated.spring(emptyScaleAnim, { toValue: 1, tension: 28, friction: 8, useNativeDriver: true }),
       ]).start();
     } else {
       emptyOpacityAnim.setValue(0);
-      emptyScaleAnim.setValue(0.95);
+      emptyScaleAnim.setValue(0.96);
     }
-  }, [filteredGarments.length, isLoading]);
+  }, [activeRenderDataset.length, isLoading]);
 
-  const renderItem = ({ item, index }: { item: ClothingItem; index: number }) => (
-    <StaggeredListWrapper index={index}>
-      <PremiumCard 
-        style={styles.card}
-        onPress={() =>
-          router.push({
-            pathname: 'clothing/[id]',
-            params: {
-              id: item.id,
-              name: item.name,
-              brand: item.brand,
-              category: item.category,
-              image: item.image_url, 
-              color: item.color,
-            },
-          })
-        }
-      >
-        <View style={styles.imageWrapper}>
-          <Image source={{ uri: item.image_url }} style={styles.imageGarmentImage} />
-          <View style={[styles.colorIndicator, { backgroundColor: item.color || '#CCCCCC' }]} />
-        </View>
+  const handleAddNewClosetAsset = () => {
+    if (activeTab === 'Garments') {
+      router.push('../clothing/add-garment');
+    } else {
+      router.push('../clothing/create-outfit');
+    }
+  };
 
-        <View style={styles.cardInfo}>
-          <SectionTitle withBottomMargin>{item.brand}</SectionTitle>
-          
-          <Text style={styles.garmentName} numberOfLines={1}>
-            {item.name}
-          </Text>
-
-          <View style={styles.rowMetadata}>
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{item.category}</Text>
+  const renderListCardItem = ({ item, index }: { item: any; index: number }) => {
+    if (activeTab === 'Garments') {
+      const garmentItem = item as ClothingItem;
+      return (
+        <StaggeredListWrapper index={index}>
+          <PremiumCard 
+            style={styles.card}
+            onPress={() =>
+              router.push({
+                pathname: 'clothing/[id]',
+                params: {
+                  id: garmentItem.id,
+                  name: garmentItem.name,
+                  brand: garmentItem.brand,
+                  category: garmentItem.category,
+                  image: garmentItem.image_url, 
+                  color: garmentItem.color,
+                },
+              })
+            }
+          >
+            <View style={styles.imageWrapper}>
+              <Image source={{ uri: garmentItem.image_url }} style={styles.imageGarmentImage} />
+              <View style={[styles.colorIndicator, { backgroundColor: garmentItem.color || '#CCCCCC' }]} />
             </View>
-          </View>
-        </View>
-      </PremiumCard>
-    </StaggeredListWrapper>
-  );
+
+            <View style={styles.cardInfo}>
+              <SectionTitle withBottomMargin>{garmentItem.brand || 'Unbranded'}</SectionTitle>
+              <Text style={styles.garmentName} numberOfLines={1}>
+                {garmentItem.name}
+              </Text>
+              <View style={styles.rowMetadata}>
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{garmentItem.category}</Text>
+                </View>
+              </View>
+            </View>
+          </PremiumCard>
+        </StaggeredListWrapper>
+      );
+    } else {
+      // Requirements 2, 3, 4 & 8: Display Cover Look Image with minimal typographic status tags
+      const outfitItem = item as OutfitCard;
+
+      return (
+        <StaggeredListWrapper index={index}>
+          <PremiumCard 
+            style={styles.card} 
+            onPress={() => router.push({
+              pathname: '/outfit/[id]',
+              params: { id: outfitItem.id }
+            })}
+          >
+            {outfitItem.coverImage ? (
+              // Enhanced Look Image viewport setup to showcase fashion assets premium styling
+              <View style={styles.imageWrapper}>
+                <Image source={{ uri: outfitItem.coverImage }} style={styles.imageGarmentImage} />
+                {outfitItem.occasion && (
+                  <View style={styles.occasionPillFloatingFloating}>
+                    <Text style={styles.occasionPillFloatingText} numberOfLines={1}>
+                      {outfitItem.occasion}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            ) : (
+              // Minimalistic empty fallback layout structure 
+              <View style={styles.outfitPlaceholderContainer}>
+                <View style={styles.outfitIconBadgeCircle}>
+                  <MaterialCommunityIcons name="hanger" size={22} color="#78716C" />
+                </View>
+                <View style={styles.outfitSparkleCorner}>
+                  <MaterialCommunityIcons name="sparkles" size={12} color="#1C1917" />
+                </View>
+              </View>
+            )}
+
+            <View style={styles.cardInfo}>
+              <SectionTitle numberOfLines={1} style={styles.outfitTitleBoldStyle}>
+                {outfitItem.name}
+              </SectionTitle>
+              
+              <View style={styles.rowMetadata}>
+                <Text style={styles.outfitGarmentsCountSubtitleStyle}>
+                  {outfitItem.garmentCount} {outfitItem.garmentCount === 1 ? 'garment' : 'garments'}
+                </Text>
+                {!outfitItem.coverImage && outfitItem.occasion && (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>{outfitItem.occasion}</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          </PremiumCard>
+        </StaggeredListWrapper>
+      );
+    }
+  };
 
   return (
     <PremiumScreen>
       <FlatList
-        data={filteredGarments}
-        renderItem={renderItem}
+        data={activeRenderDataset}
+        renderItem={renderListCardItem}
         keyExtractor={(item) => item.id}
         numColumns={2}
         columnWrapperStyle={styles.gridRow}
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
-        extraData={activeCategory} 
+        extraData={[activeCategory, activeTab, garments, outfits]} 
         ListHeaderComponent={
           <View style={styles.headerStack}>
+            
+            {/* Minimal Premium Top Header Section with Embedded Action Button */}
             <Animated.View style={[
               styles.titleRow,
               { opacity: entryHeaderOpacity, transform: [{ translateY: entryHeaderTranslateY }] }
             ]}>
               <SectionHeader 
                 title="My Closet" 
-                subtitle={isLoading ? "Loading closet..." : `${filteredGarments.length} items catalogued`}
+                subtitle={isLoading ? "Updating vault..." : `${activeRenderDataset.length} curated listings`}
                 style={styles.headerFlexOverride}
               />
               <PremiumTouchable 
                 style={styles.actionAddButton} 
-                onPress={() => router.push('../clothing/add-garment')}
+                onPress={handleAddNewClosetAsset}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               >
-                <Feather name="plus" size={22} color="#FAFAF9" />
+                <Feather name="plus" size={20} color="#1C1917" />
               </PremiumTouchable>
             </Animated.View>
 
+            {/* iOS-Style Underline Minimalist Tab Controller */}
+            <View style={styles.iosTabControlContainer}>
+              {(['Garments', 'Outfits'] as ClosetTab[]).map((tab) => {
+                const isSelected = activeTab === tab;
+                return (
+                  <PremiumTouchable
+                    key={tab}
+                    onPress={() => setActiveTab(tab)}
+                    style={styles.iosTabItemButton}
+                  >
+                    <Text style={[styles.iosTabLabel, isSelected && styles.iosTabLabelActive]}>
+                      {tab}
+                    </Text>
+                  </PremiumTouchable>
+                );
+              })}
+              {/* Dynamic Underlying Slide bar element */}
+              <Animated.View 
+                style={[
+                  styles.iosAnimatedUnderline, 
+                  { 
+                    width: TAB_WIDTH,
+                    transform: [{ translateX: tabUnderlineX }] 
+                  }
+                ]} 
+              />
+            </View>
+
+            {/* Global Search Interface Control */}
             <Animated.View style={[
               styles.searchContainer,
               { opacity: searchBarOpacity, transform: [{ translateY: searchBarTranslateY }] }
             ]}>
-              <Feather name="search" size={18} color="#78716C" style={styles.searchIcon} />
+              <Feather name="search" size={16} color="#78716C" style={styles.searchIcon} />
               <TextInput
-                placeholder="Search your wardrobe..."
+                placeholder={activeTab === 'Garments' ? "Search garments..." : "Search compiled outfits..."}
                 placeholderTextColor="#78716C"
                 style={styles.textInput}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
               />
-              <PremiumTouchable style={styles.filterButton} onPress={() => console.log('Filter')}>
-                <MaterialCommunityIcons name="filter-variant" size={20} color="#1C1917" />
+              <PremiumTouchable style={styles.filterButton} onPress={() => console.log('Filter trigger')}>
+                <MaterialCommunityIcons name="filter-variant" size={18} color="#1C1917" />
               </PremiumTouchable>
             </Animated.View>
 
-            <Animated.View style={[
-              styles.categoryScroller,
-              { opacity: filtersOpacity, transform: [{ translateY: filtersTranslateY }] }
-            ]}>
-              <FlatList
-                horizontal
-                data={CATEGORIES}
-                keyExtractor={(item) => item.id}
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.categoriesContent}
-                renderItem={({ item }) => {
-                  const isActive = activeCategory === item.id;
-                  return (
-                    <PremiumTouchable
-                      onPress={() => setActiveCategory(item.id)}
-                      style={[
-                        styles.categoryTab,
-                        isActive ? styles.categoryTabActive : styles.categoryTabInactive,
-                      ]}
-                    >
-                      <MaterialCommunityIcons
-                        name={item.icon as any}
-                        size={16}
-                        color={isActive ? '#FAFAF9' : '#1C1917'}
-                        style={styles.categoryIcon}
-                      />
-                      <Text
+            {/* horizontal Horizontal Filter Tracks for garments explicitly */}
+            {activeTab === 'Garments' && (
+              <Animated.View style={[
+                styles.categoryScroller,
+                { opacity: filtersOpacity, transform: [{ translateY: filtersTranslateY }] }
+              ]}>
+                <FlatList
+                  horizontal
+                  data={CATEGORIES}
+                  keyExtractor={(item) => item.id}
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.categoriesContent}
+                  renderItem={({ item }) => {
+                    const isActive = activeCategory === item.id;
+                    return (
+                      <PremiumTouchable
+                        onPress={() => setActiveCategory(item.id)}
                         style={[
-                          styles.categoryLabel,
-                          isActive ? styles.categoryLabelActive : styles.categoryLabelInactive,
+                          styles.categoryTab,
+                          isActive ? styles.categoryTabActive : styles.categoryTabInactive,
                         ]}
                       >
-                        {item.label}
-                      </Text>
-                    </PremiumTouchable>
-                  );
-                }}
-              />
-            </Animated.View>
+                        <MaterialCommunityIcons
+                          name={item.icon as any}
+                          size={14}
+                          color={isActive ? '#FAFAF9' : '#1C1917'}
+                          style={styles.categoryIcon}
+                        />
+                        <Text
+                          style={[
+                            styles.categoryLabel,
+                            isActive ? styles.categoryLabelActive : styles.categoryLabelInactive,
+                          ]}
+                        >
+                          {item.label}
+                        </Text>
+                      </PremiumTouchable>
+                    );
+                  }}
+                />
+              </Animated.View>
+            )}
           </View>
         }
         ListEmptyComponent={
@@ -291,10 +466,10 @@ export default function ClosetScreen() {
             </View>
           ) : error ? (
             <View style={styles.centeredStateFrame}>
-              <MaterialCommunityIcons name="alert-circle-outline" size={32} color="#EF4444" style={styles.errorIcon} />
+              <MaterialCommunityIcons name="alert-circle-outline" size={28} color="#EF4444" style={styles.errorIcon} />
               <Text style={styles.errorTextHeading}>Failed to load items</Text>
               <Text style={styles.errorTextSubtitle}>{error}</Text>
-              <PremiumTouchable style={styles.retryButton} onPress={loadGarments}>
+              <PremiumTouchable style={styles.retryButton} onPress={synchronizeClosetDataStore}>
                 <Text style={styles.retryButtonText}>Retry Connection</Text>
               </PremiumTouchable>
             </View>
@@ -304,11 +479,19 @@ export default function ClosetScreen() {
               { opacity: emptyOpacityAnim, transform: [{ scale: emptyScaleAnim }] }
             ]}>
               <View style={styles.emptyIconCircle}>
-                <MaterialCommunityIcons name="hanger" size={28} color="#78716C" />
+                <MaterialCommunityIcons 
+                  name={activeTab === 'Garments' ? "hanger" : "sparkles"} 
+                  size={24} 
+                  color="#78716C" 
+                />
               </View>
-              <Text style={styles.emptyStateTitle}>No pieces match</Text>
+              <Text style={styles.emptyStateTitle}>
+                {activeTab === 'Garments' ? "No pieces match" : "No Outfits Yet"}
+              </Text>
               <Text style={styles.emptyStateSubtitle}>
-                Try re-adjusting your active text queries or structural tags.
+                {activeTab === 'Garments' 
+                  ? "Try re-adjusting your active text queries or structural tags."
+                  : "Create your first outfit from the Create tab."}
               </Text>
             </Animated.View>
           )
@@ -319,42 +502,62 @@ export default function ClosetScreen() {
 }
 
 const styles = StyleSheet.create({
-  listContainer: { paddingHorizontal: 16, paddingBottom: 32 },
-  headerStack: { marginBottom: 8 },
-  titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingVertical: 16 },
+  listContainer: { paddingHorizontal: 16, paddingBottom: 24 },
+  headerStack: { marginBottom: 4 },
+  
+  titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 },
   headerFlexOverride: { flex: 1, paddingVertical: 0 },
-  actionAddButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#1C1917', justifyContent: 'center', alignItems: 'center', marginLeft: 16, marginTop: 2, shadowColor: '#1C1917', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 3 },
-  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F4', borderRadius: 16, height: 48, paddingHorizontal: 14, marginVertical: 12 },
-  searchIcon: { marginRight: 10 },
-  textInput: { flex: 1, fontSize: 15, color: '#1C1917' },
-  filterButton: { padding: 6 },
-  categoryScroller: { marginHorizontal: -16, marginBottom: 16 },
-  categoriesContent: { paddingHorizontal: 16, gap: 8, paddingVertical: 4 },
-  categoryTab: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 24, borderWidth: 1 },
+  actionAddButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F5F5F4', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#E7E5E4' },
+  
+  iosTabControlContainer: { flexDirection: 'row', position: 'relative', marginTop: 4, marginBottom: 8, borderBottomWidth: 1, borderColor: '#E7E5E4' },
+  iosTabItemButton: { width: TAB_WIDTH, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' },
+  iosTabLabel: { fontSize: 14, fontWeight: '400', color: '#78716C', letterSpacing: 0.3 },
+  iosTabLabelActive: { color: '#1C1917', fontWeight: '600' },
+  iosAnimatedUnderline: { position: 'absolute', bottom: -1, height: 2, backgroundColor: '#1C1917', left: 0 },
+  
+  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F4', borderRadius: 12, height: 42, paddingHorizontal: 12, marginVertical: 8 },
+  searchIcon: { marginRight: 8 },
+  textInput: { flex: 1, fontSize: 14, color: '#1C1917' },
+  filterButton: { padding: 4 },
+  categoryScroller: { marginHorizontal: -16, marginBottom: 8, marginTop: 4 },
+  categoriesContent: { paddingHorizontal: 16, gap: 6, paddingVertical: 2 },
+  categoryTab: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
   categoryTabActive: { backgroundColor: '#1C1917', borderColor: '#1C1917' },
   categoryTabInactive: { backgroundColor: 'transparent', borderColor: '#E7E5E4' },
-  categoryIcon: { marginRight: 6 },
-  categoryLabel: { fontSize: 13, fontWeight: '500' },
+  categoryIcon: { marginRight: 4 },
+  categoryLabel: { fontSize: 12, fontWeight: '500' },
   categoryLabelActive: { color: '#FAFAF9' },
   categoryLabelInactive: { color: '#1C1917' },
-  gridRow: { justifyContent: 'space-between', marginBottom: 16 },
-  card: { width: CARD_WIDTH, backgroundColor: '#FFFFFF', borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#F5F5F4', padding: 0, shadowColor: '#000000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 3, elevation: 1 },
-  imageWrapper: { width: '100%', height: CARD_WIDTH * 1.28, backgroundColor: '#F5F5F4', position: 'relative' },
+  gridRow: { justifyContent: 'space-between', marginBottom: 12 },
+  card: { width: CARD_WIDTH, backgroundColor: '#FFFFFF', borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: '#F5F5F4', padding: 0, shadowColor: '#000000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.02, shadowRadius: 2, elevation: 1 },
+  imageWrapper: { width: '100%', height: CARD_WIDTH * 1.3, backgroundColor: '#F5F5F4', position: 'relative' },
   imageGarmentImage: { width: '100%', height: '100%', resizeMode: 'cover' },
-  colorIndicator: { position: 'absolute', top: 10, right: 10, width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: '#FFFFFF', shadowColor: '#000000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 2, elevation: 2 },
-  cardInfo: { padding: 12 },
-  garmentName: { fontSize: 14, fontWeight: '400', color: '#1C1917', marginBottom: 8 },
+  colorIndicator: { position: 'absolute', top: 8, right: 8, width: 18, height: 18, borderRadius: 9, borderWidth: 1.5, borderColor: '#FFFFFF', shadowColor: '#000000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 1, elevation: 1 },
+  
+  // Requirement 4 & 8: High-end Minimal card design updates
+  outfitTitleBoldStyle: { color: '#1C1917', fontSize: 14, fontWeight: '600', letterSpacing: 0.1, marginBottom: 2 },
+  outfitGarmentsCountSubtitleStyle: { fontSize: 12, fontWeight: '400', color: '#78716C' },
+  occasionPillFloatingFloating: { position: 'absolute', bottom: 8, left: 8, backgroundColor: 'rgba(255, 255, 255, 0.90)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 0.5, borderColor: '#E7E5E4' },
+  occasionPillFloatingText: { fontSize: 10, fontWeight: '500', color: '#1C1917', letterSpacing: 0.2 },
+  
+  outfitPlaceholderContainer: { width: '100%', height: CARD_WIDTH * 1.3, backgroundColor: '#F5F5F4', alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  outfitIconBadgeCircle: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#E7E5E4' },
+  outfitSparkleCorner: { position: 'absolute', top: 10, right: 10, width: 20, height: 20, borderRadius: 10, backgroundColor: '#FAFAF9', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#E7E5E4' },
+  outfitDateBadge: { borderColor: '#1C1917', backgroundColor: '#FAFAF9' },
+  
+  cardInfo: { padding: 10 },
+  garmentName: { fontSize: 13, fontWeight: '400', color: '#1C1917', marginBottom: 6 },
   rowMetadata: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  badge: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#E7E5E4', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
-  badgeText: { fontSize: 10, fontWeight: '500', color: '#78716C' },
-  emptyStateContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 64, paddingHorizontal: 32 },
-  emptyIconCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#F5F5F4', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  emptyStateTitle: { fontSize: 15, fontWeight: '500', color: '#1C1917', marginBottom: 6 },
-  emptyStateSubtitle: { fontSize: 13, color: '#78716C', textAlign: 'center', lineHeight: 18 },
-  centeredStateFrame: { alignItems: 'center', justifyContent: 'center', paddingVertical: 80, paddingHorizontal: 32 },
-  errorIcon: { marginBottom: 12 },
-  errorTextHeading: { fontSize: 16, fontWeight: '600', color: '#1C1917', marginBottom: 4 },
-  errorTextSubtitle: { fontSize: 13, color: '#78716C', textAlign: 'center', marginBottom: 20, lineHeight: 18 },
-  retryButton: { backgroundColor: '#1C1917', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 },
-  retryButtonText: { color: '#FAFAF9', fontSize: 13, fontWeight: '600' },
+  badge: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#E7E5E4', paddingHorizontal: 6, paddingVertical: 1.5, borderRadius: 6 },
+  badgeText: { fontSize: 9, fontWeight: '500', color: '#78716C' },
+  emptyStateContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 56, paddingHorizontal: 32 },
+  emptyIconCircle: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#F5F5F4', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+  emptyStateTitle: { fontSize: 14, fontWeight: '500', color: '#1C1917', marginBottom: 4 },
+  emptyStateSubtitle: { fontSize: 12, color: '#78716C', textAlign: 'center', lineHeight: 16 },
+  centeredStateFrame: { alignItems: 'center', justifyContent: 'center', paddingVertical: 64, paddingHorizontal: 32 },
+  errorIcon: { marginBottom: 10 },
+  errorTextHeading: { fontSize: 15, fontWeight: '600', color: '#1C1917', marginBottom: 4 },
+  errorTextSubtitle: { fontSize: 12, color: '#78716C', textAlign: 'center', marginBottom: 16, lineHeight: 16 },
+  retryButton: { backgroundColor: '#1C1917', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10 },
+  retryButtonText: { color: '#FAFAF9', fontSize: 12, fontWeight: '600' },
 });

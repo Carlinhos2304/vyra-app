@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -11,7 +11,10 @@ import {
   LayoutAnimation,
   Platform,
   UIManager,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
+import { useFocusEffect, router } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { PremiumCard } from '../../components/ui/PremiumCard';
@@ -19,6 +22,9 @@ import { PremiumTouchable } from '../../components/ui/PremiumTouchable';
 import { StaggeredListWrapper } from '../../constants/motion/StaggeredListWrapper';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { SectionTitle } from '../../components/ui/SectionTitle';
+
+// Supabase client instance integration
+import { supabase } from '../../lib/supabase';
 
 // Enable layout animations natively for Android target instances
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -28,62 +34,229 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 const { width } = Dimensions.get('window');
 const GRID_ITEM_WIDTH = (width - 44) / 2;
 
-const AVAILABLE_ITEMS = [
-  {
-    id: '1',
-    name: 'White Shirt',
-    category: 'top',
-    image: 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=150&h=200&fit=crop',
-  },
-  {
-    id: '2',
-    name: 'Blue Jeans',
-    category: 'bottom',
-    image: 'https://images.unsplash.com/photo-1542272604-787c3835535d?w=150&h=200&fit=crop',
-  },
-  {
-    id: '3',
-    name: 'Black Blazer',
-    category: 'top',
-    image: 'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=150&h=200&fit=crop',
-  },
-  {
-    id: '4',
-    name: 'Brown Boots',
-    category: 'shoes',
-    image: 'https://images.unsplash.com/photo-1608256246200-53e635b5b65f?w=150&h=200&fit=crop',
-  },
-];
+// Strong Typing Strategy for Database Wardrobe Entities
+interface Garment {
+  id: string;
+  user_id: string;
+  name: string;
+  brand: string | null;
+  category: string;
+  color: string | null;
+  image_url: string | null;
+  is_favorite: boolean;
+  ai_description?: string | null;
+  tags?: string[] | null;
+}
 
 export default function CreateOutfitScreen() {
   const [outfitName, setOutfitName] = useState('');
-  const [selectedItems, setSelectedItems] = useState<typeof AVAILABLE_ITEMS>([]);
+  // Extensible occasion hook matching database schema structures (can be expanded via optional picker)
+  const [occasion, setOccasion] = useState<string | null>(null);
+  
+  // Dynamic Supabase data management synchronization states
+  const [garments, setGarments] = useState<Garment[]>([]);
+  const [selectedItems, setSelectedItems] = useState<Garment[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleAddItem = (item: typeof AVAILABLE_ITEMS[0]) => {
+  // Focus-aware active listener engine fetching user telemetry data securely
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+
+      const fetchWardrobeGarments = async () => {
+        try {
+          if (isActive) setIsLoading(true);
+          setError(null);
+          console.log('[Outfit Creation] Loading garments...');
+
+          // Resolve secure current identity validation token coordinates
+          const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+          if (authError || !user) {
+            console.error('[Outfit Creation Error] User token evaluation failed or session missing:', authError);
+            if (isActive) {
+              setError('No active credentials verified.');
+              setIsLoading(false);
+            }
+            return;
+          }
+
+          console.log('[Outfit Creation Core Debug] Authenticated user:', user.id);
+
+          // Query target relational rows strictly isolated by multi-tenant parameter
+          const { data, error: queryError } = await supabase
+            .from('clothing_items')
+            .select('*')
+            .eq('user_id', user.id);
+
+          if (queryError) {
+            console.error('[Outfit Creation Error] Query failed:', queryError);
+            throw queryError;
+          }
+
+          if (isActive) {
+            console.log('[Outfit Creation Core Debug] Garments loaded:', data ? data.length : 0);
+            setGarments(data || []);
+            
+            // Clean out invalid selections if any rows were deleted remotely
+            if (data) {
+              setSelectedItems((prev) => prev.filter((fav) => data.some((item) => item.id === fav.id)));
+            }
+          }
+        } catch (err: any) {
+          console.error('[Outfit Creation Error] Failed to load garments:', err);
+          if (isActive) {
+            setError(err.message || 'An unhandled exception occurred while fetching wardrobe entries.');
+          }
+        } finally {
+          if (isActive) setIsLoading(false);
+        }
+      };
+
+      fetchWardrobeGarments();
+
+      return () => {
+        isActive = false;
+      };
+    }, [])
+  );
+
+  // Requirements 1, 2, 3, 4, 5, 6, 7 & 10: Complete Transaction Save Workflow
+  const handleSaveOutfitWorkflow = async () => {
+    if (isSaving) return;
+
+    try {
+      setIsSaving(true);
+      setError(null);
+
+      console.log('[Outfit Save Pipeline] Initiating verification and persistence transaction logic...');
+
+      // 1. Authenticate validation checks
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        console.error('[Outfit Save Pipeline Error] Identity mapping extraction collapsed:', authError);
+        Alert.alert('Session Error', 'Your credentials expired. Authenticate your session again.');
+        return;
+      }
+      console.log('[Outfit Save Pipeline Sync] Validated Authenticated User ID context:', user.id);
+
+      // 2. Client Side Structural Sanitization Constraints
+      const sanitizedName = outfitName.trim();
+      if (!sanitizedName) {
+        console.warn('[Outfit Save Pipeline Validation Alert] Prevented commit: Blank string name variable.');
+        Alert.alert('Missing Name', 'Please add a name description for your custom creation.');
+        return;
+      }
+
+      if (selectedItems.length === 0) {
+        console.warn('[Outfit Save Pipeline Validation Alert] Prevented commit: Empty selections collection.');
+        Alert.alert('Empty Canvas', 'Select at least one garment from your wardrobe to construct an outfit.');
+        return;
+      }
+
+      console.log(`[Outfit Save Pipeline Commit] Appending new record to outfits table. Name: "${sanitizedName}"`);
+
+      // 3. Write Core Header Row to public.outfits
+      const { data: outfitRecord, error: outfitInsertError } = await supabase
+        .from('outfits')
+        .insert({
+          user_id: user.id,
+          name: sanitizedName,
+          occasion: occasion,
+          created_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (outfitInsertError || !outfitRecord) {
+        console.error('[Outfit Save Pipeline Error] Core entity record insertion aborted by DB engine:', outfitInsertError);
+        throw outfitInsertError || new Error('Database failed to generate an outfit tracker entity.');
+      }
+
+      const generatedOutfitId = outfitRecord.id;
+      console.log(`[Outfit Save Pipeline Sync] Core header tracking item recorded successfully. Generated Primary Key UUID: ${generatedOutfitId}`);
+
+      // 4. Batch items formatting logic map mapping relational associative items entries
+      const relationalItemsPayloads = selectedItems.map((garment) => ({
+        outfit_id: generatedOutfitId,
+        clothing_item_id: garment.id,
+      }));
+
+      console.log(`[Outfit Save Pipeline Commit] Processing child items relations records. Compiling associative map payload entries count: ${relationalItemsPayloads.length}`);
+
+      // 5. Append records tracking dependencies to junction grid
+      const { error: junctionInsertError } = await supabase
+        .from('outfit_items')
+        .insert(relationalItemsPayloads);
+
+      if (junctionInsertError) {
+        console.error('[Outfit Save Pipeline Error] Relational items reference array linking operation crashed:', junctionInsertError);
+        
+        // Contextual Fallback cleanup: Remove orphaned parent outfit tracker node gracefully
+        await supabase.from('outfits').delete().eq('id', generatedOutfitId);
+        throw junctionInsertError;
+      }
+
+      console.log('[Outfit Save Pipeline Success] Transaction verified and fully committed. Outfit persistent maps stored.');
+
+      // 6. Provide tactile user completion alert notification alerts
+      Alert.alert(
+        'Outfit Saved',
+        `"${sanitizedName}" has been successfully added to your lookbook collection.`,
+        [
+          {
+            text: 'Wonderful',
+            onPress: () => {
+              // 7. Route focus securely backwards onto structural underlying stack screen layouts
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/closet');
+              }
+            },
+          },
+        ]
+      );
+
+    } catch (err: any) {
+      console.error('[Outfit Save Pipeline Fatal Error Exception]:', err);
+      setError(err.message || 'An unexpected failure scenario caused save tasks to interrupt.');
+      Alert.alert('Persistence Failure', err.message || 'Could not complete save transaction across cloud servers.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleAddItem = (item: Garment) => {
     if (!selectedItems.some((selected) => selected.id === item.id)) {
-      // Direct high-performance layout mutation interpolation trigger
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setSelectedItems([...selectedItems, item]);
     }
   };
 
   const handleRemoveItem = (id: string) => {
-    // Structural micro-recalculation sequence update
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setSelectedItems(selectedItems.filter((item) => item.id !== id));
   };
 
-  const renderAvailableItem = ({ item, index }: { item: typeof AVAILABLE_ITEMS[0]; index: number }) => {
+  const renderAvailableItem = ({ item, index }: { item: Garment; index: number }) => {
     const isSelected = selectedItems.some((selected) => selected.id === item.id);
+    
+    const imageSource = item.image_url
+      ? { uri: item.image_url }
+      : { uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&background=F5F5F4&color=1C1917&size=250` };
 
     return (
       <StaggeredListWrapper index={index}>
         <PremiumCard
           onPress={isSelected ? () => handleRemoveItem(item.id) : () => handleAddItem(item)}
           style={[styles.gridCard, isSelected && styles.gridCardSelected]}
+          disabled={isSaving}
         >
           <View style={styles.gridImageContainer}>
-            <Image source={{ uri: item.image }} style={styles.gridCardImage} />
+            <Image source={imageSource} style={styles.gridCardImage} />
             {isSelected ? (
               <View style={styles.gridImageOverlaySelected}>
                 <View style={styles.checkmarkCircle}>
@@ -98,7 +271,10 @@ export default function CreateOutfitScreen() {
           </View>
           <View style={styles.gridCardFooter}>
             <Text style={styles.gridCardName} numberOfLines={1}>
-              {item.name}
+              {item.name || 'Unnamed Garment'}
+            </Text>
+            <Text style={styles.gridCardSubscript} numberOfLines={1}>
+              {[item.brand, item.color].filter(Boolean).join(' • ') || item.category || 'Wardrobe Base'}
             </Text>
           </View>
         </PremiumCard>
@@ -109,7 +285,7 @@ export default function CreateOutfitScreen() {
   return (
     <PremiumScreen>
       <FlatList
-        data={AVAILABLE_ITEMS}
+        data={garments}
         renderItem={renderAvailableItem}
         keyExtractor={(item) => item.id}
         numColumns={2}
@@ -117,21 +293,38 @@ export default function CreateOutfitScreen() {
         contentContainerStyle={styles.scrollPadding}
         showsVerticalScrollIndicator={false}
         extraData={selectedItems}
+        ListEmptyComponent={
+          !isLoading && !error ? (
+            <View style={styles.stateCenterLoaderFrame}>
+              <MaterialCommunityIcons name="hanger" size={40} color="#78716C" />
+              <Text style={styles.errorHeaderTypography}>No Garments Found</Text>
+              <Text style={styles.errorSubTypography}>
+                Your wardrobe is empty. Add clothing items first to assemble an outfit combination.
+              </Text>
+            </View>
+          ) : null
+        }
         ListHeaderComponent={
           <View style={styles.headerBlock}>
-            {/* Screen Header Layout Block */}
             <View style={styles.topBar}>
               <SectionHeader
                 title="Create Outfit"
                 subtitle="Mix & match items from your wardrobe"
                 style={styles.headerFlexOverride}
               />
-              <PremiumTouchable style={styles.saveActionCircle} onPress={() => console.log('Save Outfit Layout', { name: outfitName, items: selectedItems })}>
-                <Ionicons name="save-outline" size={20} color="#FAFAF9" />
+              <PremiumTouchable 
+                disabled={isLoading || isSaving || garments.length === 0}
+                style={[styles.saveActionCircle, (isLoading || isSaving || garments.length === 0) && styles.saveActionCircleDisabled]} 
+                onPress={handleSaveOutfitWorkflow}
+              >
+                {isSaving ? (
+                  <ActivityIndicator size="small" color="#FAFAF9" />
+                ) : (
+                  <Ionicons name="save-outline" size={20} color="#FAFAF9" />
+                )}
               </PremiumTouchable>
             </View>
 
-            {/* Canvas Input Controller Framework */}
             <View style={styles.formSection}>
               <SectionTitle withBottomMargin>Outfit Details</SectionTitle>
               <TextInput
@@ -139,11 +332,11 @@ export default function CreateOutfitScreen() {
                 placeholderTextColor="#78716C"
                 value={outfitName}
                 onChangeText={setOutfitName}
-                style={styles.textInputControl}
+                editable={!isLoading && !isSaving}
+                style={[styles.textInputControl, (isLoading || isSaving) && styles.textInputDisabled]}
               />
             </View>
 
-            {/* Dynamic Workspace / Canvas Preview Section */}
             <View style={styles.canvasSection}>
               <View style={styles.canvasHeader}>
                 <MaterialCommunityIcons name="sparkles" size={14} color="#1C1917" style={styles.sparkleIcon} />
@@ -163,30 +356,50 @@ export default function CreateOutfitScreen() {
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.canvasHorizontalTrack}
                 >
-                  {selectedItems.map((item) => (
-                    <View key={item.id} style={styles.previewCanvasCard}>
-                      <Image source={{ uri: item.image }} style={styles.canvasCardImage} />
-                      <PremiumTouchable
-                        style={styles.removeBadgeButton}
-                        onPress={() => handleRemoveItem(item.id)}
-                      >
-                        <Ionicons name="close-circle" size={20} color="#1C1917" />
-                      </PremiumTouchable>
-                      <View style={styles.canvasCardLabelContainer}>
-                        <Text style={styles.canvasCardNameText} numberOfLines={1}>
-                          {item.name}
-                        </Text>
+                  {selectedItems.map((item) => {
+                    const canvasImgSource = item.image_url ? { uri: item.image_url } : { uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&background=F5F5F4&color=1C1917` };
+                    return (
+                      <View key={item.id} style={styles.previewCanvasCard}>
+                        <Image source={canvasImgSource} style={styles.canvasCardImage} />
+                        <PremiumTouchable
+                          disabled={isSaving}
+                          style={styles.removeBadgeButton}
+                          onPress={() => handleRemoveItem(item.id)}
+                        >
+                          <Ionicons name="close-circle" size={20} color="#1C1917" />
+                        </PremiumTouchable>
+                        <View style={styles.canvasCardLabelContainer}>
+                          <Text style={styles.canvasCardNameText} numberOfLines={1}>
+                            {item.name}
+                          </Text>
+                        </View>
                       </View>
-                    </View>
-                  ))}
+                    );
+                  })}
                 </ScrollView>
               )}
             </View>
 
-            {/* Section Split Title Separator */}
-            <View style={styles.dividerHeader}>
-              <SectionTitle>Wardrobe Items</SectionTitle>
-            </View>
+            {isLoading && (
+              <View style={styles.stateCenterLoaderFrame}>
+                <ActivityIndicator size="small" color="#1C1917" />
+                <Text style={styles.loadingTypographySubtitle}>Retrieving Vyra vault assets...</Text>
+              </View>
+            )}
+
+            {error && (
+              <View style={styles.stateCenterLoaderFrame}>
+                <MaterialCommunityIcons name="alert-circle-outline" size={32} color="#EF4444" />
+                <Text style={styles.errorHeaderTypography}>Failed to Synchronize</Text>
+                <Text style={styles.errorSubTypography}>{error}</Text>
+              </View>
+            )}
+
+            {!isLoading && !error && (
+              <View style={styles.dividerHeader}>
+                <SectionTitle>Wardrobe Items</SectionTitle>
+              </View>
+            )}
           </View>
         }
       />
@@ -227,6 +440,11 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  saveActionCircleDisabled: {
+    backgroundColor: '#E7E5E4',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
   formSection: {
     marginVertical: 12,
   },
@@ -239,6 +457,10 @@ const styles = StyleSheet.create({
     color: '#1C1917',
     borderWidth: 1,
     borderColor: '#E7E5E4',
+  },
+  textInputDisabled: {
+    opacity: 0.6,
+    backgroundColor: '#E7E5E4',
   },
   canvasSection: {
     backgroundColor: '#FFFFFF',
@@ -382,11 +604,44 @@ const styles = StyleSheet.create({
   },
   gridCardFooter: {
     padding: 10,
+    alignItems: 'center',
   },
   gridCardName: {
     fontSize: 13,
-    fontWeight: '400',
+    fontWeight: '500',
     color: '#1C1917',
     textAlign: 'center',
+    marginBottom: 2,
+  },
+  gridCardSubscript: {
+    fontSize: 11,
+    color: '#78716C',
+    fontWeight: '400',
+    textAlign: 'center',
+  },
+  stateCenterLoaderFrame: {
+    paddingVertical: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  loadingTypographySubtitle: {
+    fontSize: 13,
+    color: '#78716C',
+    marginTop: 12,
+    fontWeight: '400',
+  },
+  errorHeaderTypography: {
+    fontSize: 15,
+    color: '#1C1917',
+    fontWeight: '600',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  errorSubTypography: {
+    fontSize: 12,
+    color: '#78716C',
+    textAlign: 'center',
+    lineHeight: 16,
   },
 });
