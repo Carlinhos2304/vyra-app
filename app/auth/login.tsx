@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,9 +7,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert,
+  Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+
 import VyraLogo from '../../components/branding/VyraLogo';
 import { PremiumButton } from '../../components/ui/PremiumButton'; 
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
@@ -17,7 +19,6 @@ import { PremiumInput } from '../../components/ui/PremiumInput';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { SectionTitle } from '../../components/ui/SectionTitle';
 import { PremiumLoader } from '../../components/ui/PremiumLoader';
-
 import { supabase } from '../../lib/supabase';
 
 export default function LoginScreen() {
@@ -25,16 +26,58 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Validate basic form input before network processing
+  // Pure React Native Animated opacity tracker
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  // Track error state transitions to fire smooth fade configurations
+  useEffect(() => {
+    if (errorMessage) {
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      fadeAnim.setValue(0);
+    }
+  }, [errorMessage]);
+
+  // Dismiss errors automatically when user adjusts inputs
+  useEffect(() => {
+    if (errorMessage) setErrorMessage(null);
+  }, [email, password]);
+
+  const mapAuthErrorToFriendlyMessage = (error: any): string => {
+    if (!error) return 'Something went wrong. Please try again.';
+    
+    const message = error.message?.toLowerCase() || '';
+    if (message.includes('invalid login credentials') || message.includes('email not confirmed')) {
+      return 'Incorrect email or password.';
+    }
+    if (message.includes('network') || message.includes('fetch')) {
+      return 'Connection problem. Please try again.';
+    }
+    if (message.includes('rate limit') || error.status === 429 || message.includes('too many requests')) {
+      return 'Too many login attempts. Please wait a moment.';
+    }
+    
+    return 'Something went wrong. Please try again.';
+  };
+
   const validateForm = (): boolean => {
-    if (!email.trim() || !password.trim()) {
-      Alert.alert('Validation Error', 'Please fill in all security fields.');
+    if (!email.trim()) {
+      setErrorMessage('Please enter your email address.');
       return false;
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email.trim())) {
-      Alert.alert('Invalid Email', 'Please enter a valid email address structure.');
+      setErrorMessage('Invalid email format.');
+      return false;
+    }
+    if (!password.trim()) {
+      setErrorMessage('Please enter your password.');
       return false;
     }
     return true;
@@ -42,6 +85,7 @@ export default function LoginScreen() {
 
   const handleSignIn = async () => {
     if (isLoading) return;
+    setErrorMessage(null);
     if (!validateForm()) return;
     
     setIsLoading(true);
@@ -53,7 +97,10 @@ export default function LoginScreen() {
         password: password,
       });
 
-      if (error) throw error;
+      if (error) {
+        setErrorMessage(mapAuthErrorToFriendlyMessage(error));
+        return;
+      }
 
       if (data?.user) {
         console.log('[Auth Login] Sign-In successful. Routing user session onto primary dashboard layout.');
@@ -61,7 +108,7 @@ export default function LoginScreen() {
       }
     } catch (error: any) {
       console.error('[Auth Login] Supabase authentication server error response:', error);
-      Alert.alert('Authentication Failed', error.message || 'Invalid email or password combination.');
+      setErrorMessage(mapAuthErrorToFriendlyMessage(error));
     } finally {
       setIsLoading(false);
     }
@@ -70,7 +117,22 @@ export default function LoginScreen() {
   const handleGoogleSignIn = async () => {
     if (isLoading) return;
     console.log('[Auth OAuth] Initializing Google identity token request pipeline.');
-    Alert.alert('Google Auth', 'Third-party single sign-on services can be integrated via Native Credentials here.');
+    try {
+      setIsLoading(true);
+      setErrorMessage(null);
+
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: Platform.OS === 'web' ? window.location.origin : 'vyra://home',
+        }
+      });
+
+      if (error) throw error;
+    } catch (error: any) {
+      setErrorMessage(mapAuthErrorToFriendlyMessage(error));
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -108,6 +170,8 @@ export default function LoginScreen() {
               editable={!isLoading}
             />
 
+            <View style={styles.inputSpacer} />
+
             <PremiumInput
               label="Password"
               placeholder="••••••••"
@@ -117,8 +181,17 @@ export default function LoginScreen() {
               autoCapitalize="none"
               editable={!isLoading}
             />
+
+            {/* Standard React Native Animated Error Layout Container */}
+            {errorMessage && (
+              <Animated.View style={[styles.errorInlineBanner, { opacity: fadeAnim }]}>
+                <MaterialCommunityIcons name="alert-circle-outline" size={16} color="#EF4444" />
+                <Text style={styles.errorBannerText}>{errorMessage}</Text>
+              </Animated.View>
+            )}
+
+            <View style={styles.buttonSpacingAdjustment} />
             
-            {/* Conditional Authentication View Slot */}
             {isLoading ? (
               <View style={styles.loaderButtonPlaceholder}>
                 <PremiumLoader />
@@ -199,7 +272,32 @@ const styles = StyleSheet.create({
   },
   formContainer: {
     width: '100%',
-    marginBottom: 24,
+    marginBottom: 12,
+  },
+  inputSpacer: {
+    height: 12,
+  },
+  errorInlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 16,
+    gap: 8,
+  },
+  errorBannerText: {
+    fontSize: 13,
+    color: '#EF4444',
+    fontWeight: '500',
+    letterSpacing: -0.2,
+    flex: 1,
+  },
+  buttonSpacingAdjustment: {
+    height: 24,
   },
   loaderButtonPlaceholder: {
     height: 52,
@@ -209,7 +307,8 @@ const styles = StyleSheet.create({
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 16,
+    marginTop: 24,
+    marginBottom: 32,
     paddingHorizontal: 4,
   },
   dividerLine: {
@@ -231,7 +330,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    marginBottom: 40,
+    marginBottom: 44,
   },
   googleContent: {
     flexDirection: 'row',

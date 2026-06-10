@@ -7,551 +7,663 @@ import {
   Image,
   Dimensions,
   Animated,
+  ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { PremiumCard } from '../../components/ui/PremiumCard';
 import { PremiumTouchable } from '../../components/ui/PremiumTouchable';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { SectionTitle } from '../../components/ui/SectionTitle'; 
 import VyraLogo from '../../components/branding/VyraLogo';
+import { supabase } from '../../lib/supabase';
 
 const { width } = Dimensions.get('window');
 
-const OCCASIONS = [
-  { id: 1, label: 'All', active: true },
-  { id: 2, label: 'Casual' },
-  { id: 3, label: 'Work' },
-  { id: 4, label: 'Party' },
-  { id: 5, label: 'Sport' },
-];
+interface UserProfile {
+  username: string;
+}
 
-const RECOMMENDATIONS = [
-  {
-    id: 1,
-    title: 'Summer Breeze',
-    styleKey: 'Vyra Essentials',
-    occasion: 'Casual',
-    items: 4,
-    likes: 234,
-    image: 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=400&h=600&fit=crop',
-  },
-  {
-    id: 2,
-    title: 'Office Ready',
-    styleKey: 'Tailored Linear',
-    occasion: 'Work',
-    items: 3,
-    likes: 189,
-    image: 'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=400&h=600&fit=crop',
-  },
-];
+interface Outfit {
+  id: string;
+  name: string;
+  cover_image_url: string | null;
+  occasion?: string;
+}
 
-const TRENDING_ITEMS = [
-  { id: 1, name: 'Oversized Blazer', category: 'Trending' },
-  { id: 2, name: 'Wide Leg Jeans', category: 'Popular' },
-  { id: 3, name: 'Knit Cardigan', category: 'New' },
-];
+interface OutfitPlan {
+  id: string;
+  date: string;
+  outfits: Outfit;
+  event_name?: string;
+}
+
+interface WeeklyPlan {
+  id: string;
+  date: string;
+  dayName: string;
+  outfit?: Outfit;
+}
+
+interface WardrobeInsights {
+  totalGarments: number;
+  totalOutfits: number;
+  mostUsedCategory: string;
+  favoriteColor: string;
+}
 
 export default function HomeScreen() {
-  const [activeOccasion, setActiveOccasion] = useState('All');
+  const router = useRouter();
+  
+  // Isolated Core State Matrix
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [todayPlan, setTodayPlan] = useState<OutfitPlan | null>(null);
+  const [weeklyPreview, setWeeklyPreview] = useState<WeeklyPlan[]>([]);
+  const [insights, setInsights] = useState<WardrobeInsights>({
+    totalGarments: 0,
+    totalOutfits: 0,
+    mostUsedCategory: '—',
+    favoriteColor: '—'
+  });
+  
+  const [isLoading, setIsLoading] = useState(true);
+  const [isError, setIsError] = useState(false);
 
-  // Animation values using standard Refs
-  const headerOpacity = useRef(new Animated.Value(0)).current;
-  const headerTranslateY = useRef(new Animated.Value(-12)).current;
+  // Performance Layout Entrance Anchors
+  const contentFade = useRef(new Animated.Value(0)).current;
+  const contentY = useRef(new Animated.Value(10)).current;
 
-  const occasionsOpacity = useRef(new Animated.Value(0)).current;
-  const occasionsTranslateY = useRef(new Animated.Value(8)).current;
-
-  const recommendationsOpacity = useRef(new Animated.Value(0)).current;
-  const recommendationsTranslateY = useRef(new Animated.Value(16)).current;
-
-  const bannerOpacity = useRef(new Animated.Value(0)).current;
-  const bannerTranslateX = useRef(new Animated.Value(16)).current;
-
-  const trendingOpacity = useRef(new Animated.Value(0)).current;
-  const trendingTranslateY = useRef(new Animated.Value(12)).current;
+  // Localized Formatting Engine for the Editorial Sub-Header
+  const formattedDate = new Date().toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'long',
+    day: 'numeric'
+  });
 
   useEffect(() => {
-    // Premium staggered orchestration sequence
-    Animated.stagger(100, [
-      // 1. Reveal Header Title Block
-      Animated.parallel([
-        Animated.timing(headerOpacity, {
-          toValue: 1,
-          duration: 450,
-          useNativeDriver: true,
-        }),
-        Animated.timing(headerTranslateY, {
-          toValue: 0,
-          duration: 450,
-          useNativeDriver: true,
-        }),
-      ]),
-      // 2. Reveal Horizontal Occasions Shelf
-      Animated.parallel([
-        Animated.timing(occasionsOpacity, {
-          toValue: 1,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-        Animated.timing(occasionsTranslateY, {
-          toValue: 0,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-      ]),
-      // 3. Reveal Curated Outfits Stack
-      Animated.parallel([
-        Animated.timing(recommendationsOpacity, {
-          toValue: 1,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-        Animated.timing(recommendationsTranslateY, {
-          toValue: 0,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-      ]),
-      // 4. Slide In Trend Banner
-      Animated.parallel([
-        Animated.timing(bannerOpacity, {
-          toValue: 1,
-          duration: 450,
-          useNativeDriver: true,
-        }),
-        Animated.timing(bannerTranslateX, {
-          toValue: 0,
-          duration: 450,
-          useNativeDriver: true,
-        }),
-      ]),
-      // 5. Rise Trending Essentials Matrix
-      Animated.parallel([
-        Animated.timing(trendingOpacity, {
-          toValue: 1,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-        Animated.timing(trendingTranslateY, {
-          toValue: 0,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-      ]),
-    ]).start();
+    fetchPremiumDashboardData();
   }, []);
 
+  const fetchPremiumDashboardData = async () => {
+    try {
+      setIsLoading(true);
+      setIsError(false);
+
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) throw new Error('Unauthenticated status.');
+
+      const userId = user.id;
+      const todayISO = new Date().toISOString().split('T')[0];
+
+      // Formulate a clean 5-day lookahead matrix window
+      const daysArray: WeeklyPlan[] = [];
+      for (let i = 0; i < 5; i++) {
+        const d = new Date();
+        d.setDate(d.getDate() + i);
+        daysArray.push({
+          id: `day-${i}`,
+          date: d.toISOString().split('T')[0],
+          dayName: i === 0 ? 'Today' : d.toLocaleDateString('en-US', { weekday: 'short' }),
+        });
+      }
+
+      // Parallel Data Fetch Pipeline
+      const [
+        profileRes,
+        todayOutfitRes,
+        weeklyPlansRes,
+        garmentsCountRes,
+        outfitsCountRes,
+      ] = await Promise.all([
+        supabase.from('profiles').select('username').eq('id', userId).single(),
+        supabase.from('outfit_plans').select('id, date, event_name, outfits(id, name, cover_image_url, occasion)').eq('user_id', userId).eq('date', todayISO).maybeSingle(),
+        supabase.from('outfit_plans').select('date, outfits(id, name, cover_image_url)').eq('user_id', userId).gte('date', daysArray[0].date).lte('date', daysArray[4].date),
+        supabase.from('clothing_items').select('id', { count: 'exact', head: true }).eq('user_id', userId),
+        supabase.from('outfits').select('id', { count: 'exact', head: true }).eq('user_id', userId),
+      ]);
+
+      if (profileRes.data) setProfile(profileRes.data as UserProfile);
+      
+      if (todayOutfitRes.data) {
+        const rawPlan = todayOutfitRes.data as any;
+        setTodayPlan({
+          id: rawPlan.id,
+          date: rawPlan.date,
+          event_name: rawPlan.event_name,
+          outfits: Array.isArray(rawPlan.outfits) ? rawPlan.outfits[0] : rawPlan.outfits
+        });
+      }
+
+      // Intersect database plans with structural calendar lookahead
+      const matchedWeeklyPlans = daysArray.map(day => {
+        const match = weeklyPlansRes.data?.find((p: any) => p.date === day.date);
+        if (match) {
+          day.outfit = Array.isArray(match.outfits) ? match.outfits[0] : match.outfits;
+        }
+        return day;
+      });
+      setWeeklyPreview(matchedWeeklyPlans);
+
+      setInsights({
+        totalGarments: garmentsCountRes.count || 0,
+        totalOutfits: outfitsCountRes.count || 0,
+        mostUsedCategory: 'Tailoring',
+        favoriteColor: 'Monochrome Minimalism'
+      });
+
+      Animated.parallel([
+        Animated.timing(contentFade, { toValue: 1, duration: 500, useNativeDriver: true }),
+        Animated.timing(contentY, { toValue: 0, duration: 500, useNativeDriver: true })
+      ]).start();
+
+    } catch (error) {
+      console.error('[Vyra Data Integration Fault]:', error);
+      setIsError(true);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <PremiumScreen style={styles.centerFlexContainer}>
+        <ActivityIndicator size="small" color="#1C1917" />
+      </PremiumScreen>
+    );
+  }
+
+  if (isError) {
+    return (
+      <PremiumScreen style={styles.centerFlexContainer}>
+        <Ionicons name="alert-circle-outline" size={20} color="#78716C" />
+        <Text style={styles.errorStateText}>Could not sync layout with Vyra system architecture</Text>
+        <PremiumTouchable style={styles.retryButton} onPress={fetchPremiumDashboardData}>
+          <Text style={styles.retryButtonText}>Retry Alignment</Text>
+        </PremiumTouchable>
+      </PremiumScreen>
+    );
+  }
+
   return (
-    <PremiumScreen>
+    <PremiumScreen style={styles.rootBackground}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         
-        {/* Header Block Frame Layout */}
-        <Animated.View style={[
-          styles.headerContainer, 
-          { opacity: headerOpacity, transform: [{ translateY: headerTranslateY }] }
-        ]}>
-          <View style={styles.headerTop}>
-            <View>
-              <Text style={styles.title}>Good Morning</Text>
-              <Text style={styles.subtitle}>Ready to style your day?</Text>
-            </View>
-            <PremiumTouchable style={styles.iconButton} onPress={() => console.log('Logo Press')}>
-              <VyraLogo/>
+        {/* SECTION 1: ARCHITECTURAL GREETING & LOGO */}
+        <View style={styles.editorialHeaderContainer}>
+          <View style={styles.brandMetaRow}>
+            <Text style={styles.editorialDateText}>{formattedDate}</Text>
+            <PremiumTouchable onPress={() => router.push('/profile')} activeOpacity={0.75}>
+              <VyraLogo />
             </PremiumTouchable>
           </View>
+          
+          <Text style={styles.editorialGreetingText}>
+            Hello, {profile?.username || 'Curator'}
+          </Text>
+          
+          <Text style={styles.editorialPoetryText}>
+            The wardrobe is an architecture of self. Currently managing {insights.totalGarments} archival foundations to compose your modern visual footprint.
+          </Text>
+        </View>
 
-          {/* Horizontal Badges Scroll Area */}
-          <Animated.View style={{ opacity: occasionsOpacity, transform: [{ translateY: occasionsTranslateY }] }}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.occasionsScroll}
-            >
-              {OCCASIONS.map((occasion) => {
-                const isActive = activeOccasion === occasion.label;
-                return (
-                  <PremiumTouchable
-                    key={occasion.id}
-                    onPress={() => setActiveOccasion(occasion.label)}
-                    style={[
-                      styles.badge,
-                      isActive ? styles.badgeActive : styles.badgeInactive,
-                    ]}
-                  >
-                    <Text style={[styles.badgeText, isActive && styles.badgeTextActive]}>
-                      {occasion.label}
-                    </Text>
-                  </PremiumTouchable>
-                );
-              })}
-            </ScrollView>
-          </Animated.View>
-        </Animated.View>
-
-        {/* Section Structure: Recommendations Grid */}
-        <Animated.View style={[
-          styles.section, 
-          { opacity: recommendationsOpacity, transform: [{ translateY: recommendationsTranslateY }] }
-        ]}>
-          <View style={styles.sectionHeaderRow}>
-            <SectionHeader 
-              title="Recommended for You" 
-              subtitle="Curated daily based on your preferences"
-              style={styles.headerFlexOverride}
-            />
-            <PremiumTouchable style={styles.seeAllWrapper} onPress={() => console.log('See All')}>
-              <Text style={styles.seeAllButton}>See all</Text>
-            </PremiumTouchable>
-          </View>
-
-          <View style={styles.cardsStack}>
-            {RECOMMENDATIONS.map((outfit) => (
+        <Animated.View style={{ opacity: contentFade, transform: [{ translateY: contentY }] }}>
+          
+          {/* SECTION 2: IMMERSIVE HERO ENSEMBLE */}
+          <View style={styles.systemSection}>
+            <SectionHeader title="Today's Ensemble" subtitle="Your active presentation configuration" style={styles.headerBindingFix} />
+            
+            {todayPlan?.outfits ? (
               <PremiumCard 
-                key={outfit.id} 
-                style={styles.outfitCard}
-                onPress={() => console.log(`Maps to Outfit: ${outfit.title}`)}
+                style={styles.magazineCardFrame}
+                onPress={() => router.push(`/outfits/${todayPlan.outfits.id}`)}
               >
-                <View style={styles.imageWrapper}>
-                  <Image source={{ uri: outfit.image }} style={styles.cardImage} />
-                  
-                  {/* Aspect Badge Absolute Placement Frame */}
-                  <View style={styles.cardTag}>
-                    <Text style={styles.cardTagText}>{outfit.occasion}</Text>
-                  </View>
-
-                  <View style={styles.actionsContainer}>
-                    <PremiumTouchable style={styles.floatingActionButton} onPress={() => console.log('Like Outfit')}>
-                      <Ionicons name="heart-outline" size={18} color="#1C1917" />
-                    </PremiumTouchable>
-                    <PremiumTouchable style={styles.floatingActionButton} onPress={() => console.log('Share Outfit')}>
-                      <Ionicons name="share-social-outline" size={18} color="#1C1917" />
-                    </PremiumTouchable>
-                  </View>
-                </View>
-
-                {/* Sub-Card Content Details Label Setup */}
-                <View style={styles.cardDetails}>
-                  <SectionTitle withBottomMargin>{outfit.styleKey}</SectionTitle>
-                  <Text style={styles.cardTitle}>{outfit.title}</Text>
-                  <View style={styles.cardMetadataRow}>
-                    <Text style={styles.metadataText}>{outfit.items} items</Text>
-                    <View style={styles.likesWrapper}>
-                      <Ionicons name="heart-outline" size={14} color="#78716C" style={styles.heartIcon} />
-                      <Text style={styles.metadataText}>{outfit.likes}</Text>
+                <View style={styles.magazineImageWrapper}>
+                  {todayPlan.outfits.cover_image_url ? (
+                    <Image source={{ uri: todayPlan.outfits.cover_image_url }} style={styles.magazineImage} />
+                  ) : (
+                    <View style={styles.magazineFallbackContainer}>
+                      <Ionicons name="shirt-outline" size={36} color="#A8A29E" />
                     </View>
+                  )}
+                  
+                  <View style={styles.linearScrimOverlay} />
+
+                  <View style={styles.magazineFloatingTopContent}>
+                    <Text style={styles.editorialTagText}>Today's Look</Text>
+                    {todayPlan.outfits.occasion && (
+                      <View style={styles.editorialOccasionBadge}>
+                        <Text style={styles.editorialOccasionBadgeText}>{todayPlan.outfits.occasion}</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={styles.magazineFloatingBottomContent}>
+                    {todayPlan.event_name && (
+                      <Text style={styles.magazineEventSubtitle}>{todayPlan.event_name}</Text>
+                    )}
+                    <Text style={styles.magazineTitleHeading}>{todayPlan.outfits.name}</Text>
                   </View>
                 </View>
               </PremiumCard>
-            ))}
-          </View>
-        </Animated.View>
-
-        {/* Section Structure: Editorial Tip Callout Banner */}
-        <Animated.View style={[
-          styles.section, 
-          { opacity: bannerOpacity, transform: [{ translateX: bannerTranslateX }] }
-        ]}>
-          <PremiumCard style={styles.bannerCard} onPress={() => console.log('Tips Pressed')}>
-            <View style={styles.bannerContent}>
-              <View style={styles.bannerTextContainer}>
-                <View style={styles.bannerHeaderRow}>
-                  <Ionicons name="bulb-outline" size={20} color="#FAFAF9" style={styles.bannerHeaderIcon} />
-                  <Text style={styles.bannerTitle}>Style Tips & Trends</Text>
+            ) : (
+              <PremiumCard style={styles.systemEmptySlateContainer} disabled>
+                <View style={styles.systemEmptySlateGraphic}>
+                  <Ionicons name="shirt-outline" size={32} color="#A8A29E" />
                 </View>
-                <Text style={styles.bannerSubtitle}>
-                  Discover the latest fashion advice and styling guides
-                </Text>
+                <Text style={styles.systemEmptyTitle}>The canvas is empty</Text>
+                <Text style={styles.systemEmptySubtitle}>No look configuration is assigned to your presentation schedule today.</Text>
+                <PremiumTouchable style={styles.systemCtaButton} onPress={() => router.push('/calendar')}>
+                  <Text style={styles.systemCtaButtonText}>Curate Look</Text>
+                </PremiumTouchable>
+              </PremiumCard>
+            )}
+          </View>
+
+          {/* SECTION 3: HORIZONTAL WEEKLY LOOKAHEAD */}
+          <View style={styles.systemSection}>
+            <SectionHeader title="Weekly Forecast" subtitle="Chronological lookahead tracking parameters" style={styles.headerBindingFix} />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.forecastStripScroll}>
+              {weeklyPreview.map((item) => (
+                <PremiumTouchable 
+                  key={item.id} 
+                  style={[styles.forecastDayCard, item.dayName === 'Today' && styles.forecastCardActiveToday]}
+                  onPress={() => item.outfit ? router.push(`/outfits/${item.outfit.id}`) : router.push('/calendar')}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.forecastDayText, item.dayName === 'Today' && styles.forecastDayTextActive]}>
+                    {item.dayName}
+                  </Text>
+                  
+                  <View style={styles.forecastThumbnailWrapper}>
+                    {item.outfit ? (
+                      item.outfit.cover_image_url ? (
+                        <Image source={{ uri: item.outfit.cover_image_url }} style={styles.forecastThumbnailImage} />
+                      ) : (
+                        <View style={styles.forecastThumbnailPlaceholder}>
+                          <View style={[styles.luxuryIndicatorDot, item.dayName === 'Today' && styles.luxuryIndicatorDotActive]} />
+                        </View>
+                      )
+                    ) : (
+                      <View style={[styles.forecastThumbnailEmpty, item.dayName === 'Today' && styles.forecastThumbnailEmptyActive]}>
+                        <Ionicons name="add" size={14} color={item.dayName === 'Today' ? '#FAFAF9' : '#A8A29E'} />
+                      </View>
+                    )}
+                  </View>
+                </PremiumTouchable>
+              ))}
+            </ScrollView>
+          </View>
+
+          {/* SECTION 4: LIFESTYLE WARDROBE CORE MATRICES */}
+          <View style={[styles.systemSection, styles.bottomSpacing]}>
+            <SectionTitle withBottomMargin style={styles.headerBindingFix}>Collection Insights</SectionTitle>
+            
+            <View style={styles.lifestyleInsightsGrid}>
+              <View style={styles.lifestyleMetricRow}>
+                <PremiumCard style={styles.lifestyleMetricBlock} onPress={() => router.push('/closet')}>
+                  <Text style={styles.lifestyleMetricValue}>{insights.totalGarments}</Text>
+                  <Text style={styles.lifestyleMetricLabel}>Archived Pieces</Text>
+                </PremiumCard>
+                
+                <PremiumCard style={styles.lifestyleMetricBlock} onPress={() => router.push('/closet')}>
+                  <Text style={styles.lifestyleMetricValue}>{insights.totalOutfits}</Text>
+                  <Text style={styles.lifestyleMetricLabel}>Compiled Looks</Text>
+                </PremiumCard>
               </View>
-              <MaterialCommunityIcons name="sparkles" size={26} color="#FAFAF9" style={styles.bannerSparkle} />
+
+              <PremiumCard style={styles.lifestyleWideCard} disabled>
+                <View style={styles.editorialInsightMeta}>
+                  <View style={styles.insightCluster}>
+                    <Text style={styles.lifestyleWideLabel}>Dominant Style</Text>
+                    <Text style={styles.lifestyleWideValue}>{insights.mostUsedCategory}</Text>
+                  </View>
+                  <View style={styles.insightDivider} />
+                  <View style={styles.insightCluster}>
+                    <Text style={styles.lifestyleWideLabel}>Current Aesthetic</Text>
+                    <Text style={styles.lifestyleWideValue}>{insights.favoriteColor}</Text>
+                  </View>
+                </View>
+              </PremiumCard>
             </View>
-          </PremiumCard>
-        </Animated.View>
-
-        {/* Section Structure: Trending Elements Shelf Grid */}
-        <Animated.View style={[
-          styles.section, 
-          { opacity: trendingOpacity, transform: [{ translateY: trendingTranslateY }] }
-        ]}>
-          <View style={styles.trendingHeaderRow}>
-            <MaterialCommunityIcons name="trending-up" size={16} color="#1C1917" style={styles.trendingTitleIcon} />
-            <SectionTitle style={styles.headerFlexOverride}>Trending Now</SectionTitle>
           </View>
 
-          <View style={styles.trendingGrid}>
-            {TRENDING_ITEMS.map((item) => (
-              <View key={item.id} style={styles.trendingMiniCard}>
-                <View style={styles.miniCardIconWrapper}>
-                  <MaterialCommunityIcons name="sparkles" size={22} color="#78716C" />
-                </View>
-                <Text style={styles.miniCardName} numberOfLines={1}>
-                  {item.name}
-                </Text>
-                <View style={styles.miniCardBadge}>
-                  <Text style={styles.miniCardBadgeText}>{item.category}</Text>
-                </View>
-              </View>
-            ))}
-          </View>
         </Animated.View>
-
       </ScrollView>
     </PremiumScreen>
   );
 }
 
 const styles = StyleSheet.create({
+  rootBackground: {
+    backgroundColor: '#FAFAF9',
+  },
+  centerFlexContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FAFAF9',
+  },
+  errorStateText: {
+    fontSize: 13,
+    color: '#78716C',
+    marginTop: 8,
+  },
+  retryButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#1C1917',
+    borderRadius: 12,
+    marginTop: 12,
+  },
+  retryButtonText: {
+    fontSize: 11,
+    color: '#FAFAF9',
+    fontWeight: '600',
+  },
   scrollContent: {
     paddingBottom: 40,
   },
-  headerContainer: {
-    backgroundColor: '#FAFAF9',
-    borderBottomWidth: 1,
-    borderColor: '#E7E5E4',
-    paddingBottom: 16,
+  editorialHeaderContainer: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 4,
   },
-  headerTop: {
+  brandMetaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    marginBottom: 16,
+    marginBottom: 20,
   },
-  title: {
-    fontSize: 24,
+  editorialDateText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#78716C',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  editorialGreetingText: {
+    fontSize: 28,
     fontWeight: '300',
     color: '#1C1917',
-    letterSpacing: 0.5,
+    letterSpacing: -0.5,
   },
-  subtitle: {
-    fontSize: 14,
-    color: '#78716C',
-    marginTop: 2,
-  },
-  iconButton: {
-    padding: 4,
-  },
-  occasionsScroll: {
-    paddingHorizontal: 24,
-    gap: 8,
-  },
-  badge: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-  },
-  badgeActive: {
-    backgroundColor: '#1C1917',
-    borderColor: '#1C1917',
-  },
-  badgeInactive: {
-    backgroundColor: 'transparent',
-    borderColor: '#E7E5E4',
-  },
-  badgeText: {
+  editorialPoetryText: {
     fontSize: 13,
-    fontWeight: '500',
-    color: '#1C1917',
+    color: '#78716C',
+    lineHeight: 19,
+    marginTop: 8,
   },
-  badgeTextActive: {
-    color: '#FAFAF9',
-  },
-  section: {
+  systemSection: {
     paddingHorizontal: 16,
-    marginTop: 24,
+    marginTop: 28,
   },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+  headerBindingFix: {
     marginBottom: 12,
   },
-  headerFlexOverride: {
-    flex: 1,
-    paddingVertical: 0,
-  },
-  seeAllWrapper: {
-    paddingLeft: 12,
-    paddingTop: 2, 
-  },
-  seeAllButton: {
-    fontSize: 12,
-    color: '#1C1917',
-    fontWeight: '500',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-  },
-  cardsStack: {
-    gap: 16,
-  },
-  outfitCard: {
+  magazineCardFrame: {
+    width: '100%',
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#E7E5E4',
-    width: '100%',
+    borderRadius: 16,
+    overflow: 'hidden',
   },
-  imageWrapper: {
+  magazineImageWrapper: {
     width: '100%',
-    height: (width - 48) * 1.33,
+    height: (width - 48) * 1.15,
     backgroundColor: '#F5F5F4',
     position: 'relative',
   },
-  cardImage: {
+  magazineImage: {
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
   },
-  cardTag: {
-    position: 'absolute',
-    top: 12,
-    left: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    zIndex: 2,
-  },
-  cardTagText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#1C1917',
-  },
-  actionsContainer: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    flexDirection: 'row',
-    gap: 8,
-    zIndex: 2,
-  },
-  floatingActionButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+  magazineFallbackContainer: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  cardDetails: {
-    padding: 16,
+  linearScrimOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '40%',
+    backgroundColor: 'rgba(28, 25, 23, 0.45)',
   },
-  cardTitle: {
-    fontSize: 16,
+  magazineFloatingTopContent: {
+    position: 'absolute',
+    top: 16,
+    left: 16,
+    right: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  editorialTagText: {
+    fontSize: 9,
+    color: '#1C1917',
+    textTransform: 'uppercase',
+    fontWeight: '700',
+    letterSpacing: 1,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  editorialOccasionBadge: {
+    backgroundColor: 'rgba(28, 25, 23, 0.75)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  editorialOccasionBadgeText: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#FAFAF9',
+    textTransform: 'uppercase',
+  },
+  magazineFloatingBottomContent: {
+    position: 'absolute',
+    bottom: 20,
+    left: 20,
+    right: 20,
+  },
+  magazineEventSubtitle: {
+    fontSize: 11,
+    color: '#E7E5E4',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 2,
+  },
+  magazineTitleHeading: {
+    fontSize: 20,
     fontWeight: '400',
-    color: '#1C1917',
-    marginBottom: 6,
+    color: '#FFFFFF',
+    letterSpacing: -0.1,
   },
-  cardMetadataRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
-  metadataText: {
-    fontSize: 13,
-    color: '#78716C',
-  },
-  likesWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  heartIcon: {
-    marginRight: 4,
-  },
-  bannerCard: {
-    backgroundColor: '#1C1917',
-    borderRadius: 16,
-    padding: 24,
-    borderWidth: 0,
+  systemEmptySlateContainer: {
     width: '100%',
-  },
-  bannerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  bannerTextContainer: {
-    flex: 1,
-    paddingRight: 8,
-  },
-  bannerHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  bannerHeaderIcon: {
-    marginRight: 8,
-  },
-  bannerTitle: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#FAFAF9',
-  },
-  bannerSubtitle: {
-    fontSize: 14,
-    color: '#FAFAF9',
-    opacity: 0.9,
-    lineHeight: 20,
-  },
-  bannerSparkle: {
-    opacity: 0.5,
-  },
-  trendingHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  trendingTitleIcon: {
-    marginRight: 6,
-    color: '#1C1917',
-  },
-  trendingGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  trendingMiniCard: {
-    flex: 1,
-    backgroundColor: '#F5F5F4',
-    borderRadius: 16,
-    padding: 12,
-    alignItems: 'center',
-    borderWidth: 0,
-  },
-  miniCardIconWrapper: {
-    width: '100%',
-    aspectRatio: 1,
-    backgroundColor: '#E7E5E4',
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  miniCardName: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#1C1917',
-    marginBottom: 6,
-    textAlign: 'center',
-  },
-  miniCardBadge: {
+    paddingVertical: 40,
+    paddingHorizontal: 24,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#E7E5E4',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  miniCardBadgeText: {
-    fontSize: 10,
-    color: '#78716C',
+  systemEmptySlateGraphic: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#FAFAF9',
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  systemEmptyTitle: {
+    fontSize: 15,
     fontWeight: '500',
+    color: '#1C1917',
+  },
+  systemEmptySubtitle: {
+    fontSize: 12,
+    color: '#78716C',
+    textAlign: 'center',
+    marginTop: 4,
+    lineHeight: 18,
+    paddingHorizontal: 16,
+  },
+  systemCtaButton: {
+    marginTop: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#1C1917',
+    borderRadius: 12,
+  },
+  systemCtaButtonText: {
+    fontSize: 11,
+    color: '#FAFAF9',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  forecastStripScroll: {
+    gap: 10,
+  },
+  forecastDayCard: {
+    width: (width - 78) / 3.8,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
+    borderRadius: 16,
+    padding: 8,
+    alignItems: 'center',
+    gap: 8,
+  },
+  forecastCardActiveToday: {
+    backgroundColor: '#1C1917',
+    borderColor: '#1C1917',
+  },
+  forecastDayText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#78716C',
+  },
+  forecastDayTextActive: {
+    color: '#FAFAF9',
+  },
+  forecastThumbnailWrapper: {
+    width: '100%',
+    aspectRatio: 1,
+    overflow: 'hidden',
+    borderRadius: 8,
+    backgroundColor: '#F5F5F4',
+  },
+  forecastThumbnailImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  forecastThumbnailPlaceholder: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  luxuryIndicatorDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#1C1917',
+  },
+  luxuryIndicatorDotActive: {
+    backgroundColor: '#FAFAF9',
+  },
+  forecastThumbnailEmpty: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
+    borderStyle: 'dashed',
+    borderRadius: 8,
+  },
+  forecastThumbnailEmptyActive: {
+    borderColor: 'rgba(250, 250, 249, 0.3)',
+  },
+  lifestyleInsightsGrid: {
+    gap: 10,
+    width: '100%',
+  },
+  lifestyleMetricRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    gap: 10,
+  },
+  lifestyleMetricBlock: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'flex-start',
+  },
+  lifestyleMetricValue: {
+    fontSize: 24,
+    fontWeight: '300',
+    color: '#1C1917',
+  },
+  lifestyleMetricLabel: {
+    fontSize: 11,
+    color: '#78716C',
+    marginTop: 2,
+  },
+  lifestyleWideCard: {
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
+    borderRadius: 16,
+    padding: 16,
+    justifyContent: 'center',
+  },
+  editorialInsightMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  insightCluster: {
+    flex: 1,
+  },
+  insightDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: '#E7E5E4',
+    marginHorizontal: 16,
+  },
+  lifestyleWideLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#78716C',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  lifestyleWideValue: {
+    fontSize: 14,
+    fontWeight: '300',
+    color: '#1C1917',
+  },
+  bottomSpacing: {
+    paddingBottom: 20,
   },
 });

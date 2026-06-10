@@ -2,8 +2,10 @@ import React from 'react';
 import { StyleSheet, Text, View, Platform } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabsLayout() {
+  const insets = useSafeAreaInsets();
   return (
     <Tabs
       screenOptions={{
@@ -11,7 +13,10 @@ export default function TabsLayout() {
         tabBarShowLabel: true,
         tabBarActiveTintColor: '#1C1917', // Derived from --primary token in theme.css
         tabBarInactiveTintColor: '#78716C', // Derived from --muted-foreground token in theme.css
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: [styles.tabBar,{
+            height: 60 + insets.bottom,
+            paddingBottom: Math.max(insets.bottom, 10),
+          },],
         tabBarItemStyle: styles.tabBarItem,
         tabBarLabelStyle: styles.tabBarLabel,
       }}
@@ -93,9 +98,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF', // Mapped from --card token in theme.css
     borderTopWidth: 1,
     borderTopColor: '#E7E5E4', // Mapped from --border token in theme.css
-    height: Platform.OS === 'ios' ? 88 : 68,
     paddingTop: 8,
-    paddingBottom: Platform.OS === 'ios' ? 28 : 12,
     elevation: 4,
     shadowColor: '#1C1917',
     shadowOffset: { width: 0, height: -2 },

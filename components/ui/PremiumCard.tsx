@@ -34,7 +34,7 @@ export const PremiumCard: React.FC<PremiumCardProps> = ({ children, onPress, sty
 
 const styles = StyleSheet.create({
   containerReset: {
-    width: '100%',
+    flex: 1,
   },
   cardBase: {
     backgroundColor: '#FFFFFF',
