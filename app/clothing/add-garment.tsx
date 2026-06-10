@@ -10,7 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -22,15 +22,44 @@ import { supabase } from '../../lib/supabase';
 
 const CREATION_CATEGORIES = ['Tops', 'Bottoms', 'Dresses', 'Shoes', 'Outerwear', 'Accessories'];
 
+// Significantly expanded high-fidelity architectural palette matrix
 const PALETTE_COLORS = [
-  { label: 'White', hex: '#FFFFFF' },
+  // Neutrals & Foundations
   { label: 'Black', hex: '#000000' },
-  { label: 'Blue', hex: '#1E3A8A' },
-  { label: 'Red', hex: '#DC2626' },
-  { label: 'Green', hex: '#16A34A' },
-  { label: 'Brown', hex: '#78350F' },
+  { label: 'Charcoal', hex: '#374151' },
   { label: 'Gray', hex: '#4B5563' },
+  { label: 'Light Gray', hex: '#D1D5DB' },
+  { label: 'White', hex: '#FFFFFF' },
+  { label: 'Cream', hex: '#FFFDD0' },
   { label: 'Beige', hex: '#F5F5DC' },
+  { label: 'Camel', hex: '#C19A6B' },
+  { label: 'Brown', hex: '#78350F' },
+  
+  // Cool Tones & Depths
+  { label: 'Navy', hex: '#1E3A8A' },
+  { label: 'Blue', hex: '#3B82F6' },
+  { label: 'Sky Blue', hex: '#93C5FD' },
+  { label: 'Teal', hex: '#0D9488' },
+  { label: 'Turquoise', hex: '#2DD4BF' },
+  { label: 'Olive', hex: '#556B2F' },
+  { label: 'Green', hex: '#16A34A' },
+  { label: 'Mint', hex: '#A7F3D0' },
+  { label: 'Lime', hex: '#84CC16' },
+  
+  // Warm Tones & Vibrants
+  { label: 'Burgundy', hex: '#800020' },
+  { label: 'Red', hex: '#DC2626' },
+  { label: 'Coral', hex: '#FF7F50' },
+  { label: 'Orange', hex: '#F97316' },
+  { label: 'Mustard', hex: '#CA8A04' },
+  { label: 'Yellow', hex: '#FACC15' },
+  
+  // Purples & Roses
+  { label: 'Violet', hex: '#4C1D95' },
+  { label: 'Purple', hex: '#8B5CF6' },
+  { label: 'Lavender', hex: '#E9D5FF' },
+  { label: 'Rose', hex: '#FDA4AF' },
+  { label: 'Pink', hex: '#F43F5E' },
 ];
 
 export default function AddGarmentScreen() {
@@ -82,7 +111,6 @@ export default function AddGarmentScreen() {
   };
 
   const handleFormSubmission = async () => {
-    // Structural client validation gates
     if (!name.trim()) {
       Alert.alert('Missing Field', 'Please provide a unique title naming definition for this piece.');
       return;
@@ -98,14 +126,9 @@ export default function AddGarmentScreen() {
 
     try {
       setIsSaving(true);
-      console.log('[Add Garment] Starting form submission flow...');
-
-      // 1. Fetch and verify current authenticated user session
-      console.log('[Add Garment Check] Verifying active session with Supabase Auth...');
       const { data: { user }, error: authError } = await supabase.auth.getUser();
 
       if (authError || !user) {
-        console.error('[Add Garment Failure] User identity context missing or session expired:', authError);
         Alert.alert(
           'Authentication Required',
           'Your active security token has expired. Please log out and authenticate again to update your closet storage.'
@@ -113,20 +136,13 @@ export default function AddGarmentScreen() {
         return;
       }
       
-      console.log(`[Add Garment Log] Session valid. Authenticated User Identity: ${user.id}`);
-
-      // 2. Parse file extension and set robust fallback types
       const fileExtension = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
       const cleanExtension = ['jpg', 'jpeg', 'png', 'heic'].includes(fileExtension) ? fileExtension : 'jpg';
       const mimeType = cleanExtension === 'png' ? 'image/png' : 'image/jpeg';
       
       const storageFileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${cleanExtension}`;
-      
-      // Isolate image path inside user-specific storage directory string matching RLS constraints
       const parameterizedStoragePath = `${user.id}/${storageFileName}`;
-      console.log(`[Add Garment Path Build] Generated secure asset target path: garments/${parameterizedStoragePath}`);
 
-      // 3. Build standard native multi-platform FormData payload
       const formData = new FormData();
       formData.append('file', {
         uri: imageUri,
@@ -134,62 +150,44 @@ export default function AddGarmentScreen() {
         type: mimeType,
       } as any);
 
-      // 4. Execute binary upload over native bridges directly to isolated user folder
-      console.log('[Add Garment Storage Request] Dispatching file payload directly to Supabase storage bucket...');
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('garments')
         .upload(parameterizedStoragePath, formData, {
           contentType: mimeType,
           upsert: false,
         });
 
-      if (uploadError) {
-        console.error('[Add Garment Storage Error] Storage binary push operation failed:', uploadError);
-        throw uploadError;
-      }
-      console.log('[Add Garment Storage Response] Binary trace saved securely:', JSON.stringify(uploadData));
+      if (uploadError) throw uploadError;
 
-      // 5. Extract accessible absolute remote bucket resource paths
       const { data: publicUrlData } = supabase.storage
         .from('garments')
         .getPublicUrl(parameterizedStoragePath);
 
       const finalStoragePublicUrl = publicUrlData.publicUrl;
-      console.log(`[Add Garment CDN Resolution] Created image endpoint resolution map: ${finalStoragePublicUrl}`);
 
-      // 6. Commit relational row attributes with explicit user ownership link into Postgres
-      console.log(`[Add Garment DB Write] Transmitting relational data row targeting user row link ID: ${user.id}`);
-      const { data: databaseInsertResult, error: databaseInsertError } = await supabase
+      const { error: databaseInsertError } = await supabase
         .from('clothing_items')
         .insert([
           {
-            user_id: user.id, // Explicit binding variable enforcing data layer row ownership
+            user_id: user.id,
             name: name.trim(),
             brand: brand.trim() || 'Unbranded',
             category: selectedCategory,
             color: selectedColor,
             image_url: finalStoragePublicUrl,
-            is_favorite: false, // Ensures default state fallback properties are explicitly set
+            is_favorite: false,
           },
-        ])
-        .select();
+        ]);
 
-      if (databaseInsertError) {
-        console.error('[Add Garment DB Error] Row creation transaction rejected by Database or RLS:', databaseInsertError);
-        throw databaseInsertError;
-      }
-      
-      console.log('[Add Garment DB Response] Successfully committed entry row parameters:', JSON.stringify(databaseInsertResult));
+      if (databaseInsertError) throw databaseInsertError;
 
-      // 7. Route back and trigger refresh via cache breaking query strings
-      console.log('[Add Garment Navigation] Form processing complete. Redirecting layout focusing back to Closet context view.');
       router.replace({
         pathname: '/(tabs)/closet',
         params: { refresh: `${Date.now()}` },
       });
 
     } catch (error: any) {
-      console.error('[Add Garment Flow Exception] Global processing system collapse:', error);
+      console.error('[Add Garment Flow Exception]:', error);
       Alert.alert('Transaction Failure', error.message || 'An unexpected database error occurred while registering garment profiles.');
     } finally {
       setIsSaving(false);
@@ -199,7 +197,7 @@ export default function AddGarmentScreen() {
   return (
     <PremiumScreen>
       <SafeAreaView style={styles.safeContainer} edges={['top']}>
-        {/* Customized Elegant Top Navigation Block Header */}
+        {/* Navigation Block Header */}
         <View style={styles.navigationRow}>
           <PremiumTouchable style={styles.backTouchTarget} onPress={() => router.back()}>
             <Feather name="arrow-left" size={22} color="#1C1917" />
@@ -215,7 +213,7 @@ export default function AddGarmentScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollBodyContainer}
         >
-          {/* Media Interactive Framing Capture Box */}
+          {/* Media Interactive Capture Box */}
           <Text style={styles.fieldSectionLabel}>Garment Visual Profile</Text>
           <View style={styles.mediaContainerBox}>
             {imageUri ? (
@@ -242,7 +240,7 @@ export default function AddGarmentScreen() {
             )}
           </View>
 
-          {/* Form Context Area Elements */}
+          {/* Form Context Fields */}
           <Text style={styles.fieldSectionLabel}>Garment Title</Text>
           <View style={styles.textInputWrapperBox}>
             <TextInput 
@@ -267,7 +265,7 @@ export default function AddGarmentScreen() {
             />
           </View>
 
-          {/* Selection Grid Loops for Category Chips */}
+          {/* Category Selection Array */}
           <Text style={styles.fieldSectionLabel}>Category Classification</Text>
           <View style={styles.chipsContainerRow}>
             {CREATION_CATEGORIES.map((category) => {
@@ -293,12 +291,13 @@ export default function AddGarmentScreen() {
             })}
           </View>
 
-          {/* Color Selection Swatch Block Arrays */}
+          {/* Scaled Swatch Palette Arrays */}
           <Text style={styles.fieldSectionLabel}>Dominant Tone Profile</Text>
           <View style={styles.swatchPaletteRow}>
             {PALETTE_COLORS.map((colorItem) => {
               const isSelected = selectedColor === colorItem.hex;
-              const isWhiteVariant = colorItem.hex === '#FFFFFF';
+              // Detect white and cream variations cleanly to force border line edge rendering
+              const isLightVariant = colorItem.hex === '#FFFFFF' || colorItem.hex === '#FFFDD0' || colorItem.hex === '#F5F5DC';
               return (
                 <PremiumTouchable
                   key={colorItem.hex}
@@ -306,7 +305,7 @@ export default function AddGarmentScreen() {
                   style={[
                     styles.swatchCircleCircle,
                     { backgroundColor: colorItem.hex },
-                    isWhiteVariant && styles.whiteSwatchBorderOverride,
+                    isLightVariant && styles.whiteSwatchBorderOverride,
                     isSelected && styles.swatchCircleActiveOutline
                   ]}
                   disabled={isSaving}
@@ -315,7 +314,7 @@ export default function AddGarmentScreen() {
                     <Feather 
                       name="check" 
                       size={14} 
-                      color={isWhiteVariant ? '#1C1917' : '#FAFAF9'} 
+                      color={isLightVariant ? '#1C1917' : '#FAFAF9'} 
                     />
                   )}
                 </PremiumTouchable>
@@ -323,7 +322,7 @@ export default function AddGarmentScreen() {
             })}
           </View>
 
-          {/* Execution Submission Action Callout */}
+          {/* Action Callout */}
           <PremiumTouchable
             onPress={handleFormSubmission}
             style={[styles.saveExecutionButton, isSaving && styles.saveExecutionDisabled]}
@@ -349,8 +348,11 @@ const styles = StyleSheet.create({
   scrollBodyContainer: { paddingHorizontal: 16, paddingBottom: 40 },
   fieldSectionLabel: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', color: '#78716C', letterSpacing: 1, marginTop: 20, marginBottom: 8 },
   mediaContainerBox: { width: '100%', height: 200, backgroundColor: '#F5F5F4', borderRadius: 16, borderStyle: 'dashed', borderWidth: 1, borderColor: '#E7E5E4', overflow: 'hidden' },
-  emptyMediaTriggerFrame: { flex: 1, flexDirection: 'row', alignItems: 'center' },
+  
+  // FIXED: Adjusted button alignment distribution across horizontal space
+  emptyMediaTriggerFrame: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around' },
   mediaContextButton: { flex: 1, height: '100%', justifyContent: 'center', alignItems: 'center', gap: 6 },
+  
   mediaContextText: { fontSize: 13, fontWeight: '500', color: '#1C1917' },
   mediaSplitDivider: { width: 1, height: '40%', backgroundColor: '#E7E5E4' },
   previewContainer: { flex: 1, position: 'relative' },
@@ -365,8 +367,11 @@ const styles = StyleSheet.create({
   chipTextLabel: { fontSize: 13, fontWeight: '500' },
   chipTextSelected: { color: '#FAFAF9' },
   chipTextUnselected: { color: '#1C1917' },
-  swatchPaletteRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap', paddingVertical: 4 },
-  swatchCircleCircle: { width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center', shadowColor: '#000000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
+  
+  // SCALED: Clean wrapping layout properties handling multi-row palette items safely
+  swatchPaletteRow: { flexDirection: 'row', gap: 12, flexWrap: 'wrap', paddingVertical: 4 },
+  swatchCircleCircle: { width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center', shadowColor: '#000000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1, marginBottom: 4 },
+  
   whiteSwatchBorderOverride: { borderWidth: 1, borderColor: '#E7E5E4' },
   swatchCircleActiveOutline: { borderWidth: 2, borderColor: '#1C1917', scaleX: 1.05, scaleY: 1.05 },
   saveExecutionButton: { backgroundColor: '#1C1917', height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginTop: 32, shadowColor: '#1C1917', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 3 },

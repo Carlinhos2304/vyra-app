@@ -26,16 +26,23 @@ interface UserProfile {
   username: string;
 }
 
+interface OutfitItemRelation {
+  clothing_items?: {
+    image_url?: string;
+  } | null;
+}
+
 interface Outfit {
   id: string;
   name: string;
-  cover_image_url: string | null;
-  occasion?: string;
+  occasion: string | null;
+  outfit_items?: OutfitItemRelation[];
 }
 
 interface OutfitPlan {
   id: string;
-  date: string;
+  planned_date: string;
+  outfit_id: string | null;
   outfits: Outfit;
   event_name?: string;
 }
@@ -95,21 +102,27 @@ export default function HomeScreen() {
       if (userError || !user) throw new Error('Unauthenticated status.');
 
       const userId = user.id;
-      const todayISO = new Date().toISOString().split('T')[0];
 
-      // Formulate a clean 5-day lookahead matrix window
+      // Local ISO format builder ensuring absolute parity with calendar matrix matching rules
+      const getLocalISODateString = (date: Date): string => {
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      };
+
+      const todayLocalISO = getLocalISODateString(new Date());
+
+      // Formulate a clean 5-day lookahead matrix window using localized boundaries
       const daysArray: WeeklyPlan[] = [];
       for (let i = 0; i < 5; i++) {
         const d = new Date();
         d.setDate(d.getDate() + i);
         daysArray.push({
           id: `day-${i}`,
-          date: d.toISOString().split('T')[0],
+          date: getLocalISODateString(d),
           dayName: i === 0 ? 'Today' : d.toLocaleDateString('en-US', { weekday: 'short' }),
         });
       }
 
-      // Parallel Data Fetch Pipeline
+      // Parallel Data Fetch Pipeline aligned with correct fields, tables, and relationships
       const [
         profileRes,
         todayOutfitRes,
@@ -118,8 +131,16 @@ export default function HomeScreen() {
         outfitsCountRes,
       ] = await Promise.all([
         supabase.from('profiles').select('username').eq('id', userId).single(),
-        supabase.from('outfit_plans').select('id, date, event_name, outfits(id, name, cover_image_url, occasion)').eq('user_id', userId).eq('date', todayISO).maybeSingle(),
-        supabase.from('outfit_plans').select('date, outfits(id, name, cover_image_url)').eq('user_id', userId).gte('date', daysArray[0].date).lte('date', daysArray[4].date),
+        supabase.from('outfit_plans')
+          .select('id, planned_date, outfit_id, outfits(name, occasion, outfit_items(clothing_items(image_url))))')
+          .eq('user_id', userId)
+          .eq('planned_date', todayLocalISO)
+          .maybeSingle(),
+        supabase.from('outfit_plans')
+          .select('id, planned_date, outfit_id, outfits(name, occasion, outfit_items(clothing_items(image_url))))')
+          .eq('user_id', userId)
+          .gte('planned_date', daysArray[0].date)
+          .lte('planned_date', daysArray[4].date),
         supabase.from('clothing_items').select('id', { count: 'exact', head: true }).eq('user_id', userId),
         supabase.from('outfits').select('id', { count: 'exact', head: true }).eq('user_id', userId),
       ]);
@@ -128,19 +149,32 @@ export default function HomeScreen() {
       
       if (todayOutfitRes.data) {
         const rawPlan = todayOutfitRes.data as any;
-        setTodayPlan({
-          id: rawPlan.id,
-          date: rawPlan.date,
-          event_name: rawPlan.event_name,
-          outfits: Array.isArray(rawPlan.outfits) ? rawPlan.outfits[0] : rawPlan.outfits
-        });
+        if (rawPlan && rawPlan.outfits) {
+          setTodayPlan({
+            id: rawPlan.id,
+            planned_date: rawPlan.planned_date,
+            outfit_id: rawPlan.outfit_id,
+            outfits: rawPlan.outfits,
+            event_name: rawPlan.event_name // Retained safely if added via extensions
+          });
+        } else {
+          setTodayPlan(null);
+        }
+      } else {
+        setTodayPlan(null);
       }
 
-      // Intersect database plans with structural calendar lookahead
+      // Intersect database plans with structural calendar lookahead matrices
       const matchedWeeklyPlans = daysArray.map(day => {
-        const match = weeklyPlansRes.data?.find((p: any) => p.date === day.date);
-        if (match) {
-          day.outfit = Array.isArray(match.outfits) ? match.outfits[0] : match.outfits;
+        const match = weeklyPlansRes.data?.find((p: any) => p.planned_date === day.date);
+        if (match && match.outfits) {
+          day.outfit = {
+            id: match.outfit_id,
+            name: match.outfits.name,
+            occasion: match.outfits.occasion,
+            cover_image_url: null, // Initialized safely for contract shape matching
+            outfit_items: match.outfits.outfit_items
+          };
         }
         return day;
       });
@@ -217,16 +251,21 @@ export default function HomeScreen() {
             {todayPlan?.outfits ? (
               <PremiumCard 
                 style={styles.magazineCardFrame}
-                onPress={() => router.push(`/outfits/${todayPlan.outfits.id}`)}
+                onPress={() => router.push(`../outfit/${todayPlan.outfit_id}`)}
               >
                 <View style={styles.magazineImageWrapper}>
-                  {todayPlan.outfits.cover_image_url ? (
-                    <Image source={{ uri: todayPlan.outfits.cover_image_url }} style={styles.magazineImage} />
-                  ) : (
-                    <View style={styles.magazineFallbackContainer}>
-                      <Ionicons name="shirt-outline" size={36} color="#A8A29E" />
-                    </View>
-                  )}
+                  {(() => {
+                    const items = todayPlan.outfits.outfit_items || [];
+                    const resolvedCoverUrl = items.length > 0 && items[0].clothing_items ? items[0].clothing_items.image_url : null;
+                    
+                    return resolvedCoverUrl ? (
+                      <Image source={{ uri: resolvedCoverUrl }} style={styles.magazineImage} />
+                    ) : (
+                      <View style={styles.magazineFallbackContainer}>
+                        <Ionicons name="shirt-outline" size={36} color="#A8A29E" />
+                      </View>
+                    );
+                  })()}
                   
                   <View style={styles.linearScrimOverlay} />
 
@@ -269,7 +308,7 @@ export default function HomeScreen() {
                 <PremiumTouchable 
                   key={item.id} 
                   style={[styles.forecastDayCard, item.dayName === 'Today' && styles.forecastCardActiveToday]}
-                  onPress={() => item.outfit ? router.push(`/outfits/${item.outfit.id}`) : router.push('/calendar')}
+                  onPress={() => item.outfit ? router.push(`../outfit/${item.outfit.id}`) : router.push('/calendar')}
                   activeOpacity={0.85}
                 >
                   <Text style={[styles.forecastDayText, item.dayName === 'Today' && styles.forecastDayTextActive]}>
@@ -278,13 +317,18 @@ export default function HomeScreen() {
                   
                   <View style={styles.forecastThumbnailWrapper}>
                     {item.outfit ? (
-                      item.outfit.cover_image_url ? (
-                        <Image source={{ uri: item.outfit.cover_image_url }} style={styles.forecastThumbnailImage} />
-                      ) : (
-                        <View style={styles.forecastThumbnailPlaceholder}>
-                          <View style={[styles.luxuryIndicatorDot, item.dayName === 'Today' && styles.luxuryIndicatorDotActive]} />
-                        </View>
-                      )
+                      (() => {
+                        const items = item.outfit.outfit_items || [];
+                        const resolvedThumbUrl = items.length > 0 && items[0].clothing_items ? items[0].clothing_items.image_url : null;
+                        
+                        return resolvedThumbUrl ? (
+                          <Image source={{ uri: resolvedThumbUrl }} style={styles.forecastThumbnailImage} />
+                        ) : (
+                          <View style={styles.forecastThumbnailPlaceholder}>
+                            <View style={[styles.luxuryIndicatorDot, item.dayName === 'Today' && styles.luxuryIndicatorDotActive]} />
+                          </View>
+                        );
+                      })()
                     ) : (
                       <View style={[styles.forecastThumbnailEmpty, item.dayName === 'Today' && styles.forecastThumbnailEmptyActive]}>
                         <Ionicons name="add" size={14} color={item.dayName === 'Today' ? '#FAFAF9' : '#A8A29E'} />
@@ -366,7 +410,7 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   editorialHeaderContainer: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 4,
   },
