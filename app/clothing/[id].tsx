@@ -203,7 +203,7 @@ export default function ClothingDetailScreen() {
     console.log("[Edit Action] Passing state parameter data directly to edit screen environment router configurations:", garment);
     
     router.push({
-      pathname: '/edit-garment',
+      pathname: 'clothing/edit-garment',
       params: {
         id: garment.id,
         name: garment.name,
