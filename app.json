@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon_white.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/logo_black.png",
       "resizeMode": "contain",
@@ -30,6 +30,12 @@
     "plugins": [
       "expo-router",
       "@react-native-community/datetimepicker"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "a2b91b79-167d-42dd-984d-7f221f5c9b41"
+      }
+    }
   }
 }
