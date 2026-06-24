@@ -68,7 +68,6 @@ type EditGarmentSearchParams = {
   color: string;
 };
 
-// Pure Mathematics HSV/Hex Transform Engines
 function hsvToHex(h: number, s: number, v: number): string {
   const c = v * s;
   const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
@@ -93,7 +92,7 @@ export default function EditGarmentScreen() {
   const params = useLocalSearchParams<EditGarmentSearchParams>();
   const navigation = useNavigation();
 
-  // Primary Workspace Fields Initialized from Route Parameters
+  // Form Fields
   const [name, setName] = useState(params.name || '');
   const [brand, setBrand] = useState(params.brand === 'Unknown Brand' || params.brand === 'Unbranded' ? '' : params.brand || '');
   const [selectedCategory, setSelectedCategory] = useState(params.category || '');
@@ -101,7 +100,7 @@ export default function EditGarmentScreen() {
   const [imageUri, setImageUri] = useState<string | null>(params.image || null);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Layout Native Pure Interactive Custom Picker Configurations
+  // Custom Color Picker Layout States
   const [isPickerVisible, setIsPickerVisible] = useState(false);
   const [customColor, setCustomColor] = useState('#7C3AED');
   const [hue, setHue] = useState(265);
@@ -112,7 +111,10 @@ export default function EditGarmentScreen() {
   const computedTempColor = hsvToHex(hue, saturation, brightness);
   const isCustomColorActive = !PALETTE_COLORS.some(item => item.hex.toUpperCase() === selectedColor.toUpperCase());
 
-  // Intercept Navigation Attempts when changes remain uncommitted
+  // CRITICAL FIX FOR NAVIGATION DISCARD LOOP: Use a mutable Ref to safely disable the interceptor instantly
+  const isSavedSuccess = useRef(false);
+
+  // Dynamic state checks
   const hasUnsavedChanges = 
     name.trim() !== (params.name || '').trim() ||
     brand.trim() !== (params.brand === 'Unknown Brand' || params.brand === 'Unbranded' ? '' : params.brand || '').trim() ||
@@ -123,9 +125,19 @@ export default function EditGarmentScreen() {
   const isFormValid = name.trim().length > 0 && selectedCategory.length > 0 && imageUri !== null;
   const canSave = hasUnsavedChanges && isFormValid && !isSaving;
 
+  // Intercepting hardware/software back navigation requests
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', (e) => {
-      if (!hasUnsavedChanges || isSaving) return;
+      // If the save pipeline completed successfully, completely bypass the confirmation modal
+      if (isSavedSuccess.current) {
+        return;
+      }
+
+      // If nothing has been modified, don't show the warning dialog
+      if (!hasUnsavedChanges) {
+        return;
+      }
+
       e.preventDefault();
       Alert.alert(
         'Discard Changes?',
@@ -136,17 +148,17 @@ export default function EditGarmentScreen() {
         ]
       );
     });
-    return unsubscribe;
-  }, [navigation, hasUnsavedChanges, isSaving]);
 
-  // Sync custom color initial values if route parameters don't match standard swatches
+    return unsubscribe;
+  }, [navigation, hasUnsavedChanges]);
+
   useEffect(() => {
     if (params.color && isCustomColorActive) {
       setCustomColor(params.color);
     }
   }, [params.color]);
 
-  // Pan Responders tracking input coordinates
+  // PanResponder Touch Interactions for Color Customizer Canvas
   const saturationBrightnessResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -167,9 +179,8 @@ export default function EditGarmentScreen() {
 
   const handleCanvasTouch = (x: number, y: number) => {
     const width = containerWidthRef.current;
-    const height = 160;
     setSaturation(Math.max(0, Math.min(x, width)) / width);
-    setBrightness(1 - Math.max(0, Math.min(y, height)) / height);
+    setBrightness(1 - Math.max(0, Math.min(y, 160)) / 160);
   };
 
   const handleHueTouch = (x: number) => {
@@ -216,6 +227,7 @@ export default function EditGarmentScreen() {
     setIsPickerVisible(false);
   };
 
+  // Safe Core Save Changes Function Pipeline
   const handleSaveChanges = async () => {
     if (!canSave) return;
 
@@ -231,7 +243,6 @@ export default function EditGarmentScreen() {
       let finalImageUrl = params.image;
       const isImageChanged = imageUri !== params.image;
 
-      // Conditional execution chain for image replacements
       if (isImageChanged && imageUri) {
         const fileExtension = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
         const cleanExtension = ['jpg', 'jpeg', 'png', 'heic'].includes(fileExtension) ? fileExtension : 'jpg';
@@ -243,7 +254,6 @@ export default function EditGarmentScreen() {
         const formData = new FormData();
         formData.append('file', { uri: imageUri, name: storageFileName, type: mimeType } as any);
 
-        // 1. Upload new image
         const { error: uploadError } = await supabase.storage
           .from('garments')
           .upload(targetStoragePath, formData, { contentType: mimeType, upsert: false });
@@ -253,7 +263,6 @@ export default function EditGarmentScreen() {
         const { data: publicUrlData } = supabase.storage.from('garments').getPublicUrl(targetStoragePath);
         finalImageUrl = publicUrlData.publicUrl;
 
-        // 2. Safe cleanup of old asset from Storage
         if (params.image && params.image.includes('/storage/v1/object/public/garments/')) {
           const oldFileName = params.image.split('/garments/').pop();
           if (oldFileName) {
@@ -262,9 +271,7 @@ export default function EditGarmentScreen() {
         }
       }
 
-      // 3. Update existing relational table record
-      const numericOrStringId = /^\d+$/.test(params.id) ? parseInt(params.id, 10) : params.id;
-      
+      // Execute SQL Update targeting table structure records
       const { error: databaseUpdateError } = await supabase
         .from('clothing_items')
         .update({
@@ -274,18 +281,22 @@ export default function EditGarmentScreen() {
           color: selectedColor,
           image_url: finalImageUrl,
         })
-        .eq('id', numericOrStringId);
+        .eq('id', params.id)
+        .eq('user_id', user.id);
 
       if (databaseUpdateError) throw databaseUpdateError;
 
-      // 4. Return to Detail View, passing an automated refresh stamp
+      // CRITICAL FIX: Flip the ref check to true BEFORE calling router displacement
+      isSavedSuccess.current = true;
+
+      // Return back to details viewport safely with an active refresh token
       router.replace({
-        pathname: '/clothing-detail', // Matches your current file structure routing
+        pathname: '/clothing/[id]', 
         params: { id: params.id, refresh: `${Date.now()}` },
       });
 
     } catch (error: any) {
-      console.error('[Edit Garment Exception Flow]:', error);
+      console.error('[Edit Garment Pipeline Failure]:', error);
       Alert.alert('Save Failed', error.message || 'An unexpected transaction error occurred.');
     } finally {
       setIsSaving(false);
@@ -295,7 +306,7 @@ export default function EditGarmentScreen() {
   return (
     <PremiumScreen>
       <SafeAreaView style={styles.safeContainer} edges={['top']}>
-        {/* Navigation Block Header */}
+        {/* Navigation Row */}
         <View style={styles.navigationRow}>
           <PremiumTouchable style={styles.backTouchTarget} onPress={() => router.back()}>
             <Feather name="arrow-left" size={22} color="#1C1917" />
@@ -308,7 +319,7 @@ export default function EditGarmentScreen() {
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollBodyContainer}>
-          {/* Media File Picker Area */}
+          {/* Media Profile Element Selector Container */}
           <Text style={styles.fieldSectionLabel}>Garment Visual Profile</Text>
           <View style={styles.mediaContainerBox}>
             {imageUri ? (
@@ -335,7 +346,7 @@ export default function EditGarmentScreen() {
             )}
           </View>
 
-          {/* Form Content Controls */}
+          {/* Form Context Inputs */}
           <Text style={styles.fieldSectionLabel}>Garment Title</Text>
           <View style={styles.textInputWrapperBox}>
             <TextInput 
@@ -360,7 +371,7 @@ export default function EditGarmentScreen() {
             />
           </View>
 
-          {/* Selection List Matrix */}
+          {/* Category Section Selection Grid */}
           <Text style={styles.fieldSectionLabel}>Category Classification</Text>
           <View style={styles.chipsContainerRow}>
             {CREATION_CATEGORIES.map((category) => {
@@ -380,7 +391,7 @@ export default function EditGarmentScreen() {
             })}
           </View>
 
-          {/* Core Visual Swatches Grid */}
+          {/* Color Choices Palettes Swatches Layout Wrapper */}
           <Text style={styles.fieldSectionLabel}>Dominant Tone Profile</Text>
           <View style={styles.swatchPaletteRow}>
             {PALETTE_COLORS.map((colorItem) => {
@@ -398,7 +409,6 @@ export default function EditGarmentScreen() {
               );
             })}
 
-            {/* Custom Interactive Floating Palette Picker Anchor */}
             <PremiumTouchable
               onPress={() => setIsPickerVisible(true)}
               style={[styles.swatchCircleCircle, { backgroundColor: customColor }, customColor.toUpperCase() === '#FFFFFF' && styles.whiteSwatchBorderOverride, isCustomColorActive && styles.swatchCircleActiveOutline]}
@@ -408,7 +418,7 @@ export default function EditGarmentScreen() {
             </PremiumTouchable>
           </View>
 
-          {/* Commit Pipeline Submission Anchor */}
+          {/* Complete Submission Core Execution Button */}
           <PremiumTouchable
             onPress={handleSaveChanges}
             style={[styles.saveExecutionButton, !canSave && styles.saveExecutionDisabled]}
@@ -423,7 +433,7 @@ export default function EditGarmentScreen() {
         </ScrollView>
       </SafeAreaView>
 
-      {/* Pure Layout Custom Native Mathematical Modal */}
+      {/* Custom HSV Precision Mathematical Color Overlay BottomSheet Modal */}
       <Modal visible={isPickerVisible} animationType="slide" transparent={true} statusBarTranslucent onRequestClose={() => setIsPickerVisible(false)}>
         <View style={styles.modalBackdropOverlay}>
           <SafeAreaView style={styles.modalSafeBoundary} edges={['bottom']}>
@@ -461,7 +471,6 @@ export default function EditGarmentScreen() {
                 </View>
               </ScrollView>
 
-              {/* Secure Fixed Footer Action Row */}
               <View style={styles.modalActionButtonsRow}>
                 <PremiumTouchable onPress={() => setIsPickerVisible(false)} style={styles.modalSecondaryButton}>
                   <Text style={styles.modalSecondaryButtonText}>Cancel</Text>
@@ -506,12 +515,11 @@ const styles = StyleSheet.create({
   swatchPaletteRow: { flexDirection: 'row', gap: 12, flexWrap: 'wrap', paddingVertical: 4 },
   swatchCircleCircle: { width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center', shadowColor: '#000000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1, marginBottom: 4 },
   whiteSwatchBorderOverride: { borderWidth: 1, borderColor: '#E7E5E4' },
-  swatchCircleActiveOutline: { borderWidth: 2, borderColor: '#1C1917', scaleX: 1.05, scaleY: 1.05 },
+  swatchCircleActiveOutline: { borderWidth: 2, borderColor: '#1C1917', transform: [{ scale: 1.05 }] },
   saveExecutionButton: { backgroundColor: '#1C1917', height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginTop: 32, shadowColor: '#1C1917', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 3 },
   saveExecutionDisabled: { opacity: 0.4 },
   saveExecutionText: { color: '#FAFAF9', fontSize: 15, fontWeight: '600' },
 
-  // Native Pure Layout Custom Overlays
   modalBackdropOverlay: { flex: 1, backgroundColor: 'rgba(28, 25, 23, 0.4)', justifyContent: 'flex-end' },
   modalSafeBoundary: { width: '100%' },
   bottomSheetFrame: { backgroundColor: '#FAFAF9', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 12, paddingBottom: 16, maxHeight: SCREEN_HEIGHT * 0.82, shadowColor: '#1C1917', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 8 },
@@ -525,7 +533,7 @@ const styles = StyleSheet.create({
   livePreviewColorBlock: { width: 40, height: 40, borderRadius: 8, borderWidth: 1, borderColor: '#E7E5E4' },
   livePreviewMetaBlock: { marginLeft: 12, flex: 1 },
   livePreviewLabel: { fontSize: 10, fontWeight: '600', color: '#78716C', textTransform: 'uppercase', letterSpacing: 0.5 },
-  livePreviewHexValue: { fontSize: 14, fontWeight: '700', color: '#1C1917', marginTop: 2, fontFamily: 'monospace' },
+  livePreviewHexValue: { fontSize: 14, fontWeight: '700', color: '#1C1917', marginTop: 2 },
   canvasContainerFrame: { width: '100%', height: 160, borderRadius: 12, overflow: 'hidden', marginBottom: 16, backgroundColor: '#E7E5E4' },
   canvasThumbCursor: { position: 'absolute', width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: '#FAFAF9', shadowColor: '#000000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 2, elevation: 3 },
   sliderTrackFrame: { width: '100%', height: 14, marginBottom: 20, justifyContent: 'center' },

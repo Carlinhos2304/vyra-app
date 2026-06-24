@@ -11,6 +11,7 @@ import {
   Modal,
   Dimensions,
   PanResponder,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -25,7 +26,19 @@ import { SectionHeader } from '../../components/ui/SectionHeader';
 import { supabase } from '../../lib/supabase';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-const CREATION_CATEGORIES = ['Tops', 'Bottoms', 'Dresses', 'Shoes', 'Outerwear', 'Accessories'];
+const CREATION_CATEGORIES = [
+  'Tops',
+  'Bottoms',
+  'Dresses',
+  'Outerwear',
+  'Shoes',
+  'Bags',
+  'Accessories',
+  'Jewelry',
+  'Hats',
+  'Swimwear',
+  'Activewear',
+];
 
 const PALETTE_COLORS = [
   { label: 'Black', hex: '#000000' },
@@ -522,19 +535,19 @@ export default function AddGarmentScreen() {
 
               {/* FOOTER VIEW: Fixed Bottom */}
               <View style={styles.modalActionButtonsRow}>
-                <PremiumTouchable 
+                <Pressable 
                   onPress={() => setIsPickerVisible(false)} 
                   style={styles.modalSecondaryButton}
                 >
                   <Text style={styles.modalSecondaryButtonText}>Cancel</Text>
-                </PremiumTouchable>
+                </Pressable>
                 
-                <PremiumTouchable 
+                <Pressable 
                   onPress={handleCustomColorConfirmation} 
                   style={styles.modalPrimaryButton}
                 >
                   <Text style={styles.modalPrimaryButtonText}>Apply Color</Text>
-                </PremiumTouchable>
+                </Pressable>
               </View>
             </View>
           </SafeAreaView>

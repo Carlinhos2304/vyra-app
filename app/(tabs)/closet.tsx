@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -9,6 +9,10 @@ import {
   Image,
   Animated,
   ActivityIndicator,
+  Modal,
+  ScrollView,
+  Switch,
+  Pressable, // <-- Add this line
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -23,7 +27,7 @@ import { SectionTitle } from '../../components/ui/SectionTitle';
 // Supabase client instance integration
 import { supabase } from '../../lib/supabase';
 
-const { width } = Dimensions.get('window');
+const { width, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const CARD_WIDTH = (width - 44) / 2;
 const TAB_WIDTH = (width - 32) / 2; // Screen width minus padding divided by two options
 
@@ -38,9 +42,9 @@ interface ClothingItem {
   color: string;
   image_url: string; 
   created_at?: string;
+  is_favorite?: boolean; // Added support for favorites flag mapping
 }
 
-// Requirement 6: New Type-Safe Clean Domain Interface Design
 interface OutfitCard {
   id: string;
   name: string;
@@ -51,11 +55,38 @@ interface OutfitCard {
 }
 
 const CATEGORIES = [
-  { id: 'All', label: 'All', icon: 'shopping' },
+  { id: 'All', label: 'All', icon: 'view-grid' },
   { id: 'Tops', label: 'Tops', icon: 'tshirt-crew' },
   { id: 'Bottoms', label: 'Bottoms', icon: 'human-legs' },
-  { id: 'Dresses', label: 'Dresses', icon: 'clippy' },
+  { id: 'Dresses', label: 'Dresses', icon: 'hanger' },
+  { id: 'Outerwear', label: 'Outerwear', icon: 'coat-rack' },
+  { id: 'Shoes', label: 'Shoes', icon: 'shoe-sneaker' },
+  { id: 'Bags', label: 'Bags', icon: 'bag-personal' },
+  { id: 'Accessories', label: 'Accessories', icon: 'watch-variant' },
+  { id: 'Jewelry', label: 'Jewelry', icon: 'diamond-stone' },
+  { id: 'Hats', label: 'Hats', icon: 'hat-fedora' },
+  { id: 'Swimwear', label: 'Swimwear', icon: 'hanger' },
+  { id: 'Activewear', label: 'Activewear', icon: 'run-fast' },
 ];
+
+type SortOption = 'Newest First' | 'Oldest First' | 'A-Z' | 'Z-A';
+
+// Filter State Domain Interface Definition
+interface FilterState {
+  category: string;
+  color: string;
+  brand: string;
+  favoritesOnly: boolean;
+  sortBy: SortOption;
+}
+
+const INITIAL_FILTERS: FilterState = {
+  category: 'All',
+  color: 'All Colors',
+  brand: 'All Brands',
+  favoritesOnly: false,
+  sortBy: 'Newest First',
+};
 
 export default function ClosetScreen() {
   const [activeTab, setActiveTab] = useState<ClosetTab>('Garments');
@@ -64,10 +95,20 @@ export default function ClosetScreen() {
 
   // Async data layer state primitives
   const [garments, setGarments] = useState<ClothingItem[]>([]);
-  // Swapped basic schema model with high-performance client-side optimized presentation structure
   const [outfits, setOutfits] = useState<OutfitCard[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Advanced Filtering System Infrastructure States
+  const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
+  const [persistedFilters, setPersistedFilters] = useState<FilterState>(INITIAL_FILTERS);
+  
+  // Staging filters for the open drawer before the user hits "Apply Filters"
+  const [stagedCategory, setStagedCategory] = useState('All');
+  const [stagedColor, setStagedColor] = useState('All Colors');
+  const [stagedBrand, setStagedBrand] = useState('All Brands');
+  const [stagedFavorites, setStagedFavorites] = useState(false);
+  const [stagedSortBy, setStagedSortBy] = useState<SortOption>('Newest First');
 
   const params = useLocalSearchParams<{ refresh?: string }>();
 
@@ -88,7 +129,7 @@ export default function ClosetScreen() {
   // iOS-Style Minimal Underline Segment Interpolation Node
   const tabUnderlineX = useRef(new Animated.Value(0)).current;
 
-  // Handles smooth horizontal transition for the active tab underline
+  // Sync horizontal transition for the active tab underline
   useEffect(() => {
     Animated.timing(tabUnderlineX, {
       toValue: activeTab === 'Garments' ? 0 : TAB_WIDTH,
@@ -97,7 +138,13 @@ export default function ClosetScreen() {
     }).start();
   }, [activeTab]);
 
-  // Requirements 1, 5, 9 & 10: Single-Request Performance Relational Join Strategy
+  // Synchronize top horizontally scrolled category tab bar with modal selection changes
+  useEffect(() => {
+    if (persistedFilters.category !== activeCategory) {
+      setPersistedFilters(prev => ({ ...prev, category: activeCategory }));
+    }
+  }, [activeCategory]);
+
   const synchronizeClosetDataStore = async () => {
     try {
       setIsLoading(true);
@@ -123,7 +170,6 @@ export default function ClosetScreen() {
       } else {
         console.log('[Closet Core Pipeline] Syncing Outfits Lookbooks using embedded joins...');
         
-        // Single batch fetch retrieving parent data together with child records to dodge N+1 leaks
         const { data: rawOutfitsData, error: outfitQueryErr } = await supabase
           .from('outfits')
           .select(`
@@ -144,18 +190,14 @@ export default function ClosetScreen() {
         
         console.log(`[Closet Core Pipeline Debug] Raw outfits fetched: ${rawOutfitsData?.length || 0}`);
 
-        // Requirements 2, 3 & 9: Array mapping logic to select cover image and calculate asset volume metrics
         const transformedOutfits: OutfitCard[] = (rawOutfitsData || []).map((outfit: any) => {
           const itemsArray = outfit.outfit_items || [];
           const garmentCount = itemsArray.length;
           
-          // Pull first valid nested asset url string element or drop to fallback
           let coverImage: string | null = null;
           if (garmentCount > 0 && itemsArray[0].clothing_items) {
             coverImage = itemsArray[0].clothing_items.image_url || null;
           }
-
-          console.log(`[Closet Processing Debug] Outfit: "${outfit.name}" | Garments count: ${garmentCount} | Selected Cover Image: ${coverImage}`);
 
           return {
             id: outfit.id,
@@ -183,20 +225,126 @@ export default function ClosetScreen() {
     }, [activeTab, params.refresh])
   );
 
-  const filteredGarments = garments.filter((garment) => {
-    const matchesCategory = activeCategory === 'All' || garment.category === activeCategory;
-    const matchesQuery = 
-      (garment.name?.toLowerCase().includes(searchQuery.toLowerCase()) || false) || 
-      (garment.brand?.toLowerCase().includes(searchQuery.toLowerCase()) || false);
-    return matchesCategory && matchesQuery;
-  });
+  // Dynamic Metadata Introspection (Generates unique options from in-memory garments)
+  const uniqueColors = useMemo(() => {
+    const list = new Set<string>();
+    garments.forEach(g => { if (g.color) list.add(g.color.trim()); });
+    return ['All Colors', ...Array.from(list)];
+  }, [garments]);
 
-  const filteredOutfits = outfits.filter((outfit) => {
-    return (
-      (outfit.name?.toLowerCase().includes(searchQuery.toLowerCase()) || false) ||
-      (outfit.occasion?.toLowerCase().includes(searchQuery.toLowerCase()) || false)
-    );
-  });
+  const uniqueBrands = useMemo(() => {
+    const list = new Set<string>();
+    garments.forEach(g => { if (g.brand) list.add(g.brand.trim()); });
+    return ['All Brands', ...Array.from(list).filter(b => b !== 'Unbranded' && b !== 'Unknown Brand')];
+  }, [garments]);
+
+  // Modal Sheet Interaction Event Loops
+  const handleOpenFilterPanel = () => {
+    setStagedCategory(persistedFilters.category);
+    setStagedColor(persistedFilters.color);
+    setStagedBrand(persistedFilters.brand);
+    setStagedFavorites(persistedFilters.favoritesOnly);
+    setStagedSortBy(persistedFilters.sortBy);
+    setIsFilterModalVisible(true);
+  };
+
+  const handleApplyFilters = () => {
+    const nextFilters: FilterState = {
+      category: stagedCategory,
+      color: stagedColor,
+      brand: stagedBrand,
+      favoritesOnly: stagedFavorites,
+      sortBy: stagedSortBy,
+    };
+    setPersistedFilters(nextFilters);
+    setActiveCategory(stagedCategory); // Sync up the horizontal scroller
+    setIsFilterModalVisible(false);
+  };
+
+  const handleClearAllFilters = () => {
+    setPersistedFilters(INITIAL_FILTERS);
+    setActiveCategory('All');
+    setIsFilterModalVisible(false);
+  };
+
+  // Highly-optimized Multi-Conditional Filtering & Sorting Algorithms
+  const filteredGarments = useMemo(() => {
+    let result = [...garments];
+
+    // 1. Text Search Query Parameter Matches
+    if (searchQuery.trim().length > 0) {
+      const targetQuery = searchQuery.toLowerCase().trim();
+      result = result.filter(g => 
+        (g.name?.toLowerCase().includes(targetQuery)) ||
+        (g.brand?.toLowerCase().includes(targetQuery))
+      );
+    }
+
+    // 2. Category Classification Constraints
+    if (persistedFilters.category !== 'All') {
+      result = result.filter(g => g.category === persistedFilters.category);
+    }
+
+    // 3. Color Profile Contours
+    if (persistedFilters.color !== 'All Colors') {
+      result = result.filter(g => g.color?.trim() === persistedFilters.color);
+    }
+
+    // 4. Brand Specific Selection Chains
+    if (persistedFilters.brand !== 'All Brands') {
+      result = result.filter(g => g.brand?.trim() === persistedFilters.brand);
+    }
+
+    // 5. Favorites Toggle Evaluation
+    if (persistedFilters.favoritesOnly) {
+      result = result.filter(g => g.is_favorite === true);
+    }
+
+    // 6. Sort Direction Resolution Map
+    result.sort((a, b) => {
+      if (persistedFilters.sortBy === 'Oldest First') {
+        return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
+      }
+      if (persistedFilters.sortBy === 'A-Z') {
+        return (a.name || '').localeCompare(b.name || '');
+      }
+      if (persistedFilters.sortBy === 'Z-A') {
+        return (b.name || '').localeCompare(a.name || '');
+      }
+      // Default fallback matrix: Newest First
+      return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+    });
+
+    return result;
+  }, [garments, searchQuery, persistedFilters]);
+
+  const filteredOutfits = useMemo(() => {
+    let result = [...outfits];
+
+    // Outfits evaluation handles Search Queries and cross-checks chronological sort filters
+    if (searchQuery.trim().length > 0) {
+      const targetQuery = searchQuery.toLowerCase().trim();
+      result = result.filter(o => 
+        (o.name?.toLowerCase().includes(targetQuery)) ||
+        (o.occasion?.toLowerCase().includes(targetQuery))
+      );
+    }
+
+    result.sort((a, b) => {
+      if (persistedFilters.sortBy === 'Oldest First') {
+        return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
+      }
+      if (persistedFilters.sortBy === 'A-Z') {
+        return (a.name || '').localeCompare(b.name || '');
+      }
+      if (persistedFilters.sortBy === 'Z-A') {
+        return (b.name || '').localeCompare(a.name || '');
+      }
+      return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+    });
+
+    return result;
+  }, [outfits, searchQuery, persistedFilters.sortBy]);
 
   const activeRenderDataset = activeTab === 'Garments' ? filteredGarments : filteredOutfits;
 
@@ -278,9 +426,7 @@ export default function ClosetScreen() {
         </StaggeredListWrapper>
       );
     } else {
-      // Requirements 2, 3, 4 & 8: Display Cover Look Image with minimal typographic status tags
       const outfitItem = item as OutfitCard;
-
       return (
         <StaggeredListWrapper index={index}>
           <PremiumCard 
@@ -291,7 +437,6 @@ export default function ClosetScreen() {
             })}
           >
             {outfitItem.coverImage ? (
-              // Enhanced Look Image viewport setup to showcase fashion assets premium styling
               <View style={styles.imageWrapper}>
                 <Image source={{ uri: outfitItem.coverImage }} style={styles.imageGarmentImage} />
                 {outfitItem.occasion && (
@@ -303,7 +448,6 @@ export default function ClosetScreen() {
                 )}
               </View>
             ) : (
-              // Minimalistic empty fallback layout structure 
               <View style={styles.outfitPlaceholderContainer}>
                 <View style={styles.outfitIconBadgeCircle}>
                   <MaterialCommunityIcons name="hanger" size={22} color="#78716C" />
@@ -336,6 +480,11 @@ export default function ClosetScreen() {
     }
   };
 
+  const isAnyFilterActive = persistedFilters.color !== 'All Colors' || 
+                            persistedFilters.brand !== 'All Brands' || 
+                            persistedFilters.favoritesOnly || 
+                            persistedFilters.sortBy !== 'Newest First';
+
   return (
     <PremiumScreen>
       <FlatList
@@ -346,7 +495,7 @@ export default function ClosetScreen() {
         columnWrapperStyle={styles.gridRow}
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
-        extraData={[activeCategory, activeTab, garments, outfits]} 
+        extraData={[activeCategory, activeTab, garments, outfits, persistedFilters]} 
         ListHeaderComponent={
           <View style={styles.headerStack}>
             
@@ -385,7 +534,6 @@ export default function ClosetScreen() {
                   </PremiumTouchable>
                 );
               })}
-              {/* Dynamic Underlying Slide bar element */}
               <Animated.View 
                 style={[
                   styles.iosAnimatedUnderline, 
@@ -410,12 +558,19 @@ export default function ClosetScreen() {
                 value={searchQuery}
                 onChangeText={setSearchQuery}
               />
-              <PremiumTouchable style={styles.filterButton} onPress={() => console.log('Filter trigger')}>
-                <MaterialCommunityIcons name="filter-variant" size={18} color="#1C1917" />
+              <PremiumTouchable 
+                style={[styles.filterButton, isAnyFilterActive && styles.filterButtonActiveAccent]} 
+                onPress={handleOpenFilterPanel}
+              >
+                <MaterialCommunityIcons 
+                  name="filter-variant" 
+                  size={18} 
+                  color={isAnyFilterActive ? '#FAFAF9' : '#1C1917'} 
+                />
               </PremiumTouchable>
             </Animated.View>
 
-            {/* horizontal Horizontal Filter Tracks for garments explicitly */}
+            {/* Horizontal Filter Tracks for garments explicitly */}
             {activeTab === 'Garments' && (
               <Animated.View style={[
                 styles.categoryScroller,
@@ -497,6 +652,141 @@ export default function ClosetScreen() {
           )
         }
       />
+
+      {/* Advanced Drawer Filter Sheet Overlay Viewport Component */}
+      <Modal
+        visible={isFilterModalVisible}
+        animationType="slide"
+        transparent={true}
+        statusBarTranslucent
+        onRequestClose={() => setIsFilterModalVisible(false)}
+      >
+        <View style={styles.modalBackdropOverlay}>
+          <SafeAreaView style={styles.modalSafeBoundary} edges={['bottom']}>
+            <View style={styles.bottomSheetFrame}>
+              <View style={styles.bottomSheetDraggerBar} />
+
+              <View style={styles.modalHeaderRow}>
+                <Text style={styles.modalHeadingTitle}>Filter Closet Storage</Text>
+                <PremiumTouchable onPress={() => setIsFilterModalVisible(false)} style={styles.modalCloseTouchTarget}>
+                  <Feather name="x" size={20} color="#78716C" />
+                </PremiumTouchable>
+              </View>
+
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalScrollBody}>
+                {/* 1. Category Chip Matrix Selector Layout */}
+                <Text style={styles.filterSectionLabel}>Category Block</Text>
+                <View style={styles.modalChipsContainerRow}>
+                  {CATEGORIES.map((item) => {
+                    const isSelected = stagedCategory === item.id;
+                    return (
+                      <PremiumTouchable
+                        key={item.id}
+                        onPress={() => setStagedCategory(item.id)}
+                        style={[styles.modalChipItem, isSelected ? styles.modalChipItemSelected : styles.modalChipItemUnselected]}
+                      >
+                        <Text style={[styles.modalChipText, isSelected ? styles.modalChipTextSelected : styles.modalChipTextUnselected]}>
+                          {item.label}
+                        </Text>
+                      </PremiumTouchable>
+                    );
+                  })}
+                </View>
+
+                {/* 2. Color Profile Dynamic Multi-Swatch Selector Track */}
+                <Text style={styles.filterSectionLabel}>Dominant Color Variant</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScrollGap}>
+                  {uniqueColors.map((colorItem) => {
+                    const isSelected = stagedColor === colorItem;
+                    const isHex = colorItem.startsWith('#');
+                    return (
+                      <PremiumTouchable
+                        key={colorItem}
+                        onPress={() => setStagedColor(colorItem)}
+                        style={[
+                          styles.colorTextChip, 
+                          isSelected ? styles.modalChipItemSelected : styles.modalChipItemUnselected
+                        ]}
+                      >
+                        {isHex && (
+                          <View style={[styles.inlineColorIndicatorCircle, { backgroundColor: colorItem }]} />
+                        )}
+                        <Text style={[styles.modalChipText, isSelected ? styles.modalChipTextSelected : styles.modalChipTextUnselected]}>
+                          {isHex ? colorItem.toUpperCase() : colorItem}
+                        </Text>
+                      </PremiumTouchable>
+                    );
+                  })}
+                </ScrollView>
+
+                {/* 3. Brand Entity Dynamic List Scroller Track */}
+                <Text style={styles.filterSectionLabel}>Brand Reference Line</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScrollGap}>
+                  {uniqueBrands.map((brandItem) => {
+                    const isSelected = stagedBrand === brandItem;
+                    return (
+                      <PremiumTouchable
+                        key={brandItem}
+                        onPress={() => setStagedBrand(brandItem)}
+                        style={[styles.modalChipItem, isSelected ? styles.modalChipItemSelected : styles.modalChipItemUnselected]}
+                      >
+                        <Text style={[styles.modalChipText, isSelected ? styles.modalChipTextSelected : styles.modalChipTextUnselected]}>
+                          {brandItem}
+                        </Text>
+                      </PremiumTouchable>
+                    );
+                  })}
+                </ScrollView>
+
+                {/* 4. Sequential Chronological Sorting Modes */}
+                <Text style={styles.filterSectionLabel}>Sort Sequence Hierarchy</Text>
+                <View style={styles.modalChipsContainerRow}>
+                  {(['Newest First', 'Oldest First', 'A-Z', 'Z-A'] as SortOption[]).map((option) => {
+                    const isSelected = stagedSortBy === option;
+                    return (
+                      <PremiumTouchable
+                        key={option}
+                        onPress={() => setStagedSortBy(option)}
+                        style={[styles.modalChipItem, isSelected ? styles.modalChipItemSelected : styles.modalChipItemUnselected]}
+                      >
+                        <Text style={[styles.modalChipText, isSelected ? styles.modalChipTextSelected : styles.modalChipTextUnselected]}>
+                          {option}
+                        </Text>
+                      </PremiumTouchable>
+                    );
+                  })}
+                </View>
+
+                {/* 5. Favorites Toggle Parameter Block Switch */}
+                <View style={styles.toggleRowBlockContainer}>
+                  <View>
+                    <Text style={styles.toggleLabelText}>Favorites Selection Boundary</Text>
+                    <Text style={styles.toggleSublabelText}>Isolate only items tagged as favorites</Text>
+                  </View>
+                  <Switch
+                    value={stagedFavorites}
+                    onValueChange={setStagedFavorites}
+                    trackColor={{ false: '#E7E5E4', true: '#1C1917' }}
+                    thumbColor={stagedFavorites ? '#FAFAF9' : '#F5F5F4'}
+                    ios_backgroundColor="#E7E5E4"
+                  />
+                </View>
+              </ScrollView>
+
+              {/* Layout Submission Control Rows */}
+              <View style={styles.modalActionButtonsRow}>
+                <Pressable onPress={handleClearAllFilters} style={styles.modalSecondaryButton}>
+                  <Text style={styles.modalSecondaryButtonText}>Clear All</Text>
+                </Pressable>
+                
+                <Pressable onPress={handleApplyFilters} style={styles.modalPrimaryButton}>
+                  <Text style={styles.modalPrimaryButtonText}>Apply Filters</Text>
+                </Pressable>
+              </View>
+            </View>
+          </SafeAreaView>
+        </View>
+      </Modal>
     </PremiumScreen>
   );
 }
@@ -518,7 +808,8 @@ const styles = StyleSheet.create({
   searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F4', borderRadius: 12, height: 42, paddingHorizontal: 12, marginVertical: 8 },
   searchIcon: { marginRight: 8 },
   textInput: { flex: 1, fontSize: 14, color: '#1C1917' },
-  filterButton: { padding: 4 },
+  filterButton: { padding: 6, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  filterButtonActiveAccent: { backgroundColor: '#1C1917' },
   categoryScroller: { marginHorizontal: -16, marginBottom: 8, marginTop: 4 },
   categoriesContent: { paddingHorizontal: 16, gap: 6, paddingVertical: 2 },
   categoryTab: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
@@ -534,7 +825,6 @@ const styles = StyleSheet.create({
   imageGarmentImage: { width: '100%', height: '100%', resizeMode: 'cover' },
   colorIndicator: { position: 'absolute', top: 8, right: 8, width: 18, height: 18, borderRadius: 9, borderWidth: 1.5, borderColor: '#FFFFFF', shadowColor: '#000000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 1, elevation: 1 },
   
-  // Requirement 4 & 8: High-end Minimal card design updates
   outfitTitleBoldStyle: { color: '#1C1917', fontSize: 14, fontWeight: '600', letterSpacing: 0.1, marginBottom: 2 },
   outfitGarmentsCountSubtitleStyle: { fontSize: 12, fontWeight: '400', color: '#78716C' },
   occasionPillFloatingFloating: { position: 'absolute', bottom: 8, left: 8, backgroundColor: 'rgba(255, 255, 255, 0.90)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 0.5, borderColor: '#E7E5E4' },
@@ -543,7 +833,6 @@ const styles = StyleSheet.create({
   outfitPlaceholderContainer: { width: '100%', height: CARD_WIDTH * 1.3, backgroundColor: '#F5F5F4', alignItems: 'center', justifyContent: 'center', position: 'relative' },
   outfitIconBadgeCircle: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#E7E5E4' },
   outfitSparkleCorner: { position: 'absolute', top: 10, right: 10, width: 20, height: 20, borderRadius: 10, backgroundColor: '#FAFAF9', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#E7E5E4' },
-  outfitDateBadge: { borderColor: '#1C1917', backgroundColor: '#FAFAF9' },
   
   cardInfo: { padding: 10 },
   garmentName: { fontSize: 13, fontWeight: '400', color: '#1C1917', marginBottom: 6 },
@@ -560,4 +849,33 @@ const styles = StyleSheet.create({
   errorTextSubtitle: { fontSize: 12, color: '#78716C', textAlign: 'center', marginBottom: 16, lineHeight: 16 },
   retryButton: { backgroundColor: '#1C1917', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10 },
   retryButtonText: { color: '#FAFAF9', fontSize: 12, fontWeight: '600' },
+
+  // Filter Backdrop Modal Styling System Mapping Blocks
+  modalBackdropOverlay: { flex: 1, backgroundColor: 'rgba(28, 25, 23, 0.4)', justifyContent: 'flex-end' },
+  modalSafeBoundary: { width: '100%' },
+  bottomSheetFrame: { backgroundColor: '#FAFAF9', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 16, maxHeight: SCREEN_HEIGHT * 0.85, shadowColor: '#1C1917', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 8 },
+  bottomSheetDraggerBar: { width: 36, height: 4, backgroundColor: '#E7E5E4', borderRadius: 2, alignSelf: 'center', marginBottom: 14 },
+  modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 12, borderBottomWidth: 1, borderColor: '#E7E5E4' },
+  modalHeadingTitle: { fontSize: 16, fontWeight: '600', color: '#1C1917', letterSpacing: -0.2 },
+  modalCloseTouchTarget: { padding: 4 },
+  modalScrollBody: { paddingVertical: 12 },
+  filterSectionLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', color: '#78716C', letterSpacing: 0.8, marginTop: 14, marginBottom: 10 },
+  modalChipsContainerRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
+  horizontalScrollGap: { gap: 8, paddingVertical: 2 },
+  modalChipItem: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18, borderWidth: 1 },
+  colorTextChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18, borderWidth: 1 },
+  inlineColorIndicatorCircle: { width: 12, height: 12, borderRadius: 6, marginRight: 6, borderWidth: 0.5, borderColor: '#78716C' },
+  modalChipItemUnselected: { backgroundColor: '#FFFFFF', borderColor: '#E7E5E4' },
+  modalChipItemSelected: { backgroundColor: '#1C1917', borderColor: '#1C1917' },
+  modalChipText: { fontSize: 12, fontWeight: '500' },
+  modalChipTextUnselected: { color: '#1C1917' },
+  modalChipTextSelected: { color: '#FAFAF9' },
+  toggleRowBlockContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E7E5E4', borderRadius: 12, padding: 14, marginTop: 20, marginBottom: 12 },
+  toggleLabelText: { fontSize: 13, fontWeight: '600', color: '#1C1917' },
+  toggleSublabelText: { fontSize: 11, color: '#78716C', marginTop: 1 },
+  modalActionButtonsRow: { flexDirection: 'row', gap: 12, paddingTop: 14, borderTopWidth: 1, borderColor: '#E7E5E4', marginTop: 8 },
+  modalSecondaryButton: { flex: 1, height: 48, borderRadius: 12, borderWidth: 1, borderColor: '#E7E5E4', justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' },
+  modalSecondaryButtonText: { color: '#78716C', fontSize: 14, fontWeight: '600' },
+  modalPrimaryButton: { flex: 1, height: 48, borderRadius: 12, backgroundColor: '#1C1917', justifyContent: 'center', alignItems: 'center' },
+  modalPrimaryButtonText: { color: '#FAFAF9', fontSize: 14, fontWeight: '600' },
 });
