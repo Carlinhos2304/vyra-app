@@ -9,7 +9,6 @@ import {
   Switch,
   Dimensions,
   Alert,
-  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -17,6 +16,7 @@ import { router } from 'expo-router';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { SectionTitle } from '../../components/ui/SectionTitle';
+import { PremiumLoader } from '../../components/ui/PremiumLoader';
 
 // Supabase client instance integration
 import { supabase } from '../../lib/supabase';
@@ -166,7 +166,8 @@ export default function ProfileScreen() {
         if (!poolErr && garmentPool) {
           const contentMap: { [key: string]: number } = {};
           
-          garmentPool.forEach(item => {
+          let garmentPoolIter = garmentPool;
+          garmentPoolIter.forEach(item => {
             if (item.category) {
               contentMap[item.category] = (contentMap[item.category] || 0) + 2; // Category weights
             }
@@ -289,8 +290,7 @@ export default function ProfileScreen() {
 
         {isLoading ? (
           <View style={styles.stateCenterLoaderFrame}>
-            <ActivityIndicator size="small" color="#1C1917" />
-            <Text style={styles.loadingTypographySubtitle}>Syncing profile files...</Text>
+            <PremiumLoader label="Syncing profile files..." />
           </View>
         ) : error ? (
           <View style={styles.stateCenterLoaderFrame}>
@@ -589,12 +589,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 32,
-  },
-  loadingTypographySubtitle: {
-    fontSize: 13,
-    color: '#78716C',
-    marginTop: 12,
-    fontWeight: '400',
   },
   errorHeaderTypography: {
     fontSize: 16,

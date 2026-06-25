@@ -8,11 +8,10 @@ import {
   FlatList,
   Image,
   Animated,
-  ActivityIndicator,
   Modal,
   ScrollView,
   Switch,
-  Pressable, // <-- Add this line
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -23,6 +22,7 @@ import { PremiumTouchable } from '../../components/ui/PremiumTouchable';
 import { StaggeredListWrapper } from '../../constants/motion/StaggeredListWrapper';
 import { SectionHeader } from '../../components/ui/SectionHeader'; 
 import { SectionTitle } from '../../components/ui/SectionTitle';
+import { PremiumLoader } from '../../components/ui/PremiumLoader';
 
 // Supabase client instance integration
 import { supabase } from '../../lib/supabase';
@@ -309,7 +309,7 @@ export default function ClosetScreen() {
         return (a.name || '').localeCompare(b.name || '');
       }
       if (persistedFilters.sortBy === 'Z-A') {
-        return (b.name || '').localeCompare(a.name || '');
+        return (b.name || '').localeCompare(b.name || '');
       }
       // Default fallback matrix: Newest First
       return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
@@ -321,7 +321,7 @@ export default function ClosetScreen() {
   const filteredOutfits = useMemo(() => {
     let result = [...outfits];
 
-    // Outfits evaluation handles Search Queries and cross-checks chronological sort filters
+    // Outfits evaluation handles Search Queries safely isolated from Garment-specific structural tags
     if (searchQuery.trim().length > 0) {
       const targetQuery = searchQuery.toLowerCase().trim();
       result = result.filter(o => 
@@ -335,7 +335,7 @@ export default function ClosetScreen() {
         return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
       }
       if (persistedFilters.sortBy === 'A-Z') {
-        return (a.name || '').localeCompare(b.name || '');
+        return (a.name || '').localeCompare(a.name || '');
       }
       if (persistedFilters.sortBy === 'Z-A') {
         return (b.name || '').localeCompare(a.name || '');
@@ -381,7 +381,7 @@ export default function ClosetScreen() {
     if (activeTab === 'Garments') {
       router.push('../clothing/add-garment');
     } else {
-      router.push('../clothing/create-outfit');
+      router.push('/create');
     }
   };
 
@@ -559,13 +559,16 @@ export default function ClosetScreen() {
                 onChangeText={setSearchQuery}
               />
               <PremiumTouchable 
-                style={[styles.filterButton, isAnyFilterActive && styles.filterButtonActiveAccent]} 
-                onPress={handleOpenFilterPanel}
+                style={[
+                  styles.filterButton, 
+                  (isAnyFilterActive && activeTab === 'Garments') && styles.filterButtonActiveAccent
+                ]} 
+                onPress={activeTab === 'Outfits' ? undefined : handleOpenFilterPanel}
               >
                 <MaterialCommunityIcons 
                   name="filter-variant" 
                   size={18} 
-                  color={isAnyFilterActive ? '#FAFAF9' : '#1C1917'} 
+                  color={(isAnyFilterActive && activeTab === 'Garments') ? '#FAFAF9' : '#1C1917'} 
                 />
               </PremiumTouchable>
             </Animated.View>
@@ -617,7 +620,7 @@ export default function ClosetScreen() {
         ListEmptyComponent={
           isLoading ? (
             <View style={styles.centeredStateFrame}>
-              <ActivityIndicator size="small" color="#1C1917" />
+              <PremiumLoader label="Synchronizing storage structures..." />
             </View>
           ) : error ? (
             <View style={styles.centeredStateFrame}>

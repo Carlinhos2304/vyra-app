@@ -7,7 +7,6 @@ import {
   Image,
   Dimensions,
   Animated,
-  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +17,7 @@ import { PremiumTouchable } from '../../components/ui/PremiumTouchable';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { SectionTitle } from '../../components/ui/SectionTitle'; 
 import VyraLogo from '../../components/branding/VyraLogo';
+import { PremiumLoader } from '../../components/ui/PremiumLoader';
 import { supabase } from '../../lib/supabase';
 
 const { width } = Dimensions.get('window');
@@ -155,7 +155,7 @@ export default function HomeScreen() {
             planned_date: rawPlan.planned_date,
             outfit_id: rawPlan.outfit_id,
             outfits: rawPlan.outfits,
-            event_name: rawPlan.event_name // Retained safely if added via extensions
+            event_name: rawPlan.event_name
           });
         } else {
           setTodayPlan(null);
@@ -172,7 +172,7 @@ export default function HomeScreen() {
             id: match.outfit_id,
             name: match.outfits.name,
             occasion: match.outfits.occasion,
-            cover_image_url: null, // Initialized safely for contract shape matching
+            cover_image_url: null,
             outfit_items: match.outfits.outfit_items
           };
         }
@@ -203,7 +203,7 @@ export default function HomeScreen() {
   if (isLoading) {
     return (
       <PremiumScreen style={styles.centerFlexContainer}>
-        <ActivityIndicator size="small" color="#1C1917" />
+        <PremiumLoader label="Aligning dashboard vectors..." />
       </PremiumScreen>
     );
   }

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -11,8 +11,8 @@ import {
   LayoutAnimation,
   Platform,
   UIManager,
-  ActivityIndicator,
   Alert,
+  Animated,
 } from 'react-native';
 import { useFocusEffect, router } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -22,6 +22,7 @@ import { PremiumTouchable } from '../../components/ui/PremiumTouchable';
 import { StaggeredListWrapper } from '../../constants/motion/StaggeredListWrapper';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { SectionTitle } from '../../components/ui/SectionTitle';
+import { PremiumLoader } from '../../components/ui/PremiumLoader';
 
 // Supabase client instance integration
 import { supabase } from '../../lib/supabase';
@@ -48,19 +49,78 @@ interface Garment {
   tags?: string[] | null;
 }
 
+const CATEGORY_ORDER = [
+  'Bottoms',
+  'Tops',
+  'Dresses',
+  'Outerwear',
+  'Shoes',
+  'Bags',
+  'Accessories',
+  'Jewelry',
+  'Hats',
+  'Swimwear',
+  'Activewear',
+];
+
 export default function CreateOutfitScreen() {
   const [outfitName, setOutfitName] = useState('');
-  // Extensible occasion hook matching database schema structures (can be expanded via optional picker)
   const [occasion, setOccasion] = useState<string | null>(null);
   
-  // Dynamic Supabase data management synchronization states
   const [garments, setGarments] = useState<Garment[]>([]);
   const [selectedItems, setSelectedItems] = useState<Garment[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Inline Premium Feedback Banner States
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const successFadeAnim = useRef(new Animated.Value(0)).current;
 
-  // Focus-aware active listener engine fetching user telemetry data securely
+  // Dedicated workflow to scrub inputs and runtime selection cache
+  const resetFormState = useCallback(() => {
+    setOutfitName('');
+    setOccasion(null);
+    setSelectedItems([]);
+    setErrorMessage(null);
+    setError(null);
+  }, []);
+
+  // Track error state transitions to fire smooth fade configurations
+  useEffect(() => {
+    if (errorMessage) {
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      fadeAnim.setValue(0);
+    }
+  }, [errorMessage]);
+
+  // Track success state transitions to fire smooth fade configurations
+  useEffect(() => {
+    if (successMessage) {
+      Animated.timing(successFadeAnim, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      successFadeAnim.setValue(0);
+    }
+  }, [successMessage]);
+
+  // Dismiss error and success banners automatically when user modifies parameters
+  useEffect(() => {
+    if (errorMessage) setErrorMessage(null);
+    if (successMessage) setSuccessMessage(null);
+  }, [outfitName, selectedItems]);
+
   useFocusEffect(
     useCallback(() => {
       let isActive = true;
@@ -71,7 +131,6 @@ export default function CreateOutfitScreen() {
           setError(null);
           console.log('[Outfit Creation] Loading garments...');
 
-          // Resolve secure current identity validation token coordinates
           const { data: { user }, error: authError } = await supabase.auth.getUser();
 
           if (authError || !user) {
@@ -83,24 +142,15 @@ export default function CreateOutfitScreen() {
             return;
           }
 
-          console.log('[Outfit Creation Core Debug] Authenticated user:', user.id);
-
-          // Query target relational rows strictly isolated by multi-tenant parameter
           const { data, error: queryError } = await supabase
             .from('clothing_items')
             .select('*')
             .eq('user_id', user.id);
 
-          if (queryError) {
-            console.error('[Outfit Creation Error] Query failed:', queryError);
-            throw queryError;
-          }
+          if (queryError) throw queryError;
 
           if (isActive) {
-            console.log('[Outfit Creation Core Debug] Garments loaded:', data ? data.length : 0);
             setGarments(data || []);
-            
-            // Clean out invalid selections if any rows were deleted remotely
             if (data) {
               setSelectedItems((prev) => prev.filter((fav) => data.some((item) => item.id === fav.id)));
             }
@@ -123,42 +173,66 @@ export default function CreateOutfitScreen() {
     }, [])
   );
 
-  // Requirements 1, 2, 3, 4, 5, 6, 7 & 10: Complete Transaction Save Workflow
+  // Grouped and sorted structure initialization preferred layout matrixes
+  const groupedGarments = useMemo(() => {
+    const groups: { [key: string]: Garment[] } = {};
+    garments.forEach((item) => {
+      const cat = item.category || 'Other';
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(item);
+    });
+
+    const orderedSections: { title: string; data: Garment[] }[] = [];
+
+    // Predefined structure mapping pass logic
+    CATEGORY_ORDER.forEach((catName) => {
+      if (groups[catName] && groups[catName].length > 0) {
+        orderedSections.push({ title: catName, data: groups[catName] });
+        delete groups[catName];
+      }
+    });
+
+    // Remainder unlisted grouping configurations pass logic
+    Object.keys(groups).forEach((catName) => {
+      if (groups[catName].length > 0) {
+        orderedSections.push({ title: catName, data: groups[catName] });
+      }
+    });
+
+    return orderedSections;
+  }, [garments]);
+
   const handleSaveOutfitWorkflow = async () => {
     if (isSaving) return;
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    // 1) Outfit name verification block
+    const sanitizedName = outfitName.trim();
+    if (!sanitizedName) {
+      setErrorMessage('Please enter a name for your outfit.');
+      return;
+    }
+
+    // 2) Capsule collection requirement assessment logic
+    const hasTop = selectedItems.some((item) => item.category === 'Tops');
+    const hasBottom = selectedItems.some((item) => item.category === 'Bottoms');
+    const hasShoes = selectedItems.some((item) => item.item_category === 'Shoes' || item.category === 'Shoes');
+
+    if (!hasTop || !hasBottom || !hasShoes) {
+      setErrorMessage('Your outfit must include at least 1 top, 1 bottom, and 1 pair of shoes.');
+      return;
+    }
 
     try {
       setIsSaving(true);
       setError(null);
-
-      console.log('[Outfit Save Pipeline] Initiating verification and persistence transaction logic...');
-
-      // 1. Authenticate validation checks
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       if (authError || !user) {
-        console.error('[Outfit Save Pipeline Error] Identity mapping extraction collapsed:', authError);
         Alert.alert('Session Error', 'Your credentials expired. Authenticate your session again.');
         return;
       }
-      console.log('[Outfit Save Pipeline Sync] Validated Authenticated User ID context:', user.id);
 
-      // 2. Client Side Structural Sanitization Constraints
-      const sanitizedName = outfitName.trim();
-      if (!sanitizedName) {
-        console.warn('[Outfit Save Pipeline Validation Alert] Prevented commit: Blank string name variable.');
-        Alert.alert('Missing Name', 'Please add a name description for your custom creation.');
-        return;
-      }
-
-      if (selectedItems.length === 0) {
-        console.warn('[Outfit Save Pipeline Validation Alert] Prevented commit: Empty selections collection.');
-        Alert.alert('Empty Canvas', 'Select at least one garment from your wardrobe to construct an outfit.');
-        return;
-      }
-
-      console.log(`[Outfit Save Pipeline Commit] Appending new record to outfits table. Name: "${sanitizedName}"`);
-
-      // 3. Write Core Header Row to public.outfits
       const { data: outfitRecord, error: outfitInsertError } = await supabase
         .from('outfits')
         .insert({
@@ -170,58 +244,37 @@ export default function CreateOutfitScreen() {
         .select()
         .single();
 
-      if (outfitInsertError || !outfitRecord) {
-        console.error('[Outfit Save Pipeline Error] Core entity record insertion aborted by DB engine:', outfitInsertError);
-        throw outfitInsertError || new Error('Database failed to generate an outfit tracker entity.');
-      }
+      if (outfitInsertError || !outfitRecord) throw outfitInsertError;
 
-      const generatedOutfitId = outfitRecord.id;
-      console.log(`[Outfit Save Pipeline Sync] Core header tracking item recorded successfully. Generated Primary Key UUID: ${generatedOutfitId}`);
-
-      // 4. Batch items formatting logic map mapping relational associative items entries
       const relationalItemsPayloads = selectedItems.map((garment) => ({
-        outfit_id: generatedOutfitId,
+        outfit_id: outfitRecord.id,
         clothing_item_id: garment.id,
       }));
 
-      console.log(`[Outfit Save Pipeline Commit] Processing child items relations records. Compiling associative map payload entries count: ${relationalItemsPayloads.length}`);
-
-      // 5. Append records tracking dependencies to junction grid
       const { error: junctionInsertError } = await supabase
         .from('outfit_items')
         .insert(relationalItemsPayloads);
 
       if (junctionInsertError) {
-        console.error('[Outfit Save Pipeline Error] Relational items reference array linking operation crashed:', junctionInsertError);
-        
-        // Contextual Fallback cleanup: Remove orphaned parent outfit tracker node gracefully
-        await supabase.from('outfits').delete().eq('id', generatedOutfitId);
+        await supabase.from('outfits').delete().eq('id', outfitRecord.id);
         throw junctionInsertError;
       }
 
-      console.log('[Outfit Save Pipeline Success] Transaction verified and fully committed. Outfit persistent maps stored.');
-
-      // 6. Provide tactile user completion alert notification alerts
-      Alert.alert(
-        'Outfit Saved',
-        `"${sanitizedName}" has been successfully added to your lookbook collection.`,
-        [
-          {
-            text: 'Wonderful',
-            onPress: () => {
-              // 7. Route focus securely backwards onto structural underlying stack screen layouts
-              if (router.canGoBack()) {
-                router.back();
-              } else {
-                router.replace('/closet');
-              }
-            },
-          },
-        ]
-      );
+      // Premium inline success routing transition phase
+      setSuccessMessage(`"${sanitizedName}" added to your lookbook.`);
+      
+      setTimeout(() => {
+        // Complete visual layout reset clean context initialization prior to execution transition loops
+        resetFormState();
+        
+        if (router.canGoBack()) {
+          router.back();
+        } else {
+          router.replace('/closet');
+        }
+      }, 1800);
 
     } catch (err: any) {
-      console.error('[Outfit Save Pipeline Fatal Error Exception]:', err);
       setError(err.message || 'An unexpected failure scenario caused save tasks to interrupt.');
       Alert.alert('Persistence Failure', err.message || 'Could not complete save transaction across cloud servers.');
     } finally {
@@ -243,7 +296,6 @@ export default function CreateOutfitScreen() {
 
   const renderAvailableItem = ({ item, index }: { item: Garment; index: number }) => {
     const isSelected = selectedItems.some((selected) => selected.id === item.id);
-    
     const imageSource = item.image_url
       ? { uri: item.image_url }
       : { uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&background=F5F5F4&color=1C1917&size=250` };
@@ -285,16 +337,32 @@ export default function CreateOutfitScreen() {
   return (
     <PremiumScreen>
       <FlatList
-        data={garments}
-        renderItem={renderAvailableItem}
-        keyExtractor={(item) => item.id}
-        numColumns={2}
-        columnWrapperStyle={styles.gridRow}
+        data={groupedGarments}
+        keyExtractor={(item) => item.title}
         contentContainerStyle={styles.scrollPadding}
         showsVerticalScrollIndicator={false}
         extraData={selectedItems}
+        renderItem={({ item: section }) => (
+          <View key={section.title}>
+            <View style={styles.categoryHeaderContainer}>
+              <SectionTitle>
+                {section.title}
+              </SectionTitle>
+            </View>
+            <FlatList
+               Goldman
+              data={section.data}
+              renderItem={renderAvailableItem}
+              keyExtractor={(item) => item.id}
+              numColumns={2}
+              columnWrapperStyle={styles.gridRow}
+              scrollEnabled={false}
+              extraData={selectedItems}
+            />
+          </View>
+        )}
         ListEmptyComponent={
-          !isLoading && !error ? (
+          !isLoading && !error && garments.length === 0 ? (
             <View style={styles.stateCenterLoaderFrame}>
               <MaterialCommunityIcons name="hanger" size={40} color="#78716C" />
               <Text style={styles.errorHeaderTypography}>No Garments Found</Text>
@@ -318,7 +386,9 @@ export default function CreateOutfitScreen() {
                 onPress={handleSaveOutfitWorkflow}
               >
                 {isSaving ? (
-                  <ActivityIndicator size="small" color="#FAFAF9" />
+                  <View style={styles.saveLoaderContainer}>
+                    <PremiumLoader />
+                  </View>
                 ) : (
                   <Ionicons name="save-outline" size={20} color="#FAFAF9" />
                 )}
@@ -335,6 +405,22 @@ export default function CreateOutfitScreen() {
                 editable={!isLoading && !isSaving}
                 style={[styles.textInputControl, (isLoading || isSaving) && styles.textInputDisabled]}
               />
+
+              {/* Standard React Native Animated Error Layout Container */}
+              {errorMessage && (
+                <Animated.View style={[styles.errorInlineBanner, { opacity: fadeAnim }]}>
+                  <MaterialCommunityIcons name="alert-circle-outline" size={16} color="#EF4444" />
+                  <Text style={styles.errorBannerText}>{errorMessage}</Text>
+                </Animated.View>
+              )}
+
+              {/* Premium Inline Success Banner Container */}
+              {successMessage && (
+                <Animated.View style={[styles.successInlineBanner, { opacity: successFadeAnim }]}>
+                  <MaterialCommunityIcons name="check-circle-outline" size={16} color="#10B981" />
+                  <Text style={styles.successBannerText}>{successMessage}</Text>
+                </Animated.View>
+              )}
             </View>
 
             <View style={styles.canvasSection}>
@@ -382,8 +468,7 @@ export default function CreateOutfitScreen() {
 
             {isLoading && (
               <View style={styles.stateCenterLoaderFrame}>
-                <ActivityIndicator size="small" color="#1C1917" />
-                <Text style={styles.loadingTypographySubtitle}>Retrieving Vyra vault assets...</Text>
+                <PremiumLoader label="Retrieving Vyra vault assets..." />
               </View>
             )}
 
@@ -395,7 +480,7 @@ export default function CreateOutfitScreen() {
               </View>
             )}
 
-            {!isLoading && !error && (
+            {!isLoading && !error && garments.length > 0 && (
               <View style={styles.dividerHeader}>
                 <SectionTitle>Wardrobe Items</SectionTitle>
               </View>
@@ -407,6 +492,7 @@ export default function CreateOutfitScreen() {
   );
 }
 
+// ... styles object remains unchanged ...
 const styles = StyleSheet.create({
   scrollPadding: {
     paddingHorizontal: 16,
@@ -445,6 +531,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0,
     elevation: 0,
   },
+  saveLoaderContainer: {
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    transform: [{ scale: 0.5 }], // Cleanly downscale the editorial horizontal track pulse
+  },
   formSection: {
     marginVertical: 12,
   },
@@ -461,6 +554,44 @@ const styles = StyleSheet.create({
   textInputDisabled: {
     opacity: 0.6,
     backgroundColor: '#E7E5E4',
+  },
+  errorInlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 12,
+    gap: 8,
+  },
+  errorBannerText: {
+    fontSize: 13,
+    color: '#EF4444',
+    fontWeight: '500',
+    letterSpacing: -0.2,
+    flex: 1,
+  },
+  successInlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#DCFCE7',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 12,
+    gap: 8,
+  },
+  successBannerText: {
+    fontSize: 13,
+    color: '#10B981',
+    fontWeight: '500',
+    letterSpacing: -0.2,
+    flex: 1,
   },
   canvasSection: {
     backgroundColor: '#FFFFFF',
@@ -625,12 +756,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 32,
   },
-  loadingTypographySubtitle: {
-    fontSize: 13,
-    color: '#78716C',
-    marginTop: 12,
-    fontWeight: '400',
-  },
   errorHeaderTypography: {
     fontSize: 15,
     color: '#1C1917',
@@ -643,5 +768,18 @@ const styles = StyleSheet.create({
     color: '#78716C',
     textAlign: 'center',
     lineHeight: 16,
+  },
+  categoryHeaderContainer: {
+    paddingVertical: 8,
+    marginTop: 8,
+    marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5F5F4',
+  },
+  categoryHeaderText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1C1917',
+    textTransform: 'capitalize',
   },
 });
