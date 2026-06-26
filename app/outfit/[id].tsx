@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -107,11 +107,6 @@ export default function OutfitDetailScreen() {
         garments: parsedGarments,
       };
 
-      console.log('[Outfit Detail Debug] Pipeline parsed data successfully:', {
-        name: formattedDetail.name,
-        itemsCount: formattedDetail.garments.length,
-      });
-
       setOutfit(formattedDetail);
     } catch (err: any) {
       console.error('[Outfit Detail Error Exception]:', err);
@@ -127,12 +122,25 @@ export default function OutfitDetailScreen() {
     }, [id])
   );
 
+  // Filter and deduplicate nested children parameters natively at client calculation level
+  const uniqueGarments = useMemo(() => {
+    if (!outfit?.garments) return [];
+    return Array.from(
+      new Map(outfit.garments.map((item) => [item.id, item])).values()
+    );
+  }, [outfit?.garments]);
+
+  console.log('[Outfit Detail Debug] Pipeline parsed data successfully:', {
+    name: outfit?.name || 'Empty',
+    itemsCount: uniqueGarments.length,
+  });
+
   // Business Logic Interaction Methods
   const handleShareLookbookOutfit = async () => {
     if (!outfit) return;
     try {
       console.log('[Outfit Action] Spawning device default system share layer sheets...');
-      const summaryText = `Check out my look "${outfit.name}" on Vyra. A curated mix of ${outfit.garments.length} wardrobe pieces tailored for ${outfit.occasion || 'any setting'}.`;
+      const summaryText = `Check out my look "${outfit.name}" on Vyra. A curated mix of ${uniqueGarments.length} wardrobe pieces tailored for ${outfit.occasion || 'any setting'}.`;
       await Share.share({ message: summaryText });
     } catch (err) {
       console.error('[Outfit Share Error Alert]', err);
@@ -155,8 +163,6 @@ export default function OutfitDetailScreen() {
               setIsDeleting(true);
               console.log(`[Outfit Delete Workflow] Purging records attached to ID: ${outfit.id}`);
               
-              // Note: Cascading foreign keys should handle outfit_items dependencies on your DB,
-              // but we cleanly handle tracking safely here
               const { error: cascadeError } = await supabase
                 .from('outfit_items')
                 .delete()
@@ -184,13 +190,12 @@ export default function OutfitDetailScreen() {
     );
   };
 
-  // State Interception View Render Conditionals
   if (isLoading) {
     return (
       <PremiumScreen>
         <View style={styles.centeredStateShell}>
           <ActivityIndicator size="small" color="#1C1917" />
-          <Text style={styles.stateSubtitleTypography}>RetrievingLookbook Matrix...</Text>
+          <Text style={styles.stateSubtitleTypography}>Retrieving Lookbook Matrix...</Text>
         </View>
       </PremiumScreen>
     );
@@ -249,7 +254,7 @@ export default function OutfitDetailScreen() {
               </View>
               <Text style={styles.heroHeaderTitleTypography}>{outfit.name}</Text>
               <Text style={styles.heroHeaderSubscriptTypography}>
-                {outfit.garments.length} curated pieces assembled
+                {uniqueGarments.length} curated pieces assembled
               </Text>
             </View>
           </View>
@@ -260,11 +265,11 @@ export default function OutfitDetailScreen() {
           <View style={styles.inlineHeaderTitleSection}>
             <SectionTitle>Garments Included</SectionTitle>
             <View style={styles.countBadgeNode}>
-              <Text style={styles.countBadgeText}>{outfit.garments.length}</Text>
+              <Text style={styles.countBadgeText}>{uniqueGarments.length}</Text>
             </View>
           </View>
 
-          {outfit.garments.length === 0 ? (
+          {uniqueGarments.length === 0 ? (
             <View style={styles.emptyItemsTrackPlaceholderBox}>
               <Text style={styles.emptyTrackTypography}>No garments linked to this composition canvas yet.</Text>
             </View>
@@ -274,9 +279,9 @@ export default function OutfitDetailScreen() {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.horizontalSwiperViewportSpacing}
             >
-              {outfit.garments.map((garment) => (
+              {uniqueGarments.map((garment, index) => (
                 <PremiumTouchable
-                  key={garment.id}
+                  key={`garment-card-${garment.id}-${index}`} // Composite dynamic unique safe-key structure
                   style={styles.garmentMagazineCardElement}
                   onPress={() => router.push({
                     pathname: '/clothing/[id]',
@@ -319,7 +324,7 @@ export default function OutfitDetailScreen() {
             </View>
             <View style={styles.metadataMetricDataRow}>
               <Text style={styles.metricRowAttributeKeyText}>Total Components</Text>
-              <Text style={styles.metricRowValueLabelText}>{outfit.garments.length} Items</Text>
+              <Text style={styles.metricRowValueLabelText}>{uniqueGarments.length} Items</Text>
             </View>
             <View style={styles.metadataMetricDataRowLineOverride}>
               <Text style={styles.metricRowAttributeKeyText}>Assembled On</Text>
@@ -334,7 +339,7 @@ export default function OutfitDetailScreen() {
           <View style={styles.actionsLinearControlStack}>
             <PremiumTouchable 
               style={styles.actionRowInteractiveButton}
-              onPress={() => console.log('Forwarding execution context to Edit Flow targeting outfit ID:', outfit.id)}
+              onPress={() => router.push({ pathname: '/create', params: { mode: 'edit', outfitId: outfit.id } })}
             >
               <View style={styles.actionRowLeftGroupSymbolLayout}>
                 <Feather name="edit-3" size={15} color="#1C1917" />
@@ -411,9 +416,9 @@ const styles = StyleSheet.create({
   },
   floatingHeaderActionBar: {
     position: 'absolute',
-    top: 16,
-    left: 16,
-    right: 16,
+    left: 20,
+    right: 20,
+    top: 56,
     zIndex: 100,
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -466,7 +471,6 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     paddingHorizontal: 20,
     paddingBottom: 24,
-    // Solid clean fashion gradient fallback mechanism text protection shadow
     backgroundColor: 'rgba(28, 25, 23, 0.02)',
   },
   heroMetaCardLabelRow: {
@@ -556,7 +560,7 @@ const styles = StyleSheet.create({
   },
   garmentImageContainerBoundingBox: {
     width: '100%',
-    height: GARMENT_CARD_WIDTH * 1.25, // Uniform fashion aspect card wrapper
+    height: GARMENT_CARD_WIDTH * 1.25,
     backgroundColor: '#F5F5F4',
   },
   garmentCardTargetImage: {

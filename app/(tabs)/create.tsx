@@ -7,19 +7,17 @@ import {
   TextInput,
   Image,
   Dimensions,
-  FlatList,
   LayoutAnimation,
   Platform,
   UIManager,
-  Alert,
+  ActivityIndicator,
   Animated,
 } from 'react-native';
-import { useFocusEffect, router } from 'expo-router';
+import { useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { PremiumCard } from '../../components/ui/PremiumCard';
 import { PremiumTouchable } from '../../components/ui/PremiumTouchable';
-import { StaggeredListWrapper } from '../../constants/motion/StaggeredListWrapper';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { SectionTitle } from '../../components/ui/SectionTitle';
 import { PremiumLoader } from '../../components/ui/PremiumLoader';
@@ -33,7 +31,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 const { width } = Dimensions.get('window');
-const GRID_ITEM_WIDTH = (width - 44) / 2;
+const CANVAS_ITEM_SIZE = 76;
 
 // Strong Typing Strategy for Database Wardrobe Entities
 interface Garment {
@@ -63,13 +61,28 @@ const CATEGORY_ORDER = [
   'Activewear',
 ];
 
+const OCCASIONS = [
+  'Casual',
+  'Formal',
+  'Business Casual',
+  'Night Out',
+  'Sporty',
+  'Vacation',
+  'Special Event',
+];
+
 export default function CreateOutfitScreen() {
+  const router = useRouter();
+  const { mode, outfitId } = useLocalSearchParams<{ mode: string; outfitId: string }>();
+  const isEditMode = mode === 'edit' && !!outfitId;
+
   const [outfitName, setOutfitName] = useState('');
   const [occasion, setOccasion] = useState<string | null>(null);
   
   const [garments, setGarments] = useState<Garment[]>([]);
   const [selectedItems, setSelectedItems] = useState<Garment[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isOutfitLoading, setIsOutfitLoading] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   
@@ -121,20 +134,20 @@ export default function CreateOutfitScreen() {
     if (successMessage) setSuccessMessage(null);
   }, [outfitName, selectedItems]);
 
+  // Dual-mode integration logic pipeline
   useFocusEffect(
     useCallback(() => {
       let isActive = true;
 
-      const fetchWardrobeGarments = async () => {
+      const fetchInitialDataFlow = async () => {
         try {
           if (isActive) setIsLoading(true);
           setError(null);
-          console.log('[Outfit Creation] Loading garments...');
 
+          // 1. Resolve Secure Context Profile
           const { data: { user }, error: authError } = await supabase.auth.getUser();
-
           if (authError || !user) {
-            console.error('[Outfit Creation Error] User token evaluation failed or session missing:', authError);
+            console.error('[Outfit Form Error] User token evaluation failed:', authError);
             if (isActive) {
               setError('No active credentials verified.');
               setIsLoading(false);
@@ -142,35 +155,82 @@ export default function CreateOutfitScreen() {
             return;
           }
 
-          const { data, error: queryError } = await supabase
+          // 2. Load Worldwide Catalogued Items Block
+          const { data: clothingData, error: queryError } = await supabase
             .from('clothing_items')
             .select('*')
             .eq('user_id', user.id);
 
           if (queryError) throw queryError;
+          if (isActive) setGarments(clothingData || []);
 
-          if (isActive) {
-            setGarments(data || []);
-            if (data) {
-              setSelectedItems((prev) => prev.filter((fav) => data.some((item) => item.id === fav.id)));
+          // 3. Conditional Graph Node Pull: Edit Mode Sequence Pre-load
+          if (isEditMode && isActive) {
+            try {
+              setIsOutfitLoading(true);
+              console.log(`[Outfit Edit Engine] Querying deep relations matching public.outfits.id = ${outfitId}`);
+              
+              const { data: currentOutfit, error: outfitErr } = await supabase
+                .from('outfits')
+                .select(`
+                  id,
+                  name,
+                  occasion,
+                  outfit_items (
+                    clothing_items (
+                      id,
+                      user_id,
+                      name,
+                      brand,
+                      category,
+                      color,
+                      image_url,
+                      is_favorite,
+                      ai_description,
+                      tags
+                    )
+                  )
+                `)
+                .eq('id', outfitId)
+                .single();
+
+              if (outfitErr) throw outfitErr;
+
+              if (currentOutfit) {
+                setOutfitName(currentOutfit.name || '');
+                setOccasion(currentOutfit.occasion);
+                
+                const rawJunctionItems = currentOutfit.outfit_items || [];
+                const deepParsedGarments: Garment[] = rawJunctionItems
+                  .map((junction: any) => junction.clothing_items)
+                  .filter(Boolean);
+
+                setSelectedItems(deepParsedGarments);
+                console.log(`[Outfit Edit Engine] Hydrated details successfully for Lookbook ID: ${outfitId}`);
+              }
+            } catch (editFetchErr: any) {
+              console.error('[Outfit Edit Engine Error] Query processing collapsed:', editFetchErr);
+              setErrorMessage('Failed to pre-populate look profile configurations.');
+            } finally {
+              setIsOutfitLoading(false);
             }
           }
         } catch (err: any) {
-          console.error('[Outfit Creation Error] Failed to load garments:', err);
+          console.error('[Outfit Form Matrix Failure]:', err);
           if (isActive) {
-            setError(err.message || 'An unhandled exception occurred while fetching wardrobe entries.');
+            setError(err.message || 'An unhandled exception blocked layout parsing profiles.');
           }
         } finally {
           if (isActive) setIsLoading(false);
         }
       };
 
-      fetchWardrobeGarments();
+      fetchInitialDataFlow();
 
       return () => {
         isActive = false;
       };
-    }, [])
+    }, [isEditMode, outfitId])
   );
 
   // Grouped and sorted structure initialization preferred layout matrixes
@@ -184,7 +244,6 @@ export default function CreateOutfitScreen() {
 
     const orderedSections: { title: string; data: Garment[] }[] = [];
 
-    // Predefined structure mapping pass logic
     CATEGORY_ORDER.forEach((catName) => {
       if (groups[catName] && groups[catName].length > 0) {
         orderedSections.push({ title: catName, data: groups[catName] });
@@ -192,7 +251,6 @@ export default function CreateOutfitScreen() {
       }
     });
 
-    // Remainder unlisted grouping configurations pass logic
     Object.keys(groups).forEach((catName) => {
       if (groups[catName].length > 0) {
         orderedSections.push({ title: catName, data: groups[catName] });
@@ -201,6 +259,18 @@ export default function CreateOutfitScreen() {
 
     return orderedSections;
   }, [garments]);
+
+  const toggleGarmentSelection = (item: Garment) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setSelectedItems((current) => {
+      const isAlreadySelected = current.some((selected) => selected.id === item.id);
+      if (isAlreadySelected) {
+        return current.filter((selected) => selected.id !== item.id);
+      } else {
+        return [...current, item];
+      }
+    });
+  };
 
   const handleSaveOutfitWorkflow = async () => {
     if (isSaving) return;
@@ -217,7 +287,7 @@ export default function CreateOutfitScreen() {
     // 2) Capsule collection requirement assessment logic
     const hasTop = selectedItems.some((item) => item.category === 'Tops');
     const hasBottom = selectedItems.some((item) => item.category === 'Bottoms');
-    const hasShoes = selectedItems.some((item) => item.item_category === 'Shoes' || item.category === 'Shoes');
+    const hasShoes = selectedItems.some((item) => item.category === 'Shoes');
 
     if (!hasTop || !hasBottom || !hasShoes) {
       setErrorMessage('Your outfit must include at least 1 top, 1 bottom, and 1 pair of shoes.');
@@ -229,557 +299,623 @@ export default function CreateOutfitScreen() {
       setError(null);
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       if (authError || !user) {
-        Alert.alert('Session Error', 'Your credentials expired. Authenticate your session again.');
+        setErrorMessage('Session trace expired. Re-authenticate client endpoints.');
         return;
       }
 
-      const { data: outfitRecord, error: outfitInsertError } = await supabase
-        .from('outfits')
-        .insert({
-          user_id: user.id,
-          name: sanitizedName,
-          occasion: occasion,
-          created_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
+      let activeOutfitId = outfitId;
 
-      if (outfitInsertError || !outfitRecord) throw outfitInsertError;
+      if (isEditMode) {
+        console.log(`[Outfit Commit Mode: EDIT] Patching core public.outfits schema where ID = ${activeOutfitId}`);
+        
+        // Step 1: Patch parent record parameters
+        const { error: outfitUpdateErr } = await supabase
+          .from('outfits')
+          .update({
+            name: sanitizedName,
+            occasion: occasion,
+          })
+          .eq('id', activeOutfitId);
 
-      const relationalItemsPayloads = selectedItems.map((garment) => ({
-        outfit_id: outfitRecord.id,
-        clothing_item_id: garment.id,
-      }));
+        if (outfitUpdateErr) throw outfitUpdateErr;
 
-      const { error: junctionInsertError } = await supabase
-        .from('outfit_items')
-        .insert(relationalItemsPayloads);
+        // Step 2: Clear historical children relational intersections
+        const { error: relationalPurgeErr } = await supabase
+          .from('outfit_items')
+          .delete()
+          .eq('outfit_id', activeOutfitId);
 
-      if (junctionInsertError) {
-        await supabase.from('outfits').delete().eq('id', outfitRecord.id);
-        throw junctionInsertError;
+        if (relationalPurgeErr) throw relationalPurgeErr;
+
+      } else {
+        console.log('[Outfit Commit Mode: CREATE] Generating root public.outfits database transaction sequence');
+        
+        const { data: newOutfit, error: outfitCreateErr } = await supabase
+          .from('outfits')
+          .insert({
+            user_id: user.id,
+            name: sanitizedName,
+            occasion: occasion,
+          })
+          .select('id')
+          .single();
+
+        if (outfitCreateErr) throw outfitCreateErr;
+        activeOutfitId = newOutfit.id;
       }
 
-      // Premium inline success routing transition phase
-      setSuccessMessage(`"${sanitizedName}" added to your lookbook.`);
+      // Step 3: Insert look composition grid entries mapping public relational indices keys
+      if (selectedItems.length > 0 && activeOutfitId) {
+        const payloadJunctionRows = selectedItems.map((item) => ({
+          outfit_id: activeOutfitId,
+          clothing_item_id: item.id,
+        }));
+
+        const { error: junctionInsertErr } = await supabase
+          .from('outfit_items')
+          .insert(payloadJunctionRows);
+
+        if (junctionInsertErr) throw junctionInsertErr;
+      }
+
+      setSuccessMessage(isEditMode ? 'Outfit modifications stored successfully.' : 'Outfit curated into lookbook.');
       
       setTimeout(() => {
-        // Complete visual layout reset clean context initialization prior to execution transition loops
-        resetFormState();
-        
-        if (router.canGoBack()) {
+        if (isEditMode) {
           router.back();
         } else {
+          resetFormState();
           router.replace('/closet');
         }
-      }, 1800);
+      }, 1200);
 
     } catch (err: any) {
-      setError(err.message || 'An unexpected failure scenario caused save tasks to interrupt.');
-      Alert.alert('Persistence Failure', err.message || 'Could not complete save transaction across cloud servers.');
+      console.error('[Form Execution Pipeline Aborted Exception]:', err);
+      setErrorMessage(err.message || 'Critical pipeline exception blocked persistence engines.');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleAddItem = (item: Garment) => {
-    if (!selectedItems.some((selected) => selected.id === item.id)) {
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setSelectedItems([...selectedItems, item]);
-    }
-  };
-
-  const handleRemoveItem = (id: string) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setSelectedItems(selectedItems.filter((item) => item.id !== id));
-  };
-
-  const renderAvailableItem = ({ item, index }: { item: Garment; index: number }) => {
-    const isSelected = selectedItems.some((selected) => selected.id === item.id);
-    const imageSource = item.image_url
-      ? { uri: item.image_url }
-      : { uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&background=F5F5F4&color=1C1917&size=250` };
-
+  if (isLoading || isOutfitLoading) {
     return (
-      <StaggeredListWrapper index={index}>
-        <PremiumCard
-          onPress={isSelected ? () => handleRemoveItem(item.id) : () => handleAddItem(item)}
-          style={[styles.gridCard, isSelected && styles.gridCardSelected]}
-          disabled={isSaving}
-        >
-          <View style={styles.gridImageContainer}>
-            <Image source={imageSource} style={styles.gridCardImage} />
-            {isSelected ? (
-              <View style={styles.gridImageOverlaySelected}>
-                <View style={styles.checkmarkCircle}>
-                  <Ionicons name="checkmark" size={16} color="#1C1917" />
-                </View>
-              </View>
-            ) : (
-              <View style={styles.gridImageOverlay}>
-                <Ionicons name="add" size={24} color="#FFFFFF" />
-              </View>
-            )}
-          </View>
-          <View style={styles.gridCardFooter}>
-            <Text style={styles.gridCardName} numberOfLines={1}>
-              {item.name || 'Unnamed Garment'}
-            </Text>
-            <Text style={styles.gridCardSubscript} numberOfLines={1}>
-              {[item.brand, item.color].filter(Boolean).join(' • ') || item.category || 'Wardrobe Base'}
-            </Text>
-          </View>
-        </PremiumCard>
-      </StaggeredListWrapper>
+      <PremiumScreen>
+        <View style={styles.centeredLoadingFrame}>
+          <PremiumLoader label={isOutfitLoading ? "Syncing look configurations..." : "Assembling curated wardrobe matrixes..."} />
+        </View>
+      </PremiumScreen>
     );
-  };
+  }
+
+  if (error) {
+    return (
+      <PremiumScreen>
+        <View style={styles.centeredLoadingFrame}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={32} color="#EF4444" />
+          <Text style={styles.errorHeaderTypography}>Operational Disruption</Text>
+          <Text style={styles.errorSubTypography}>{error}</Text>
+        </View>
+      </PremiumScreen>
+    );
+  }
 
   return (
     <PremiumScreen>
-      <FlatList
-        data={groupedGarments}
-        keyExtractor={(item) => item.title}
-        contentContainerStyle={styles.scrollPadding}
-        showsVerticalScrollIndicator={false}
-        extraData={selectedItems}
-        renderItem={({ item: section }) => (
-          <View key={section.title}>
-            <View style={styles.categoryHeaderContainer}>
-              <SectionTitle>
-                {section.title}
-              </SectionTitle>
-            </View>
-            <FlatList
-               Goldman
-              data={section.data}
-              renderItem={renderAvailableItem}
-              keyExtractor={(item) => item.id}
-              numColumns={2}
-              columnWrapperStyle={styles.gridRow}
-              scrollEnabled={false}
-              extraData={selectedItems}
-            />
-          </View>
+      <ScrollView contentContainerStyle={styles.scrollCanvasContainer} showsVerticalScrollIndicator={false}>
+        
+        <View style={styles.formHeaderSection}>
+          <SectionHeader 
+            title={isEditMode ? "Edit Outfit" : "Curate Outfit"}
+            style={styles.headerFlexLayoutReset}
+          />
+          <Text style={styles.formSubtitleTypography}>
+            {isEditMode 
+              ? "Refine your look and update its pieces" 
+              : "Weave individual collection items into structured stylistic coordinates"
+            }
+          </Text>
+        </View>
+
+        {/* Dynamic Display Layer: Animated Interactive Context Messages */}
+        {errorMessage && (
+          <Animated.View style={[styles.inlineFeedbackBannerFrameError, { opacity: fadeAnim }]}>
+            <MaterialCommunityIcons name="alert-rhombus-outline" size={16} color="#DC2626" />
+            <Text style={styles.inlineFeedbackBannerTypographyError}>{errorMessage}</Text>
+          </Animated.View>
         )}
-        ListEmptyComponent={
-          !isLoading && !error && garments.length === 0 ? (
-            <View style={styles.stateCenterLoaderFrame}>
-              <MaterialCommunityIcons name="hanger" size={40} color="#78716C" />
-              <Text style={styles.errorHeaderTypography}>No Garments Found</Text>
-              <Text style={styles.errorSubTypography}>
-                Your wardrobe is empty. Add clothing items first to assemble an outfit combination.
-              </Text>
+
+        {successMessage && (
+          <Animated.View style={[styles.inlineFeedbackBannerFrameSuccess, { opacity: successFadeAnim }]}>
+            <Ionicons name="checkmark-circle-outline" size={16} color="#15803D" />
+            <Text style={styles.inlineFeedbackBannerTypographySuccess}>{successMessage}</Text>
+          </Animated.View>
+        )}
+
+        {/* Input Block Core Parameters */}
+        <View style={styles.cardInputBlockWrapper}>
+          <PremiumCard style={styles.interactiveDataCardElement}>
+            <Text style={styles.inputTitleContextLabel}>Designation Identity Name</Text>
+            <TextInput
+              style={styles.premiumFormInputFieldString}
+              placeholder={isEditMode ? "e.g., Summer Yacht Silhouette (Updated)" : "e.g., Minimalist Monochrome Autumn"}
+              placeholderTextColor="#A8A29E"
+              value={outfitName}
+              onChangeText={setOutfitName}
+              maxLength={50}
+            />
+
+            <Text style={styles.inputTitleContextLabelSpacerOverride}>Target Occasion Context Setting</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalChipsViewportSpacing}>
+              {OCCASIONS.map((occ) => {
+                const isSelected = occasion === occ;
+                return (
+                  <PremiumTouchable
+                    key={occ}
+                    style={isSelected ? styles.chipNodeElementActive : styles.chipNodeElementInactive}
+                    onPress={() => setOccasion(isSelected ? null : occ)}
+                  >
+                    <Text style={isSelected ? styles.chipTypographyActive : styles.chipTypographyInactive}>
+                      {occ}
+                    </Text>
+                  </PremiumTouchable>
+                );
+              })}
+            </ScrollView>
+          </PremiumCard>
+        </View>
+
+        {/* Outfit Canvas Assembly Stage View */}
+        <View style={styles.architecturalContentSection}>
+          <View style={styles.inlineHeaderTitleSection}>
+            <SectionTitle>Composition Grid Canvas</SectionTitle>
+            <View style={styles.countBadgeNode}>
+              <Text style={styles.countBadgeText}>{selectedItems.length} Layered</Text>
             </View>
-          ) : null
-        }
-        ListHeaderComponent={
-          <View style={styles.headerBlock}>
-            <View style={styles.topBar}>
-              <SectionHeader
-                title="Create Outfit"
-                subtitle="Mix & match items from your wardrobe"
-                style={styles.headerFlexOverride}
-              />
-              <PremiumTouchable 
-                disabled={isLoading || isSaving || garments.length === 0}
-                style={[styles.saveActionCircle, (isLoading || isSaving || garments.length === 0) && styles.saveActionCircleDisabled]} 
-                onPress={handleSaveOutfitWorkflow}
-              >
-                {isSaving ? (
-                  <View style={styles.saveLoaderContainer}>
-                    <PremiumLoader />
-                  </View>
-                ) : (
-                  <Ionicons name="save-outline" size={20} color="#FAFAF9" />
-                )}
-              </PremiumTouchable>
-            </View>
-
-            <View style={styles.formSection}>
-              <SectionTitle withBottomMargin>Outfit Details</SectionTitle>
-              <TextInput
-                placeholder="Name your creation (e.g., Casual Friday)"
-                placeholderTextColor="#78716C"
-                value={outfitName}
-                onChangeText={setOutfitName}
-                editable={!isLoading && !isSaving}
-                style={[styles.textInputControl, (isLoading || isSaving) && styles.textInputDisabled]}
-              />
-
-              {/* Standard React Native Animated Error Layout Container */}
-              {errorMessage && (
-                <Animated.View style={[styles.errorInlineBanner, { opacity: fadeAnim }]}>
-                  <MaterialCommunityIcons name="alert-circle-outline" size={16} color="#EF4444" />
-                  <Text style={styles.errorBannerText}>{errorMessage}</Text>
-                </Animated.View>
-              )}
-
-              {/* Premium Inline Success Banner Container */}
-              {successMessage && (
-                <Animated.View style={[styles.successInlineBanner, { opacity: successFadeAnim }]}>
-                  <MaterialCommunityIcons name="check-circle-outline" size={16} color="#10B981" />
-                  <Text style={styles.successBannerText}>{successMessage}</Text>
-                </Animated.View>
-              )}
-            </View>
-
-            <View style={styles.canvasSection}>
-              <View style={styles.canvasHeader}>
-                <MaterialCommunityIcons name="sparkles" size={14} color="#1C1917" style={styles.sparkleIcon} />
-                <SectionTitle>Outfit Canvas</SectionTitle>
+          </View>
+          
+          <View style={styles.outfitCanvasPreviewStageFrame}>
+            {selectedItems.length === 0 ? (
+              <View style={styles.emptyCanvasCenterFrameFallback}>
+                <MaterialCommunityIcons name="layers-triple-outline" size={32} color="#A8A29E" />
+                <Text style={styles.emptyCanvasTypographyFallback}>
+                  Select individual wardrobe cards below to construct combination lines.
+                </Text>
               </View>
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.canvasItemsRowSpacedLayout}>
+                {selectedItems.map((item) => (
+                  <PremiumTouchable key={item.id} style={styles.canvasAssetWrapperCircle} onPress={() => toggleGarmentSelection(item)}>
+                    {item.image_url ? (
+                      <Image source={{ uri: item.image_url }} style={styles.canvasTargetAssetImageSquare} />
+                    ) : (
+                      <View style={styles.canvasFallbackAssetCenterFrame}>
+                        <MaterialCommunityIcons name="hanger" size={18} color="#78716C" />
+                      </View>
+                    )}
+                    <View style={styles.removeAssetIndicatorBadgeMini}>
+                      <Ionicons name="close" size={10} color="#FFFFFF" />
+                    </View>
+                  </PremiumTouchable>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        </View>
 
-              {selectedItems.length === 0 ? (
-                <View style={styles.emptyStateContainer}>
-                  <MaterialCommunityIcons name="hanger" size={32} color="#78716C" style={styles.emptyStateIcon} />
-                  <Text style={styles.emptyStateText}>
-                    Select garments from below to assemble your combination
-                  </Text>
-                </View>
-              ) : (
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.canvasHorizontalTrack}
-                >
-                  {selectedItems.map((item) => {
-                    const canvasImgSource = item.image_url ? { uri: item.image_url } : { uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&background=F5F5F4&color=1C1917` };
+        {/* Grid Selector Core Relational Node Rows Grouped by Category */}
+        <View style={styles.architecturalContentSectionSpacerOverride}>
+          <SectionTitle withBottomMargin>Available Wardrobe Pieces</SectionTitle>
+          
+          {groupedGarments.length === 0 ? (
+            <View style={styles.emptyStateContainerBox}>
+              <MaterialCommunityIcons name="hanger" size={36} color="#78716C" />
+              <Text style={styles.emptyStatePrimaryText}>Wardrobe Catalog Empty</Text>
+              <Text style={styles.emptyStateSecondaryText}>Add single clothing entries to generate look configurations.</Text>
+            </View>
+          ) : (
+            groupedGarments.map((section) => (
+              <View key={section.title} style={styles.categorySubdivisionContainerBlock}>
+                <Text style={styles.categorySubdivisionSectionHeaderTitleText}>{section.title}</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryHorizontalSwiperViewportSpacing}>
+                  {section.data.map((item) => {
+                    const isSelected = selectedItems.some((selected) => selected.id === item.id);
                     return (
-                      <View key={item.id} style={styles.previewCanvasCard}>
-                        <Image source={canvasImgSource} style={styles.canvasCardImage} />
-                        <PremiumTouchable
-                          disabled={isSaving}
-                          style={styles.removeBadgeButton}
-                          onPress={() => handleRemoveItem(item.id)}
-                        >
-                          <Ionicons name="close-circle" size={20} color="#1C1917" />
-                        </PremiumTouchable>
-                        <View style={styles.canvasCardLabelContainer}>
-                          <Text style={styles.canvasCardNameText} numberOfLines={1}>
+                      <PremiumTouchable
+                        key={item.id}
+                        style={[styles.garmentSwiperMagazineCard, isSelected && styles.garmentSwiperMagazineCardActive]}
+                        onPress={() => toggleGarmentSelection(item)}
+                      >
+                        <View style={styles.garmentSwiperImageContainerBoundingBox}>
+                          {item.image_url ? (
+                            <Image source={{ uri: item.image_url }} style={styles.garmentSwiperCardTargetImage} />
+                          ) : (
+                            <View style={styles.garmentSwiperFallbackAssetCenterFrame}>
+                              <MaterialCommunityIcons name="hanger" size={20} color="#A8A29E" />
+                            </View>
+                          )}
+                          {isSelected && (
+                            <View style={styles.selectionCheckmarkScrimOverlayMask}>
+                              <Ionicons name="checkmark-circle" size={24} color="#1C1917" />
+                            </View>
+                          )}
+                        </View>
+                        <View style={styles.garmentSwiperMetaFooterBlockText}>
+                          <Text style={styles.garmentSwiperLabelBrandHeader} numberOfLines={1}>
+                            {item.brand || 'UNBRANDED'}
+                          </Text>
+                          <Text style={styles.garmentSwiperLabelNameSubscript} numberOfLines={1}>
                             {item.name}
                           </Text>
                         </View>
-                      </View>
+                      </PremiumTouchable>
                     );
                   })}
                 </ScrollView>
-              )}
-            </View>
-
-            {isLoading && (
-              <View style={styles.stateCenterLoaderFrame}>
-                <PremiumLoader label="Retrieving Vyra vault assets..." />
               </View>
-            )}
+            ))
+          )}
+        </View>
 
-            {error && (
-              <View style={styles.stateCenterLoaderFrame}>
-                <MaterialCommunityIcons name="alert-circle-outline" size={32} color="#EF4444" />
-                <Text style={styles.errorHeaderTypography}>Failed to Synchronize</Text>
-                <Text style={styles.errorSubTypography}>{error}</Text>
-              </View>
+        {/* Submission Control Action Block Node */}
+        <View style={styles.submissionTerminalBlockActionSection}>
+          <PremiumTouchable
+            disabled={isSaving}
+            style={styles.submissionTerminalTriggerButtonPrimary}
+            onPress={handleSaveOutfitWorkflow}
+          >
+            {isSaving ? (
+              <ActivityIndicator size="small" color="#FAFAF9" />
+            ) : (
+              <Text style={styles.submissionTerminalTriggerLabelTextString}>
+                {isEditMode ? "Commit Structural Updates" : "Register Combination Look"}
+              </Text>
             )}
+          </PremiumTouchable>
+        </View>
 
-            {!isLoading && !error && garments.length > 0 && (
-              <View style={styles.dividerHeader}>
-                <SectionTitle>Wardrobe Items</SectionTitle>
-              </View>
-            )}
-          </View>
-        }
-      />
+      </ScrollView>
     </PremiumScreen>
   );
 }
 
-// ... styles object remains unchanged ...
 const styles = StyleSheet.create({
-  scrollPadding: {
-    paddingHorizontal: 16,
-    paddingBottom: 32,
+  scrollCanvasContainer: {
+    paddingBottom: 64,
   },
-  headerBlock: {
-    marginBottom: 8,
-  },
-  topBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingVertical: 16,
-  },
-  headerFlexOverride: {
+  centeredLoadingFrame: {
     flex: 1,
-    paddingVertical: 0,
-  },
-  saveActionCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#1C1917',
-    justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 16,
-    marginTop: 2,
-    shadowColor: '#1C1917',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  saveActionCircleDisabled: {
-    backgroundColor: '#E7E5E4',
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  saveLoaderContainer: {
-    width: 24,
-    height: 24,
     justifyContent: 'center',
-    alignItems: 'center',
-    transform: [{ scale: 0.5 }], // Cleanly downscale the editorial horizontal track pulse
+    paddingHorizontal: 40,
   },
-  formSection: {
-    marginVertical: 12,
-  },
-  textInputControl: {
-    backgroundColor: '#F5F5F4',
-    borderRadius: 16,
-    height: 48,
-    paddingHorizontal: 16,
-    fontSize: 14,
+  errorHeaderTypography: {
+    fontSize: 16,
     color: '#1C1917',
-    borderWidth: 1,
-    borderColor: '#E7E5E4',
+    fontWeight: '600',
+    marginTop: 14,
+    marginBottom: 4,
   },
-  textInputDisabled: {
-    opacity: 0.6,
-    backgroundColor: '#E7E5E4',
+  errorSubTypography: {
+    fontSize: 13,
+    color: '#78716C',
+    textAlign: 'center',
+    lineHeight: 18,
   },
-  errorInlineBanner: {
+  formHeaderSection: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    marginBottom: 16,
+  },
+  headerFlexLayoutReset: {
+    paddingVertical: 0,
+    marginBottom: 6,
+  },
+  formSubtitleTypography: {
+    fontSize: 13,
+    color: '#78716C',
+    lineHeight: 18,
+    fontWeight: '400',
+  },
+  inlineFeedbackBannerFrameError: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FEF2F2',
     borderWidth: 1,
     borderColor: '#FEE2E2',
     borderRadius: 12,
+    paddingVertical: 10,
     paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginTop: 12,
+    marginHorizontal: 16,
+    marginBottom: 16,
     gap: 8,
   },
-  errorBannerText: {
-    fontSize: 13,
-    color: '#EF4444',
+  inlineFeedbackBannerTypographyError: {
+    fontSize: 12,
+    color: '#DC2626',
     fontWeight: '500',
-    letterSpacing: -0.2,
     flex: 1,
   },
-  successInlineBanner: {
+  inlineFeedbackBannerFrameSuccess: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F0FDF4',
     borderWidth: 1,
     borderColor: '#DCFCE7',
     borderRadius: 12,
+    paddingVertical: 10,
     paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginTop: 12,
+    marginHorizontal: 16,
+    marginBottom: 16,
     gap: 8,
   },
-  successBannerText: {
-    fontSize: 13,
-    color: '#10B981',
+  inlineFeedbackBannerTypographySuccess: {
+    fontSize: 12,
+    color: '#15803D',
     fontWeight: '500',
-    letterSpacing: -0.2,
     flex: 1,
   },
-  canvasSection: {
+  cardInputBlockWrapper: {
+    paddingHorizontal: 16,
+    marginBottom: 24,
+  },
+  interactiveDataCardElement: {
+    padding: 16,
     backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
+  },
+  inputTitleContextLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#78716C',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  inputTitleContextLabelSpacerOverride: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#78716C',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 18,
+    marginBottom: 8,
+  },
+  premiumFormInputFieldString: {
+    height: 44,
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    fontSize: 14,
+    color: '#1C1917',
+    backgroundColor: '#FAFAF9',
+  },
+  horizontalChipsViewportSpacing: {
+    gap: 8,
+    paddingVertical: 2,
+  },
+  chipNodeElementInactive: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 20,
+    backgroundColor: '#FAFAF9',
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
+  },
+  chipNodeElementActive: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#1C1917',
+    borderWidth: 1,
+    borderColor: '#1C1917',
+  },
+  chipTypographyInactive: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#78716C',
+  },
+  chipTypographyActive: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#FAFAF9',
+  },
+  architecturalContentSection: {
+    paddingHorizontal: 16,
+    marginBottom: 28,
+  },
+  architecturalContentSectionSpacerOverride: {
+    paddingLeft: 16,
+    marginBottom: 28,
+  },
+  inlineHeaderTitleSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  countBadgeNode: {
+    backgroundColor: '#F5F5F4',
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
+  countBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#78716C',
+  },
+  outfitCanvasPreviewStageFrame: {
+    minHeight: 112,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: '#E7E5E4',
     padding: 16,
-    marginVertical: 12,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.02,
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  canvasHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  sparkleIcon: {
-    marginRight: 6,
-  },
-  emptyStateContainer: {
-    height: 140,
     justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 32,
-  },
-  emptyStateIcon: {
-    marginBottom: 8,
-    opacity: 0.7,
-  },
-  emptyStateText: {
-    fontSize: 13,
-    color: '#78716C',
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  canvasHorizontalTrack: {
-    gap: 12,
-    paddingRight: 16,
-    paddingVertical: 6,
-    alignItems: 'center',
-  },
-  previewCanvasCard: {
-    width: 90,
-    position: 'relative',
-  },
-  canvasCardImage: {
-    width: 90,
-    height: 120,
-    borderRadius: 12,
-    backgroundColor: '#F5F5F4',
-  },
-  removeBadgeButton: {
-    position: 'absolute',
-    top: -6,
-    right: -6,
-    zIndex: 10,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-  },
-  canvasCardLabelContainer: {
-    marginTop: 4,
-    paddingHorizontal: 2,
-  },
-  canvasCardNameText: {
-    fontSize: 11,
-    color: '#78716C',
-    textAlign: 'center',
-  },
-  dividerHeader: {
-    marginTop: 24,
-    marginBottom: 16,
-  },
-  gridRow: {
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  gridCard: {
-    width: GRID_ITEM_WIDTH,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#F5F5F4',
-    padding: 0,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
+    shadowOpacity: 0.01,
     shadowRadius: 2,
     elevation: 1,
   },
-  gridCardSelected: {
-    borderColor: '#1C1917',
-    backgroundColor: '#FAFAF9',
+  emptyCanvasCenterFrameFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
   },
-  gridImageContainer: {
-    width: '100%',
-    height: GRID_ITEM_WIDTH * 1.33,
+  emptyCanvasTypographyFallback: {
+    fontSize: 12,
+    color: '#A8A29E',
+    textAlign: 'center',
+    lineHeight: 16,
+    marginTop: 6,
+  },
+  canvasItemsRowSpacedLayout: {
+    gap: 14,
+    alignItems: 'center',
+  },
+  canvasAssetWrapperCircle: {
+    width: CANVAS_ITEM_SIZE,
+    height: CANVAS_ITEM_SIZE,
+    borderRadius: CANVAS_ITEM_SIZE / 2,
     backgroundColor: '#F5F5F4',
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
     position: 'relative',
+    overflow: 'visible',
   },
-  gridCardImage: {
+  canvasTargetAssetImageSquare: {
     width: '100%',
     height: '100%',
+    borderRadius: CANVAS_ITEM_SIZE / 2,
     resizeMode: 'cover',
   },
-  gridImageOverlay: {
+  canvasFallbackAssetCenterFrame: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  removeAssetIndicatorBadgeMini: {
     position: 'absolute',
-    left: 0,
-    top: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.02)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  gridImageOverlaySelected: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(28, 25, 23, 0.25)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  checkmarkCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#FAFAF9',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  gridCardFooter: {
-    padding: 10,
-    alignItems: 'center',
-  },
-  gridCardName: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#1C1917',
-    textAlign: 'center',
-    marginBottom: 2,
-  },
-  gridCardSubscript: {
-    fontSize: 11,
-    color: '#78716C',
-    fontWeight: '400',
-    textAlign: 'center',
-  },
-  stateCenterLoaderFrame: {
-    paddingVertical: 36,
+    right: -2,
+    top: -2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#1C1917',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 32,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
   },
-  errorHeaderTypography: {
-    fontSize: 15,
-    color: '#1C1917',
+  emptyStateContainerBox: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
+    padding: 32,
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  emptyStatePrimaryText: {
+    fontSize: 14,
     fontWeight: '600',
-    marginTop: 12,
+    color: '#1C1917',
+    marginTop: 10,
     marginBottom: 4,
   },
-  errorSubTypography: {
+  emptyStateSecondaryText: {
     fontSize: 12,
     color: '#78716C',
     textAlign: 'center',
     lineHeight: 16,
   },
-  categoryHeaderContainer: {
-    paddingVertical: 8,
-    marginTop: 8,
-    marginBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F5F5F4',
+  categorySubdivisionContainerBlock: {
+    marginBottom: 20,
   },
-  categoryHeaderText: {
+  categorySubdivisionSectionHeaderTitleText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#44403C',
+    marginBottom: 10,
+  },
+  categoryHorizontalSwiperViewportSpacing: {
+    gap: 12,
+    paddingRight: 16,
+  },
+  garmentSwiperMagazineCard: {
+    width: width * 0.3,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
+  },
+  garmentSwiperMagazineCardActive: {
+    borderColor: '#1C1917',
+    borderWidth: 1.5,
+  },
+  garmentSwiperImageContainerBoundingBox: {
+    width: '100%',
+    height: width * 0.3 * 1.2,
+    backgroundColor: '#F5F5F4',
+    position: 'relative',
+  },
+  garmentSwiperCardTargetImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  garmentSwiperFallbackAssetCenterFrame: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectionCheckmarkScrimOverlayMask: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  garmentSwiperMetaFooterBlockText: {
+    padding: 8,
+  },
+  garmentSwiperLabelBrandHeader: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#1C1917',
+    letterSpacing: 0.3,
+    marginBottom: 1,
+  },
+  garmentSwiperLabelNameSubscript: {
+    fontSize: 11,
+    color: '#44403C',
+    fontWeight: '400',
+  },
+  submissionTerminalBlockActionSection: {
+    paddingHorizontal: 16,
+    marginTop: 8,
+  },
+  submissionTerminalTriggerButtonPrimary: {
+    height: 48,
+    backgroundColor: '#1C1917',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  submissionTerminalTriggerLabelTextString: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1C1917',
-    textTransform: 'capitalize',
+    color: '#FAFAF9',
   },
 });
