@@ -214,6 +214,9 @@ export default function CreateOutfitScreen() {
             } finally {
               setIsOutfitLoading(false);
             }
+          } else if (!isEditMode && isActive) {
+            // Clean slate configuration check if swapping context directly from edit to setup
+            resetFormState();
           }
         } catch (err: any) {
           console.error('[Outfit Form Matrix Failure]:', err);
@@ -230,7 +233,7 @@ export default function CreateOutfitScreen() {
       return () => {
         isActive = false;
       };
-    }, [isEditMode, outfitId])
+    }, [isEditMode, outfitId, resetFormState])
   );
 
   // Grouped and sorted structure initialization preferred layout matrixes
@@ -323,7 +326,8 @@ export default function CreateOutfitScreen() {
         const { error: relationalPurgeErr } = await supabase
           .from('outfit_items')
           .delete()
-          .eq('outfit_id', activeOutfitId);
+          .eq('outfit_id', activeOutfitId)
+          .select(); // Added .select() to ensure execution block commits
 
         if (relationalPurgeErr) throw relationalPurgeErr;
 
@@ -358,7 +362,7 @@ export default function CreateOutfitScreen() {
         if (junctionInsertErr) throw junctionInsertErr;
       }
 
-      setSuccessMessage(isEditMode ? 'Outfit modifications stored successfully.' : 'Outfit curated into lookbook.');
+      setSuccessMessage(isEditMode ? 'Outfit updated successfully.' : 'Outfit created successfully.');
       
       setTimeout(() => {
         if (isEditMode) {
@@ -483,8 +487,12 @@ export default function CreateOutfitScreen() {
               </View>
             ) : (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.canvasItemsRowSpacedLayout}>
-                {selectedItems.map((item) => (
-                  <PremiumTouchable key={item.id} style={styles.canvasAssetWrapperCircle} onPress={() => toggleGarmentSelection(item)}>
+                {selectedItems.map((item, index) => (
+                  <PremiumTouchable 
+                    key={`${item.id}-${index}`} 
+                    style={styles.canvasAssetWrapperCircle} 
+                    onPress={() => toggleGarmentSelection(item)}
+                  >
                     {item.image_url ? (
                       <Image source={{ uri: item.image_url }} style={styles.canvasTargetAssetImageSquare} />
                     ) : (
@@ -567,7 +575,7 @@ export default function CreateOutfitScreen() {
               <ActivityIndicator size="small" color="#FAFAF9" />
             ) : (
               <Text style={styles.submissionTerminalTriggerLabelTextString}>
-                {isEditMode ? "Commit Structural Updates" : "Register Combination Look"}
+                {isEditMode ? "Save Changes" : "Create Outfit"}
               </Text>
             )}
           </PremiumTouchable>

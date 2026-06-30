@@ -163,19 +163,28 @@ export default function OutfitDetailScreen() {
               setIsDeleting(true);
               console.log(`[Outfit Delete Workflow] Purging records attached to ID: ${outfit.id}`);
               
+              // Cascade Execution Step A: Erase junction entries linked to the Lookbook identity 
               const { error: cascadeError } = await supabase
                 .from('outfit_items')
                 .delete()
-                .eq('outfit_id', outfit.id);
+                .eq('outfit_id', outfit.id)
+                .select(); // Added .select() to ensure execution block commits
 
-              if (cascadeError) throw cascadeError;
+              if (cascadeError) {
+                console.error('[Outfit Delete Failure] Error generated running Cascade Row Purge:', cascadeError);
+                throw cascadeError;
+              }
 
+              // Cascade Execution Step B: Clear parent identity footprint completely 
               const { error: deleteError } = await supabase
                 .from('outfits')
                 .delete()
                 .eq('id', outfit.id);
 
-              if (deleteError) throw deleteError;
+              if (deleteError) {
+                console.error('[Outfit Delete Failure] Error generated wiping Parent Table Node:', deleteError);
+                throw deleteError;
+              }
 
               console.log('[Outfit Delete Workflow] Successfully wiped record elements across nodes.');
               router.replace('/closet');
