@@ -25,6 +25,22 @@ export default function CreateEventScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
+  const placesRef = useRef<any>(null);
+
+  // Form Validation State
+  const isFormValid =
+    name.trim().length > 0 &&
+    date.trim().length > 0 &&
+    selectedCategory.length > 0 &&
+    location.trim().length > 0 &&
+    description.trim().length > 0;
+
+  useEffect(() => {
+    if (placesRef.current && location === '') {
+      placesRef.current.setAddressText('');
+    }
+  }, [location]);
+
   // 1. Validation Animation Opacity Tracker & Edit Listener
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -62,7 +78,6 @@ export default function CreateEventScreen() {
   };
 
   const handleSaveEvent = async () => {
-    // Premium friendly field validations
     if (!name.trim()) {
       setValidationError('Please enter an event name.');
       return;
@@ -73,6 +88,14 @@ export default function CreateEventScreen() {
     }
     if (!selectedCategory) {
       setValidationError('Please choose a category.');
+      return;
+    }
+    if (!location.trim()) {
+      setValidationError('Please select a location.');
+      return;
+    }
+    if (!description.trim()) {
+      setValidationError('Please enter a description.');
       return;
     }
     
@@ -87,8 +110,8 @@ export default function CreateEventScreen() {
         user_id: user.id,
         name: name.trim(),
         event_date: date,
-        location: location.trim() || null,
-        description: description.trim() || null,
+        location: location.trim(),
+        description: description.trim(),
         category: selectedCategory,
       });
 
@@ -107,10 +130,10 @@ export default function CreateEventScreen() {
         contentContainerStyle={styles.scrollContainer} 
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        nestedScrollEnabled={true}
       >
         <SectionHeader title="Create Event" subtitle="Schedule an upcoming social fixture" />
         
-        {/* Animated Premium Banner */}
         {validationError && (
           <Animated.View style={[styles.errorInlineBanner, { opacity: fadeAnim }]}>
             <MaterialCommunityIcons name="alert-circle-outline" size={16} color="#EF4444" />
@@ -123,7 +146,6 @@ export default function CreateEventScreen() {
           <TextInput style={styles.inputField} placeholder="e.g. Gallery Exhibition Opening" placeholderTextColor="#A8A29E" value={name} onChangeText={setName} />
         </View>
 
-        {/* Premium Native Birthday / Date Selector Trigger */}
         <View style={styles.formGroup}>
           <Text style={styles.fieldLabel}>DATE *</Text>
           <TouchableOpacity activeOpacity={0.9} onPress={() => !isSaving && setShowDatePicker(true)}>
@@ -163,25 +185,29 @@ export default function CreateEventScreen() {
           </View>
         </View>
 
-        {/* Location dropdown utilizing Google Places Autocomplete */}
-        <View style={[styles.formGroup, { zIndex: 1000 }]}>
-          <Text style={styles.fieldLabel}>LOCATION</Text>
+        {/* Location Dropdown - Configured to run inside a ScrollView container */}
+        <View style={[styles.formGroup, { zIndex: 1000, position: 'relative' }]}>
+          <Text style={styles.fieldLabel}>LOCATION *</Text>
           <GooglePlacesAutocomplete
+            ref={placesRef}
             placeholder="e.g. Somerset House, London"
             minLength={2}
             fetchDetails={false}
+            debounce={400}
+            disableScroll={true} // Bypasses internal sub-scrolling properties entirely
             onPress={(data) => {
               setLocation(data.description);
             }}
             textInputProps={{
-              value: location,
-              onChangeText: (text) => setLocation(text),
               placeholderTextColor: '#A8A29E',
               style: styles.inputField,
+              onChangeText: (text) => setLocation(text),
+              defaultValue: location
             }}
             query={{
               key: GOOGLE_PLACES_API_KEY,
               language: 'en',
+              type: 'geocode',
             }}
             styles={{
               container: { flex: 0 },
@@ -195,11 +221,15 @@ export default function CreateEventScreen() {
         </View>
 
         <View style={styles.formGroup}>
-          <Text style={styles.fieldLabel}>DESCRIPTION</Text>
+          <Text style={styles.fieldLabel}>DESCRIPTION *</Text>
           <TextInput style={[styles.inputField, styles.textAreaField]} placeholder="Add context notes..." placeholderTextColor="#A8A29E" value={description} onChangeText={setDescription} multiline numberOfLines={3} />
         </View>
 
-        <PremiumTouchable style={styles.actionSaveButton} onPress={handleSaveEvent} disabled={isSaving}>
+        <PremiumTouchable 
+          style={[styles.actionSaveButton, (!isFormValid || isSaving) && { opacity: 0.5 }]} 
+          onPress={handleSaveEvent} 
+          disabled={!isFormValid || isSaving}
+        >
           {isSaving ? <ActivityIndicator size="small" color="#FAFAF9" /> : <Text style={styles.saveBtnText}>Save Event</Text>}
         </PremiumTouchable>
       </ScrollView>
@@ -229,8 +259,8 @@ const styles = StyleSheet.create({
   iosPickerHeaderRow: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: '#E7E5E4' },
   iosPickerDoneText: { color: '#1C1917', fontWeight: '600', fontSize: 14 },
 
-  // Google Places Sub-list Overrides
-  googleAutocompleteListView: { backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#E7E5E4', marginTop: 6, elevation: 4, shadowColor: '#000000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12 },
+  // Google Places Sub-list Overrides with explicit layout locking
+  googleAutocompleteListView: { backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#E7E5E4', marginTop: 6, elevation: 4, shadowColor: '#000000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12, position: 'absolute', top: 45, left: 0, right: 0, zIndex: 5000 },
   googleAutocompleteRow: { padding: 14, backgroundColor: '#FFFFFF' },
   googleAutocompleteDescription: { color: '#44403C', fontSize: 13 },
   googleAutocompleteSeparator: { height: 0.5, backgroundColor: '#E7E5E4' }

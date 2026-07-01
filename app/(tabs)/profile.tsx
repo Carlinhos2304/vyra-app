@@ -239,6 +239,8 @@ export default function ProfileScreen() {
   const handleItemNavigationTriggers = (item: any) => {
     if (item.type === 'action' && item.label === 'Log Out') {
       handleSystemSignOutRequest();
+    } else if (item.id === 'edit_prof') {
+      router.push('/profile/edit-profile');
     } else {
       console.log(`Navigation link processing redirected for action item: ${item.label}`);
     }

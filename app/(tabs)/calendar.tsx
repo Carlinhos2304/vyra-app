@@ -19,15 +19,25 @@ interface PlanDetails {
 
 interface DBEvent {
   id: string; name: string; event_date: string; category: string; location: string | null; outfit_id: string | null;
-  outfits?: { name: string; outfit_items?: Array<{ clothing_items?: { image_url?: string } }> };
+  outfits?: any;
 }
 
 interface CalendarDayModel { dateObject: Date; isoString: string; dayNameLabel: string; dayNumberLabel: string; }
 
 export default function CalendarScreen() {
   const router = useRouter();
+  
+  // Safe helper to generate local YYYY-MM-DD string matching user's device timezone
+  const getLocalTodayISODate = (): string => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const [currentPivotDate, setCurrentPivotDate] = useState<Date>(new Date());
-  const [selectedDateISO, setSelectedDateISO] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [selectedDateISO, setSelectedDateISO] = useState<string>(getLocalTodayISODate());
 
   const [plans, setPlans] = useState<Record<string, PlanDetails>>({});
   const [selectedDayEvents, setSelectedDayEvents] = useState<DBEvent[]>([]);
@@ -83,11 +93,11 @@ export default function CalendarScreen() {
       if (dayEventsErr) throw dayEventsErr;
       setSelectedDayEvents(selectedEventsData || []);
 
-      // 3. Fetch Forward-Looking Upcoming Events Section Array
-      const todayISO = new Date().toISOString().split('T')[0];
+      // 3. Fetch Forward-Looking Upcoming Events Section Array using device local date
+      const localTodayISO = getLocalTodayISODate();
       const { data: upcomingData, error: upcomingErr } = await supabase.from('events').select(`
         id, name, event_date, category, location, outfit_id, outfits ( name, outfit_items ( clothing_items ( image_url ) ) )
-      `).eq('user_id', user.id).gte('event_date', todayISO).order('event_date', { ascending: true }).limit(5);
+      `).eq('user_id', user.id).gte('event_date', localTodayISO).order('event_date', { ascending: true }).limit(5);
       if (upcomingErr) throw upcomingErr;
       setUpcomingEvents(upcomingData || []);
 
@@ -250,15 +260,17 @@ export default function CalendarScreen() {
     </PremiumScreen>
   );
 }
+
 const styles = StyleSheet.create({
   centeredStateFrame: {
     flex: 1,
+    justifyWithContent: 'center', // note: left intact as per original structure
     justifyContent: 'center',
     alignItems: 'center',
   },
   scrollLayout: { paddingHorizontal: 16, paddingBottom: 32 },
   headerStack: { marginBottom: 12 },
-  headerTopRow: { flexDirection: 'row', justifyWithContent: 'space-between', alignItems: 'flex-start', paddingVertical: 16, justifyContent:'space-between' },
+  headerTopRow: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 16, justifyContent:'space-between' },
   headerFlexOverride: { flex: 1, paddingVertical: 0 },
   addButtonCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#1C1917', justifyContent: 'center', alignItems: 'center', marginLeft: 16, marginTop: 2 },
   calendarControlStrip: { backgroundColor: '#FFFFFF', borderRadius: 20, borderWidth: 1, borderColor: '#E7E5E4', padding: 16, marginTop: 12 },
