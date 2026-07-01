@@ -9,7 +9,8 @@ import {
   ActionSheetIOS, 
   Platform, 
   Modal, 
-  TouchableWithoutFeedback 
+  TouchableWithoutFeedback,
+  ActivityIndicator
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,7 +20,6 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { PremiumInput } from '../../components/ui/PremiumInput';
-import { PremiumButton } from '../../components/ui/PremiumButton';
 import { PremiumLoader } from '../../components/ui/PremiumLoader';
 import { SectionTitle } from '../../components/ui/SectionTitle';
 
@@ -283,16 +283,23 @@ export default function EditProfileScreen() {
           </TouchableWithoutFeedback>
         </Modal>
 
-        {/* Fixed Save Button Infrastructure */}
+        {/* Fixed Save Button Infrastructure with Custom Design Token Requirements */}
         <View style={styles.saveButtonContainer}>
-          <View style={styles.buttonWidthWrapper}>
-            <PremiumButton
-              title="Save Changes"
-              onPress={handleSaveProfile}
-              loading={isSaving}
-              disabled={isSaving}
-            />
-          </View>
+          <TouchableOpacity
+            onPress={handleSaveProfile}
+            activeOpacity={0.85}
+            disabled={isSaving}
+            style={[
+              styles.customPremiumButton,
+              isSaving && styles.customPremiumButtonDisabled
+            ]}
+          >
+            {isSaving ? (
+              <ActivityIndicator size="small" color="#FAFAF9" />
+            ) : (
+              <Text style={styles.customPremiumButtonText}>Save Changes</Text>
+            )}
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     </PremiumScreen>
@@ -380,8 +387,22 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderColor: '#F5F5F4',
   },
-  buttonWidthWrapper: {
+  customPremiumButton: {
     width: '100%',
+    height: 56,
+    backgroundColor: '#1C1917',
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  customPremiumButtonDisabled: {
+    opacity: 0.5,
+  },
+  customPremiumButtonText: {
+    color: '#FAFAF9',
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: -0.2, // Subtle tracking reduction to pair seamlessly with Vyra headers
   },
   modalOverlayContainer: {
     flex: 1,
