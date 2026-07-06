@@ -243,6 +243,9 @@ export default function ProfileScreen() {
       router.push('/profile/edit-profile');
     } else if (item.id === 'favs') {
       router.push('/profile/favorites');
+    } else if (item.id === 'history') {
+      // Routed link implementation matching file destination coordinates
+      router.push('/profile/history');
     } else {
       console.log(`Navigation link processing redirected for action item: ${item.label}`);
     }
