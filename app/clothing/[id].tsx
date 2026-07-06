@@ -41,7 +41,7 @@ export default function ClothingDetailScreen() {
     id: params.id,
     name: params.name || 'Unnamed Garment',
     brand: params.brand || 'Unknown Brand',
-    category: params.category || 'Uncategorized',
+    category: params.category || 'Uncategorized', 
     image: params.image || '',
     color: params.color || 'N/A',
     is_favorite: false,
