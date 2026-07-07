@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -9,6 +9,7 @@ import {
   Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
@@ -88,10 +89,6 @@ export default function HomeScreen() {
     month: 'long',
     day: 'numeric'
   });
-
-  useEffect(() => {
-    fetchPremiumDashboardData();
-  }, []);
 
   const fetchPremiumDashboardData = async () => {
     try {
@@ -199,6 +196,13 @@ export default function HomeScreen() {
       setIsLoading(false);
     }
   };
+
+  // Replaces standard component scope initialization hook with focus triggers
+  useFocusEffect(
+    useCallback(() => {
+      fetchPremiumDashboardData();
+    }, [])
+  );
 
   if (isLoading) {
     return (

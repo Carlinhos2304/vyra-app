@@ -1,6 +1,14 @@
-import { Redirect } from 'expo-router';
+import { useEffect } from "react";
+import { useOnboardingGuard } from "../hooks/useOnboardingGuard";
+import { PremiumLoader } from "../components/ui/PremiumLoader";
 
 export default function Index() {
-  return <Redirect href="/splash" />;
-  // retunn <Redirect href="../components/branding" />;
+
+    const { evaluateSessionRouteState } = useOnboardingGuard();
+
+    useEffect(() => {
+        evaluateSessionRouteState();
+    }, []);
+
+    return <PremiumLoader label="Loading..." />;
 }
