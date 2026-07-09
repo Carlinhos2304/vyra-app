@@ -104,7 +104,7 @@ export default function LoginScreen() {
 
       if (data?.user) {
         console.log('[Auth Login] Sign-In successful. Routing user session onto primary dashboard layout.');
-        router.replace('/(tabs)/home');
+        router.replace('/');
       }
     } catch (error: any) {
       console.error('[Auth Login] Supabase authentication server error response:', error);

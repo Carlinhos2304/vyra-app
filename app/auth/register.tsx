@@ -138,7 +138,24 @@ export default function RegisterScreen() {
       }
 
       console.log(`[Registration Execution] Auth Account provisioned successfully. ID assigned: ${authenticatedUserInstance.id}`);
-      router.replace('/(tabs)/home');
+
+      // Ensure profile exists
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert({
+          id: authenticatedUserInstance.id,
+          username: username.trim(),
+          birth_date: birthDate.trim(),
+          gender: gender || null,
+          onboarding_completed: false,
+          created_at: new Date().toISOString(),
+        });
+
+      if (profileError) {
+        console.error('[Registration Execution] Error creating profile:', profileError);
+        throw profileError;
+      }
+      router.replace('/');
 
     } catch (error: any) {
       console.error('[Registration Execution] Critical authorization transaction crash state:', error);
