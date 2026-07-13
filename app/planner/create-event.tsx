@@ -7,6 +7,7 @@ import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplet
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { PremiumTouchable } from '../../components/ui/PremiumTouchable';
 import { SectionHeader } from '../../components/ui/SectionHeader';
+import * as NotificationsService from '../../services/notificationService';
 import { supabase } from '../../lib/supabase';
 
 const CATEGORIES = ['Work', 'Formal', 'Casual', 'Party', 'Travel', 'Sport', 'Other'];
@@ -106,16 +107,30 @@ export default function CreateEventScreen() {
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       if (authError || !user) throw new Error('Session signature invalid.');
 
-      const { error: insertError } = await supabase.from('events').insert({
-        user_id: user.id,
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('notifications_enabled')
+        .eq('id', user.id)
+        .single();
+
+      const { data: event, error: insertError } = await supabase
+        .from('events')
+        .insert({
+          user_id: user.id,
         name: name.trim(),
         event_date: date,
         location: location.trim(),
         description: description.trim(),
         category: selectedCategory,
-      });
-
+        })
+        .select()
+        .single();
       if (insertError) throw insertError;
+
+      if (profile?.notifications_enabled && event) {
+        await NotificationsService.schedulePlannedOutfitReminder(event.id, new Date(event.event_date));
+      }
+
       router.back();
     } catch (err: any) {
       setValidationError(err.message || 'An error obstructed event persistence layout.');

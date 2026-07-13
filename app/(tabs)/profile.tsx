@@ -17,6 +17,7 @@ import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { SectionTitle } from '../../components/ui/SectionTitle';
 import { PremiumLoader } from '../../components/ui/PremiumLoader';
+import { useNotifications } from '../../hooks/useNotifications';
 
 // Supabase client instance integration
 import { supabase } from '../../lib/supabase';
@@ -45,8 +46,7 @@ const MENU_SECTIONS = [
   {
     title: 'Preferences',
     items: [
-      { id: 'dark_mode', label: 'Dark Mode', icon: 'theme-light-dark', type: 'toggle' },
-      { id: 'notifications', label: 'Push Notifications', icon: 'bell-outline', type: 'chevron' },
+      { id: 'notifications', label: 'Push Notifications', icon: 'bell-outline', type: 'toggle' },
     ],
   },
   {
@@ -60,6 +60,8 @@ const MENU_SECTIONS = [
 
 export default function ProfileScreen() {
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const { syncNotifications } = useNotifications();
   
   // State variables for managing loading, error, and profile parameters
   const [profile, setProfile] = useState<UserProfileState | null>(null);
@@ -103,6 +105,8 @@ export default function ProfileScreen() {
         console.error('[Profile Sync Database Failure] Query returned a bad schema response:', dbError);
         throw dbError;
       }
+
+      setNotificationsEnabled(dbProfile?.notifications_enabled || false);
 
       console.log('[Profile Sync Complete] Payload matched. Username:', dbProfile?.username);
       
@@ -152,8 +156,13 @@ export default function ProfileScreen() {
       setWeeklyCount(recentGarments || 0);
 
       // D. Outfits Aggregator Integration Hook
-      console.log('[Stats Notice] Outfits schema unavailable. Setting layout default fallback representation to: 0');
-      setOutfitsCount(0);
+      const { count: totalOutfits, error: outfitsErr } = await supabase
+        .from('outfits')
+        .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id);
+
+      if (outfitsErr) console.error('[Stats Failure] Outfits count trace failed:', outfitsErr);
+      setOutfitsCount(totalOutfits || 0);
 
       // E. Dynamic Style Profile Preference Chip Engine Generation
       if (stableGarmentsCount > 0) {
@@ -190,7 +199,7 @@ export default function ProfileScreen() {
         setStylePreferences([]);
       }
 
-      console.log(`[Statistics Diagnostics] Complete metrics loaded: Garments: ${stableGarmentsCount}, Favorites: ${totalFavorites || 0}, Weekly: ${recentGarments || 0}, Outfits: 0`);
+      console.log(`[Statistics Diagnostics] Complete metrics loaded: Garments: ${stableGarmentsCount}, Favorites: ${totalFavorites || 0}, Weekly: ${recentGarments || 0}, Outfits: ${totalOutfits || 0}`);
 
     } catch (err: any) {
       console.error('[Profile Processing Breakdown Exception]:', err);
@@ -236,6 +245,28 @@ export default function ProfileScreen() {
     );
   };
 
+  const handleToggleNotifications = async (value: boolean) => {
+    setNotificationsEnabled(value);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from('profiles')
+        .update({ notifications_enabled: value })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      await syncNotifications(value);
+    } catch (err) {
+      console.error('Error toggling notifications:', err);
+      Alert.alert('Error', 'Could not update notification settings.');
+      setNotificationsEnabled(!value); // Rollback
+    }
+  };
+
   const handleItemNavigationTriggers = (item: any) => {
     if (item.type === 'action' && item.label === 'Log Out') {
       handleSystemSignOutRequest();
@@ -269,7 +300,7 @@ export default function ProfileScreen() {
     if (section.title === 'My Activity') {
       return {
         ...section,
-        items: section.items.map(item => 
+        items: section.items.map(item =>
           item.label === 'Favorites' ? { ...item, badge: String(favoritesCount) } : item
         )
       };
@@ -378,8 +409,8 @@ export default function ProfileScreen() {
 
                           {item.type === 'toggle' && (
                             <Switch
-                              value={isDarkMode}
-                              onValueChange={setIsDarkMode}
+                              value={item.id === 'notifications' ? notificationsEnabled : isDarkMode}
+                              onValueChange={item.id === 'notifications' ? handleToggleNotifications : setIsDarkMode}
                               trackColor={{ false: '#D6D3D1', true: '#1C1917' }}
                               thumbColor="#FFFFFF"
                               ios_backgroundColor="#D6D3D1"
