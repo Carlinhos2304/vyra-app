@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   Alert,
   Share,
+  Animated,
+  Pressable,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
@@ -20,8 +22,8 @@ import { SectionTitle } from '../../components/ui/SectionTitle';
 import { supabase } from '../../lib/supabase';
 
 const { width } = Dimensions.get('window');
-const HERO_IMAGE_HEIGHT = width * 1.25; // 4:5 Portrait golden fashion ratio
-const GARMENT_CARD_WIDTH = width * 0.42;
+const HERO_IMAGE_HEIGHT = width * 1.35; // Elongated 3:4 portrait crop for editorial weight
+const GARMENT_CARD_WIDTH = width * 0.44;
 
 interface Garment {
   id: string;
@@ -48,6 +50,50 @@ export default function OutfitDetailScreen() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  // --- Premium Micro-interactions / Animation Drivers ---
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const scaleAnim = useRef(new Animated.Value(0.97)).current;
+
+  // Press feedback scales for primary interaction groups
+  const editScale = useRef(new Animated.Value(1)).current;
+  const shareScale = useRef(new Animated.Value(1)).current;
+  const deleteScale = useRef(new Animated.Value(1)).current;
+
+  const runEntranceAnimation = () => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 700,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 750,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
+  const handlePressIn = (animatedValue: Animated.Value) => {
+    Animated.spring(animatedValue, {
+      toValue: 0.96,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handlePressOut = (animatedValue: Animated.Value) => {
+    Animated.spring(animatedValue, {
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
+  };
 
   // Secure Relational Core Single Query Fetch Engine
   const fetchOutfitExtendedDetails = async () => {
@@ -108,6 +154,7 @@ export default function OutfitDetailScreen() {
       };
 
       setOutfit(formattedDetail);
+      runEntranceAnimation();
     } catch (err: any) {
       console.error('[Outfit Detail Error Exception]:', err);
       setError(err.message || 'An unhandled exception blocked outfit sync parsing profiles.');
@@ -204,7 +251,7 @@ export default function OutfitDetailScreen() {
       <PremiumScreen>
         <View style={styles.centeredStateShell}>
           <ActivityIndicator size="small" color="#1C1917" />
-          <Text style={styles.stateSubtitleTypography}>Retrieving Lookbook Matrix...</Text>
+          <Text style={styles.stateSubtitleTypography}>Retrieving Lookbook...</Text>
         </View>
       </PremiumScreen>
     );
@@ -214,10 +261,10 @@ export default function OutfitDetailScreen() {
     return (
       <PremiumScreen>
         <View style={styles.centeredStateShell}>
-          <MaterialCommunityIcons name="comment-question-outline" size={32} color="#EF4444" />
+          <MaterialCommunityIcons name="comment-question-outline" size={28} color="#D62F2F" />
           <Text style={styles.stateHeaderTitleTypography}>Lookbook Entry Unresolved</Text>
           <Text style={styles.stateSubtitleTypography}>
-            {error || 'The requested look combination metadata record profile is missing from your secure database.'}
+            {error || 'The requested look combination metadata record profile is missing.'}
           </Text>
           <PremiumTouchable style={styles.fallbackNavigationAction} onPress={() => router.back()}>
             <Text style={styles.fallbackActionText}>Return to Wardrobe</Text>
@@ -228,160 +275,215 @@ export default function OutfitDetailScreen() {
   }
 
   const creationTimestampDate = outfit.created_at
-    ? new Date(outfit.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
-    : 'Undated creation profile';
+    ? new Date(outfit.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+    : 'Undated';
 
   return (
     <PremiumScreen>
+      {/* Floating Glass Header Buttons */}
       <View style={styles.floatingHeaderActionBar}>
-        <PremiumTouchable style={styles.roundBarIconButton} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={18} color="#1C1917" />
-        </PremiumTouchable>
-        <PremiumTouchable style={styles.roundBarIconButton} onPress={handleShareLookbookOutfit}>
+        <Pressable 
+          onPress={() => router.back()}
+          style={({ pressed }) => [styles.roundBarIconButton, pressed && styles.opaqueScalePress]}
+        >
+          <Ionicons name="chevron-back" size={20} color="#1C1917" />
+        </Pressable>
+        <Pressable 
+          onPress={handleShareLookbookOutfit}
+          style={({ pressed }) => [styles.roundBarIconButton, pressed && styles.opaqueScalePress]}
+        >
           <Feather name="share-2" size={16} color="#1C1917" />
-        </PremiumTouchable>
+        </Pressable>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollCanvasTrack} showsVerticalScrollIndicator={false}>
         
-        {/* Requirement 1 & 3: High-Fashion Minimalist Hero Viewport Layer */}
-        <View style={styles.heroMagazineStage}>
+        {/* Magazine Cover Hero Banner */}
+        <Animated.View style={[styles.heroMagazineStage, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
           {outfit.coverImage ? (
             <Image source={{ uri: outfit.coverImage }} style={styles.heroParallaxAssetImage} />
           ) : (
             <View style={styles.heroPlaceholderGraphicBase}>
-              <MaterialCommunityIcons name="hanger" size={56} color="#78716C" />
+              <MaterialCommunityIcons name="hanger" size={48} color="#A8A29E" />
               <Text style={styles.heroPlaceholderLabelText}>No Silhouette Image Linked</Text>
             </View>
           )}
+          
+          {/* Subtle multi-layer gradient cover overlay */}
+          <View style={styles.scrimOverlayShadow} />
           <View style={styles.heroLinearGradientScrimOverlay}>
             <View style={styles.heroMetaCardLabelRow}>
-              <View style={styles.heroCapsuleWrapper}>
-                <Text style={styles.heroOccasionCapsuleTagText}>
-                  {outfit.occasion || 'UNRESTRICTED'}
-                </Text>
-              </View>
-              <Text style={styles.heroHeaderTitleTypography}>{outfit.name}</Text>
-              <Text style={styles.heroHeaderSubscriptTypography}>
-                {uniqueGarments.length} curated pieces assembled
+              {outfit.occasion && (
+                <View style={styles.heroCapsuleWrapper}>
+                  <Text style={styles.heroOccasionCapsuleTagText}>
+                    {outfit.occasion.toUpperCase()}
+                  </Text>
+                </View>
+              )}
+              <Text style={styles.heroHeaderTitleTypography} numberOfLines={2}>
+                {outfit.name}
               </Text>
             </View>
           </View>
-        </View>
+        </Animated.View>
 
-        {/* Requirement 4, 5 & 6: Horizontal Multi-Asset Garments Swipe Collection Track */}
-        <View style={styles.architecturalContentSection}>
-          <View style={styles.inlineHeaderTitleSection}>
-            <SectionTitle>Garments Included</SectionTitle>
-            <View style={styles.countBadgeNode}>
-              <Text style={styles.countBadgeText}>{uniqueGarments.length}</Text>
+        {/* Dynamic Content Panel */}
+        <Animated.View style={{ transform: [{ translateY: slideAnim }], opacity: fadeAnim }}>
+          
+          {/* Architectural Summary Card */}
+          <View style={styles.magazineSummaryCard}>
+            <View style={styles.summaryMetricItem}>
+              <Text style={styles.summaryMetricLabel}>PIECES</Text>
+              <Text style={styles.summaryMetricValue}>{uniqueGarments.length}</Text>
+            </View>
+            <View style={styles.summaryVerticalDivider} />
+            <View style={styles.summaryMetricItem}>
+              <Text style={styles.summaryMetricLabel}>OCCASION</Text>
+              <Text style={styles.summaryMetricValue} numberOfLines={1}>
+                {outfit.occasion ? outfit.occasion : 'Any Setting'}
+              </Text>
+            </View>
+            <View style={styles.summaryVerticalDivider} />
+            <View style={styles.summaryMetricItem}>
+              <Text style={styles.summaryMetricLabel}>CURATED</Text>
+              <Text style={styles.summaryMetricValue}>{creationTimestampDate}</Text>
             </View>
           </View>
 
-          {uniqueGarments.length === 0 ? (
-            <View style={styles.emptyItemsTrackPlaceholderBox}>
-              <Text style={styles.emptyTrackTypography}>No garments linked to this composition canvas yet.</Text>
+          {/* Pinterest-style horizontal Garments Carousel */}
+          <View style={styles.architecturalContentSection}>
+            <View style={styles.inlineHeaderTitleSection}>
+              <SectionTitle>Garments Included</SectionTitle>
+              <View style={styles.countBadgeNode}>
+                <Text style={styles.countBadgeText}>{uniqueGarments.length}</Text>
+              </View>
             </View>
-          ) : (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.horizontalSwiperViewportSpacing}
-            >
-              {uniqueGarments.map((garment, index) => (
-                <PremiumTouchable
-                  key={`garment-card-${garment.id}-${index}`} // Composite dynamic unique safe-key structure
-                  style={styles.garmentMagazineCardElement}
-                  onPress={() => router.push({
-                    pathname: '/clothing/[id]',
-                    params: { id: garment.id }
-                  })}
-                >
-                  <View style={styles.garmentImageContainerBoundingBox}>
-                    {garment.image_url ? (
-                      <Image source={{ uri: garment.image_url }} style={styles.garmentCardTargetImage} />
-                    ) : (
-                      <View style={styles.garmentFallbackAssetCenterFrame}>
-                        <MaterialCommunityIcons name="hanger" size={24} color="#A8A29E" />
-                      </View>
-                    )}
-                  </View>
-                  <View style={styles.garmentMetaFooterBlockText}>
-                    <Text style={styles.garmentLabelBrandHeader} numberOfLines={1}>
-                      {garment.brand || 'UNBRANDED'}
-                    </Text>
-                    <Text style={styles.garmentLabelNameSubscript} numberOfLines={1}>
-                      {garment.name}
-                    </Text>
-                    <Text style={styles.garmentLabelCategoryTag} numberOfLines={1}>
-                      {garment.category}
-                    </Text>
-                  </View>
-                </PremiumTouchable>
-              ))}
-            </ScrollView>
-          )}
-        </View>
 
-        {/* Requirement 8: Technical Specs Metadata Block */}
-        <View style={styles.architecturalContentSection}>
-          <SectionTitle withBottomMargin>Outfit Information</SectionTitle>
-          <View style={styles.premiumDataGridMetricsSheet}>
-            <View style={styles.metadataMetricDataRow}>
-              <Text style={styles.metricRowAttributeKeyText}>Occasion Setting</Text>
-              <Text style={styles.metricRowValueLabelText}>{outfit.occasion || 'General Wardrobe'}</Text>
-            </View>
-            <View style={styles.metadataMetricDataRow}>
-              <Text style={styles.metricRowAttributeKeyText}>Total Components</Text>
-              <Text style={styles.metricRowValueLabelText}>{uniqueGarments.length} Items</Text>
-            </View>
-            <View style={styles.metadataMetricDataRowLineOverride}>
-              <Text style={styles.metricRowAttributeKeyText}>Assembled On</Text>
-              <Text style={styles.metricRowValueLabelText}>{creationTimestampDate}</Text>
+            {uniqueGarments.length === 0 ? (
+              <View style={styles.emptyItemsTrackPlaceholderBox}>
+                <Text style={styles.emptyTrackTypography}>No garments linked to this composition canvas yet.</Text>
+              </View>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.horizontalSwiperViewportSpacing}
+                snapToInterval={GARMENT_CARD_WIDTH + 16}
+                decelerationRate="fast"
+              >
+                {uniqueGarments.map((garment, index) => (
+                  <Pressable
+                    key={`garment-card-${garment.id}-${index}`}
+                    style={({ pressed }) => [
+                      styles.garmentMagazineCardElement,
+                      pressed && styles.cardInteractivePress
+                    ]}
+                    onPress={() => router.push({
+                      pathname: '/clothing/[id]',
+                      params: { id: garment.id }
+                    })}
+                  >
+                    <View style={styles.garmentImageContainerBoundingBox}>
+                      {garment.image_url ? (
+                        <Image source={{ uri: garment.image_url }} style={styles.garmentCardTargetImage} />
+                      ) : (
+                        <View style={styles.garmentFallbackAssetCenterFrame}>
+                          <MaterialCommunityIcons name="hanger" size={24} color="#D6D3D1" />
+                        </View>
+                      )}
+                    </View>
+                    <View style={styles.garmentMetaFooterBlockText}>
+                      <Text style={styles.garmentLabelBrandHeader} numberOfLines={1}>
+                        {garment.brand ? garment.brand.toUpperCase() : 'ESSENTIAL'}
+                      </Text>
+                      <Text style={styles.garmentLabelNameSubscript} numberOfLines={1}>
+                        {garment.name}
+                      </Text>
+                      <Text style={styles.garmentLabelCategoryTag} numberOfLines={1}>
+                        {garment.category}
+                      </Text>
+                    </View>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+
+          {/* Wardrobe Metrics Grid */}
+          <View style={styles.architecturalContentSection}>
+            <SectionTitle withBottomMargin>Composition Summary</SectionTitle>
+            <View style={styles.metricsTwoColumnGrid}>
+              <View style={styles.metricGridCell}>
+                <Text style={styles.metricGridLabel}>PRIMARY OCCASION</Text>
+                <Text style={styles.metricGridValue} numberOfLines={1}>
+                  {outfit.occasion || 'Everyday'}
+                </Text>
+              </View>
+              <View style={styles.metricGridCell}>
+                <Text style={styles.metricGridLabel}>TOTAL COMPONENTS</Text>
+                <Text style={styles.metricGridValue}>
+                  {uniqueGarments.length} {uniqueGarments.length === 1 ? 'Garment' : 'Garments'}
+                </Text>
+              </View>
             </View>
           </View>
-        </View>
 
-        {/* Requirement 9: Functional Premium Operations Interface Controls */}
-        <View style={styles.architecturalContentSection}>
-          <SectionTitle withBottomMargin>Actions</SectionTitle>
-          <View style={styles.actionsLinearControlStack}>
-            <PremiumTouchable 
-              style={styles.actionRowInteractiveButton}
-              onPress={() => router.push({ pathname: '/create', params: { mode: 'edit', outfitId: outfit.id } })}
-            >
-              <View style={styles.actionRowLeftGroupSymbolLayout}>
-                <Feather name="edit-3" size={15} color="#1C1917" />
-                <Text style={styles.actionButtonLabelTextString}>Edit Outfit Structure</Text>
-              </View>
-              <Feather name="chevron-right" size={14} color="#A8A29E" />
-            </PremiumTouchable>
+          {/* Minimalist Separator */}
+          <View style={styles.minimalistSectionDivider} />
 
-            <PremiumTouchable style={styles.actionRowInteractiveButton} onPress={handleShareLookbookOutfit}>
-              <View style={styles.actionRowLeftGroupSymbolLayout}>
-                <Feather name="share" size={15} color="#1C1917" />
-                <Text style={styles.actionButtonLabelTextString}>Share Combination Profile</Text>
-              </View>
-              <Feather name="chevron-right" size={14} color="#A8A29E" />
-            </PremiumTouchable>
+          {/* Action Operations Controller Container */}
+          <View style={[styles.architecturalContentSection, styles.extraBottomOffset]}>
+            <Animated.View style={{ transform: [{ scale: editScale }] }}>
+              <Pressable
+                onPressIn={() => handlePressIn(editScale)}
+                onPressOut={() => handlePressOut(editScale)}
+                onPress={() => router.push({ pathname: '/create', params: { mode: 'edit', outfitId: outfit.id } })}
+                style={styles.actionCardPrimary}
+              >
+                <View style={styles.actionCardBody}>
+                  <Feather name="edit-3" size={16} color="#FFFFFF" />
+                  <Text style={styles.actionCardPrimaryText}>Edit Outfit Details</Text>
+                </View>
+                <Feather name="arrow-right" size={16} color="#FFFFFF" />
+              </Pressable>
+            </Animated.View>
 
-            <PremiumTouchable 
-              disabled={isDeleting}
-              style={[styles.actionRowInteractiveButtonLineOverride]} 
-              onPress={handleDeleteOutfitConfirmation}
-            >
-              <View style={styles.actionRowLeftGroupSymbolLayout}>
+            <Animated.View style={{ transform: [{ scale: shareScale }], marginTop: 12 }}>
+              <Pressable
+                onPressIn={() => handlePressIn(shareScale)}
+                onPressOut={() => handlePressOut(shareScale)}
+                onPress={handleShareLookbookOutfit}
+                style={styles.actionCardSecondary}
+              >
+                <View style={styles.actionCardBody}>
+                  <Feather name="share" size={15} color="#1C1917" />
+                  <Text style={styles.actionCardSecondaryText}>Share Composition</Text>
+                </View>
+                <Feather name="chevron-right" size={14} color="#78716C" />
+              </Pressable>
+            </Animated.View>
+
+            <Animated.View style={{ transform: [{ scale: deleteScale }], marginTop: 24 }}>
+              <Pressable
+                disabled={isDeleting}
+                onPressIn={() => handlePressIn(deleteScale)}
+                onPressOut={() => handlePressOut(deleteScale)}
+                onPress={handleDeleteOutfitConfirmation}
+                style={styles.actionCardDestructive}
+              >
                 {isDeleting ? (
-                  <ActivityIndicator size="small" color="#EF4444" style={styles.deletingSpinnerFix} />
+                  <ActivityIndicator size="small" color="#D62F2F" />
                 ) : (
-                  <Feather name="trash-2" size={15} color="#EF4444" />
+                  <View style={styles.destructiveRowWrapper}>
+                    <Feather name="trash-2" size={14} color="#D62F2F" />
+                    <Text style={styles.actionCardDestructiveText}>Delete Outfit from Closet</Text>
+                  </View>
                 )}
-                <Text style={styles.actionButtonLabelTextStringDestructive}>Deconstruct Look permanently</Text>
-              </View>
-            </PremiumTouchable>
+              </Pressable>
+            </Animated.View>
           </View>
-        </View>
 
+        </Animated.View>
       </ScrollView>
     </PremiumScreen>
   );
@@ -389,70 +491,81 @@ export default function OutfitDetailScreen() {
 
 const styles = StyleSheet.create({
   scrollCanvasTrack: {
-    paddingBottom: 48,
+    paddingBottom: 64,
   },
   centeredStateShell: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 40,
+    backgroundColor: '#FAF9F6',
   },
   stateHeaderTitleTypography: {
-    fontSize: 16,
+    fontSize: 15,
+    fontFamily: 'System',
     fontWeight: '600',
     color: '#1C1917',
-    marginTop: 16,
-    marginBottom: 6,
+    marginTop: 20,
+    letterSpacing: -0.2,
   },
   stateSubtitleTypography: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#78716C',
     textAlign: 'center',
     lineHeight: 18,
-    marginTop: 8,
+    marginTop: 6,
+    letterSpacing: 0.1,
   },
   fallbackNavigationAction: {
-    marginTop: 20,
+    marginTop: 24,
     backgroundColor: '#1C1917',
     paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 10,
+    paddingVertical: 12,
+    borderRadius: 8,
   },
   fallbackActionText: {
     color: '#FAFAF9',
     fontSize: 12,
     fontWeight: '600',
+    letterSpacing: 0.2,
   },
   floatingHeaderActionBar: {
     position: 'absolute',
     left: 20,
     right: 20,
-    top: 56,
+    top: 50,
     zIndex: 100,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   roundBarIconButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(255, 255, 255, 0.88)',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
     elevation: 2,
-    borderWidth: 0.5,
-    borderColor: '#E7E5E4',
+    borderWidth: 1,
+    borderColor: 'rgba(231, 229, 228, 0.5)',
+  },
+  opaqueScalePress: {
+    opacity: 0.85,
+    transform: [{ scale: 0.95 }],
   },
   heroMagazineStage: {
     width: width,
     height: HERO_IMAGE_HEIGHT,
     backgroundColor: '#F5F5F4',
     position: 'relative',
+    borderBottomLeftRadius: 36,
+    borderBottomRightRadius: 36,
+    overflow: 'hidden',
   },
   heroParallaxAssetImage: {
     width: '100%',
@@ -463,61 +576,97 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#E7E5E4',
+    backgroundColor: '#EAE6E1',
   },
   heroPlaceholderLabelText: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#78716C',
-    fontWeight: '500',
+    fontWeight: '600',
     marginTop: 12,
+    letterSpacing: 0.5,
+  },
+  scrimOverlayShadow: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.06)',
   },
   heroLinearGradientScrimOverlay: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    height: '50%',
+    height: '45%',
     justifyContent: 'flex-end',
-    paddingHorizontal: 20,
-    paddingBottom: 24,
-    backgroundColor: 'rgba(28, 25, 23, 0.02)',
+    paddingHorizontal: 24,
+    paddingBottom: 36,
+    // Emulates a smooth ambient shadow layer over image bottom
+    backgroundColor: 'rgba(0, 0, 0, 0.45)', 
   },
   heroMetaCardLabelRow: {
     alignItems: 'flex-start',
   },
   heroCapsuleWrapper: {
-    backgroundColor: '#1C1917',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    marginBottom: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 50,
+    marginBottom: 12,
+    borderWidth: 0.5,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
   },
   heroOccasionCapsuleTagText: {
     color: '#FAFAF9',
     fontSize: 9,
-    fontWeight: '600',
-    letterSpacing: 0.6,
+    fontWeight: '700',
+    letterSpacing: 1,
   },
   heroHeaderTitleTypography: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: '#1C1917',
-    letterSpacing: -0.5,
-    textShadowColor: 'rgba(255, 255, 255, 0.8)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.8,
+    lineHeight: 38,
   },
-  heroHeaderSubscriptTypography: {
+  magazineSummaryCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 16,
+    marginTop: -24,
+    borderRadius: 20,
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    shadowColor: '#1C1917',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.05,
+    shadowRadius: 16,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
+  },
+  summaryMetricItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  summaryMetricLabel: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: '#A8A29E',
+    letterSpacing: 1.2,
+    marginBottom: 4,
+  },
+  summaryMetricValue: {
     fontSize: 13,
-    color: '#44403C',
-    marginTop: 4,
-    fontWeight: '400',
-    textShadowColor: 'rgba(255, 255, 255, 0.8)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    fontWeight: '600',
+    color: '#1C1917',
+    letterSpacing: -0.2,
+  },
+  summaryVerticalDivider: {
+    width: 1,
+    height: '100%',
+    backgroundColor: '#F5F5F4',
   },
   architecturalContentSection: {
-    marginTop: 32,
+    marginTop: 36,
     paddingHorizontal: 16,
   },
   inlineHeaderTitleSection: {
@@ -526,50 +675,55 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   countBadgeNode: {
-    backgroundColor: '#F5F5F4',
-    borderWidth: 1,
-    borderColor: '#E7E5E4',
-    paddingHorizontal: 7,
+    backgroundColor: '#1C1917',
+    paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 8,
+    borderRadius: 10,
     marginLeft: 8,
   },
   countBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#78716C',
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FAFAF9',
   },
   emptyItemsTrackPlaceholderBox: {
-    backgroundColor: '#F5F5F4',
-    borderRadius: 12,
-    padding: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 32,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
   },
   emptyTrackTypography: {
     fontSize: 12,
     color: '#78716C',
+    textAlign: 'center',
   },
   horizontalSwiperViewportSpacing: {
-    gap: 12,
     paddingRight: 16,
     paddingVertical: 4,
+    gap: 16,
   },
   garmentMagazineCardElement: {
     width: GARMENT_CARD_WIDTH,
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 16,
     overflow: 'hidden',
+    shadowColor: '#1C1917',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 2,
     borderWidth: 1,
-    borderColor: '#F5F5F4',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.02,
-    shadowRadius: 2,
-    elevation: 1,
+    borderColor: '#E7E5E4',
+  },
+  cardInteractivePress: {
+    opacity: 0.95,
+    transform: [{ scale: 0.98 }],
   },
   garmentImageContainerBoundingBox: {
     width: '100%',
-    height: GARMENT_CARD_WIDTH * 1.25,
+    height: GARMENT_CARD_WIDTH * 1.35, // 3:4 High-fashion asset proportion
     backgroundColor: '#F5F5F4',
   },
   garmentCardTargetImage: {
@@ -583,19 +737,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   garmentMetaFooterBlockText: {
-    padding: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
   },
   garmentLabelBrandHeader: {
-    fontSize: 10,
+    fontSize: 8,
     fontWeight: '700',
-    color: '#1C1917',
-    letterSpacing: 0.4,
-    marginBottom: 2,
+    color: '#78716C',
+    letterSpacing: 1,
+    marginBottom: 3,
   },
   garmentLabelNameSubscript: {
-    fontSize: 12,
-    color: '#44403C',
-    fontWeight: '400',
+    fontSize: 13,
+    color: '#1C1917',
+    fontWeight: '500',
+    letterSpacing: -0.2,
     marginBottom: 4,
   },
   garmentLabelCategoryTag: {
@@ -603,74 +759,96 @@ const styles = StyleSheet.create({
     color: '#A8A29E',
     fontWeight: '500',
   },
-  premiumDataGridMetricsSheet: {
+  metricsTwoColumnGrid: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  metricGridCell: {
+    flex: 1,
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
     borderWidth: 1,
     borderColor: '#E7E5E4',
-    paddingHorizontal: 16,
+    borderRadius: 16,
+    padding: 16,
   },
-  metadataMetricDataRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 0.5,
-    borderColor: '#E7E5E4',
+  metricGridLabel: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: '#A8A29E',
+    letterSpacing: 1,
+    marginBottom: 6,
   },
-  metadataMetricDataRowLineOverride: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 14,
-  },
-  metricRowAttributeKeyText: {
+  metricGridValue: {
     fontSize: 13,
-    color: '#78716C',
-    fontWeight: '400',
-  },
-  metricRowValueLabelText: {
-    fontSize: 13,
+    fontWeight: '600',
     color: '#1C1917',
+  },
+  minimalistSectionDivider: {
+    height: 1,
+    backgroundColor: '#E7E5E4',
+    marginHorizontal: 16,
+    marginTop: 36,
+  },
+  extraBottomOffset: {
+    marginBottom: 20,
+  },
+  actionCardPrimary: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#1C1917',
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    shadowColor: '#1C1917',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+  },
+  actionCardPrimaryText: {
+    color: '#FAFAF9',
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.1,
+  },
+  actionCardSecondary: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+  },
+  actionCardSecondaryText: {
+    color: '#1C1917',
+    fontSize: 13,
     fontWeight: '500',
   },
-  actionsLinearControlStack: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E7E5E4',
-    paddingHorizontal: 16,
-  },
-  actionRowInteractiveButton: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 0.5,
-    borderColor: '#E7E5E4',
-  },
-  actionRowInteractiveButtonLineOverride: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 14,
-  },
-  actionRowLeftGroupSymbolLayout: {
+  actionCardBody: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
-  actionButtonLabelTextString: {
-    fontSize: 13,
-    color: '#1C1917',
-    fontWeight: '400',
+  actionCardDestructive: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.06)',
+    borderRadius: 16,
+    paddingVertical: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.15)',
   },
-  actionButtonLabelTextStringDestructive: {
-    fontSize: 13,
-    color: '#EF4444',
-    fontWeight: '500',
+  destructiveRowWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  deletingSpinnerFix: {
-    marginRight: -4,
+  actionCardDestructiveText: {
+    color: '#D62F2F',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });

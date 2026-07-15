@@ -6,11 +6,19 @@ import {
   ScrollView,
   Image,
   Dimensions,
-  Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+  withDelay,
+  Easing,
+} from 'react-native-reanimated';
 
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { PremiumCard } from '../../components/ui/PremiumCard';
@@ -79,10 +87,12 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isError, setIsError] = useState(false);
 
-  // Performance Layout Entrance Anchors
-  const contentFade = useRef(new Animated.Value(0)).current;
-  const contentY = useRef(new Animated.Value(10)).current;
+  // Reanimated Interaction States (Premium Timing)
+  const heroScale = useSharedValue(1);
 
+  const heroAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: heroScale.value }],
+  }));
   // Localized Formatting Engine for the Editorial Sub-Header
   const formattedDate = new Date().toLocaleDateString('en-US', {
     weekday: 'short',
@@ -184,11 +194,6 @@ export default function HomeScreen() {
         favoriteColor: 'Monochrome Minimalism'
       });
 
-      Animated.parallel([
-        Animated.timing(contentFade, { toValue: 1, duration: 500, useNativeDriver: true }),
-        Animated.timing(contentY, { toValue: 0, duration: 500, useNativeDriver: true })
-      ]).start();
-
     } catch (error) {
       console.error('[Vyra Data Integration Fault]:', error);
       setIsError(true);
@@ -229,48 +234,60 @@ export default function HomeScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         
         {/* SECTION 1: ARCHITECTURAL GREETING & LOGO */}
-        <View style={styles.editorialHeaderContainer}>
+        <Animated.View
+          entering={FadeInDown.duration(600).easing(Easing.out(Easing.cubic))}
+          style={styles.editorialHeaderContainer}
+        >
           <View style={styles.brandMetaRow}>
             <Text style={styles.editorialDateText}>{formattedDate}</Text>
             <PremiumTouchable onPress={() => router.push('/profile')} activeOpacity={0.75}>
               <VyraLogo />
-            </PremiumTouchable>
+                </PremiumTouchable>
           </View>
-          
-          <Text style={styles.editorialGreetingText}>
+          <Animated.Text
+            entering={FadeInDown.duration(600).delay(80).easing(Easing.out(Easing.cubic))}
+            style={styles.editorialGreetingText}
+                >
             Hello, {profile?.username || 'Curator'}
-          </Text>
-          
-          <Text style={styles.editorialPoetryText}>
-            The wardrobe is an architecture of self. Currently managing {insights.totalGarments} archival foundations to compose your modern visual footprint.
-          </Text>
-        </View>
+          </Animated.Text>
 
-        <Animated.View style={{ opacity: contentFade, transform: [{ translateY: contentY }] }}>
-          
-          {/* SECTION 2: IMMERSIVE HERO ENSEMBLE */}
-          <View style={styles.systemSection}>
-            <SectionHeader title="Today's Ensemble" subtitle="Your active presentation configuration" style={styles.headerBindingFix} />
-            
-            {todayPlan?.outfits ? (
-              <PremiumCard 
+          <Animated.Text
+            entering={FadeInDown.duration(600).delay(140).easing(Easing.out(Easing.cubic))}
+            style={styles.editorialPoetryText}
+          >
+            The wardrobe is an architecture of self. Currently managing {insights.totalGarments} archival foundations to compose your modern visual footprint.
+          </Animated.Text>
+        </Animated.View>
+
+        {/* SECTION 2: IMMERSIVE HERO ENSEMBLE */}
+        <Animated.View
+          entering={FadeInDown.duration(600).delay(200).easing(Easing.out(Easing.cubic))}
+          style={styles.systemSection}
+        >
+          <SectionHeader title="Today's Ensemble" subtitle="Your active presentation configuration" style={styles.headerBindingFix} />
+
+          {todayPlan?.outfits ? (
+            <Animated.View style={heroAnimatedStyle}>
+              <PremiumCard
                 style={styles.magazineCardFrame}
                 onPress={() => router.push(`../outfit/${todayPlan.outfit_id}`)}
+                onPressIn={() => heroScale.value = withTiming(0.98, { duration: 200, easing: Easing.out(Easing.cubic) })}
+                onPressOut={() => heroScale.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.cubic) })}
               >
                 <View style={styles.magazineImageWrapper}>
                   {(() => {
                     const items = todayPlan.outfits.outfit_items || [];
                     const resolvedCoverUrl = items.length > 0 && items[0].clothing_items ? items[0].clothing_items.image_url : null;
-                    
+
                     return resolvedCoverUrl ? (
                       <Image source={{ uri: resolvedCoverUrl }} style={styles.magazineImage} />
                     ) : (
                       <View style={styles.magazineFallbackContainer}>
                         <Ionicons name="shirt-outline" size={36} color="#A8A29E" />
                       </View>
-                    );
+  );
                   })()}
-                  
+
                   <View style={styles.linearScrimOverlay} />
 
                   <View style={styles.magazineFloatingTopContent}>
@@ -290,27 +307,31 @@ export default function HomeScreen() {
                   </View>
                 </View>
               </PremiumCard>
-            ) : (
-              <PremiumCard style={styles.systemEmptySlateContainer} disabled>
-                <View style={styles.systemEmptySlateGraphic}>
-                  <Ionicons name="shirt-outline" size={32} color="#A8A29E" />
-                </View>
-                <Text style={styles.systemEmptyTitle}>The canvas is empty</Text>
-                <Text style={styles.systemEmptySubtitle}>No look configuration is assigned to your presentation schedule today.</Text>
-                <PremiumTouchable style={styles.systemCtaButton} onPress={() => router.push('/calendar')}>
-                  <Text style={styles.systemCtaButtonText}>Curate Look</Text>
-                </PremiumTouchable>
-              </PremiumCard>
-            )}
-          </View>
+            </Animated.View>
+          ) : (
+            <PremiumCard style={styles.systemEmptySlateContainer} disabled>
+              <View style={styles.systemEmptySlateGraphic}>
+                <Ionicons name="shirt-outline" size={32} color="#A8A29E" />
+              </View>
+              <Text style={styles.systemEmptyTitle}>The canvas is empty</Text>
+              <Text style={styles.systemEmptySubtitle}>No look configuration is assigned to your presentation schedule today.</Text>
+              <PremiumTouchable style={styles.systemCtaButton} onPress={() => router.push('/calendar')}>
+                <Text style={styles.systemCtaButtonText}>Curate Look</Text>
+              </PremiumTouchable>
+            </PremiumCard>
+          )}
+        </Animated.View>
 
-          {/* SECTION 3: HORIZONTAL WEEKLY LOOKAHEAD */}
-          <View style={styles.systemSection}>
-            <SectionHeader title="Weekly Forecast" subtitle="Chronological lookahead tracking parameters" style={styles.headerBindingFix} />
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.forecastStripScroll}>
-              {weeklyPreview.map((item) => (
-                <PremiumTouchable 
-                  key={item.id} 
+        {/* SECTION 3: HORIZONTAL WEEKLY LOOKAHEAD */}
+        <View style={styles.systemSection}>
+          <SectionHeader title="Weekly Forecast" subtitle="Chronological lookahead tracking parameters" style={styles.headerBindingFix} />
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.forecastStripScroll}>
+            {weeklyPreview.map((item, index) => (
+              <Animated.View
+                key={item.id}
+                entering={FadeInDown.duration(500).delay(300 + (index * 50)).easing(Easing.out(Easing.cubic))}
+              >
+                <PremiumTouchable
                   style={[styles.forecastDayCard, item.dayName === 'Today' && styles.forecastCardActiveToday]}
                   onPress={() => item.outfit ? router.push(`../outfit/${item.outfit.id}`) : router.push('/calendar')}
                   activeOpacity={0.85}
@@ -318,13 +339,13 @@ export default function HomeScreen() {
                   <Text style={[styles.forecastDayText, item.dayName === 'Today' && styles.forecastDayTextActive]}>
                     {item.dayName}
                   </Text>
-                  
+
                   <View style={styles.forecastThumbnailWrapper}>
                     {item.outfit ? (
                       (() => {
                         const items = item.outfit.outfit_items || [];
                         const resolvedThumbUrl = items.length > 0 && items[0].clothing_items ? items[0].clothing_items.image_url : null;
-                        
+
                         return resolvedThumbUrl ? (
                           <Image source={{ uri: resolvedThumbUrl }} style={styles.forecastThumbnailImage} />
                         ) : (
@@ -340,43 +361,45 @@ export default function HomeScreen() {
                     )}
                   </View>
                 </PremiumTouchable>
-              ))}
-            </ScrollView>
-          </View>
+              </Animated.View>
+            ))}
+          </ScrollView>
+        </View>
 
-          {/* SECTION 4: LIFESTYLE WARDROBE CORE MATRICES */}
-          <View style={[styles.systemSection, styles.bottomSpacing]}>
-            <SectionTitle withBottomMargin style={styles.headerBindingFix}>Collection Insights</SectionTitle>
-            
-            <View style={styles.lifestyleInsightsGrid}>
-              <View style={styles.lifestyleMetricRow}>
-                <PremiumCard style={styles.lifestyleMetricBlock} onPress={() => router.push('/closet')}>
-                  <Text style={styles.lifestyleMetricValue}>{insights.totalGarments}</Text>
-                  <Text style={styles.lifestyleMetricLabel}>Archived Pieces</Text>
-                </PremiumCard>
-                
-                <PremiumCard style={styles.lifestyleMetricBlock} onPress={() => router.push('/closet')}>
-                  <Text style={styles.lifestyleMetricValue}>{insights.totalOutfits}</Text>
-                  <Text style={styles.lifestyleMetricLabel}>Compiled Looks</Text>
-                </PremiumCard>
-              </View>
+        {/* SECTION 4: LIFESTYLE WARDROBE CORE MATRICES */}
+        <Animated.View
+          entering={FadeInDown.duration(600).delay(600).easing(Easing.out(Easing.cubic))}
+          style={[styles.systemSection, styles.bottomSpacing]}
+        >
+          <SectionTitle withBottomMargin style={styles.headerBindingFix}>Collection Insights</SectionTitle>
 
-              <PremiumCard style={styles.lifestyleWideCard} disabled>
-                <View style={styles.editorialInsightMeta}>
-                  <View style={styles.insightCluster}>
-                    <Text style={styles.lifestyleWideLabel}>Dominant Style</Text>
-                    <Text style={styles.lifestyleWideValue}>{insights.mostUsedCategory}</Text>
-                  </View>
-                  <View style={styles.insightDivider} />
-                  <View style={styles.insightCluster}>
-                    <Text style={styles.lifestyleWideLabel}>Current Aesthetic</Text>
-                    <Text style={styles.lifestyleWideValue}>{insights.favoriteColor}</Text>
-                  </View>
-                </View>
+          <View style={styles.lifestyleInsightsGrid}>
+            <View style={styles.lifestyleMetricRow}>
+              <PremiumCard style={styles.lifestyleMetricBlock} onPress={() => router.push('/closet')}>
+                <Text style={styles.lifestyleMetricValue}>{insights.totalGarments}</Text>
+                <Text style={styles.lifestyleMetricLabel}>Archived Pieces</Text>
+              </PremiumCard>
+
+              <PremiumCard style={styles.lifestyleMetricBlock} onPress={() => router.push('/closet')}>
+                <Text style={styles.lifestyleMetricValue}>{insights.totalOutfits}</Text>
+                <Text style={styles.lifestyleMetricLabel}>Compiled Looks</Text>
               </PremiumCard>
             </View>
-          </View>
 
+            <PremiumCard style={styles.lifestyleWideCard} disabled>
+              <View style={styles.editorialInsightMeta}>
+                <View style={styles.insightCluster}>
+                  <Text style={styles.lifestyleWideLabel}>Dominant Style</Text>
+                  <Text style={styles.lifestyleWideValue}>{insights.mostUsedCategory}</Text>
+                </View>
+                <View style={styles.insightDivider} />
+                <View style={styles.insightCluster}>
+                  <Text style={styles.lifestyleWideLabel}>Current Aesthetic</Text>
+                  <Text style={styles.lifestyleWideValue}>{insights.favoriteColor}</Text>
+                </View>
+              </View>
+            </PremiumCard>
+          </View>
         </Animated.View>
       </ScrollView>
     </PremiumScreen>

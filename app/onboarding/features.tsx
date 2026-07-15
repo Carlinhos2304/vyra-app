@@ -1,42 +1,151 @@
-import React from 'react';
-import { StyleSheet, Text, View, Dimensions } from 'react-native';
+import React, { useEffect } from 'react';
+import { StyleSheet, Text, View, Dimensions, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
-import { PremiumTouchable } from '../../components/ui/PremiumTouchable';
+
+// React Native Reanimated 3
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSpring,
+  withDelay,
+  withRepeat,
+  withSequence,
+} from 'react-native-reanimated';
 
 const { width } = Dimensions.get('window');
+
+// Luxury-calibrated spring physics
+const PREMIUM_SPRING = {
+  damping: 18,
+  stiffness: 100,
+  mass: 0.8,
+};
 
 export default function FeaturesScreen() {
   const router = useRouter();
 
+  // Animation Shared Values
+  const canvasOpacity = useSharedValue(0);
+  const canvasScale = useSharedValue(0.85);
+  const ornamentOpacity = useSharedValue(0.3);
+
+  const titleOpacity = useSharedValue(0);
+  const titleTranslateY = useSharedValue(20);
+
+  const subtitleOpacity = useSharedValue(0);
+  const subtitleTranslateY = useSharedValue(15);
+
+  const buttonOpacity = useSharedValue(0);
+  const buttonTranslateY = useSharedValue(20);
+  const buttonPressScale = useSharedValue(1);
+
+  useEffect(() => {
+    // 1. Illustration Canvas Entrance
+    canvasOpacity.value = withTiming(1, { duration: 600 });
+    canvasScale.value = withSpring(1, PREMIUM_SPRING);
+
+    // Subtle Breathing animation for the visual ornament
+    ornamentOpacity.value = withDelay(
+      600,
+      withRepeat(
+        withSequence(
+          withTiming(1, { duration: 1800 }),
+          withTiming(0.3, { duration: 1800 })
+        ),
+        -1, // Loop infinitely
+        true
+      )
+    );
+
+    // 2. Title Slide Up
+    titleOpacity.value = withDelay(200, withTiming(1, { duration: 600 }));
+    titleTranslateY.value = withDelay(200, withSpring(0, PREMIUM_SPRING));
+
+    // 3. Subtitle Slide Up
+    subtitleOpacity.value = withDelay(350, withTiming(1, { duration: 600 }));
+    subtitleTranslateY.value = withDelay(350, withSpring(0, PREMIUM_SPRING));
+
+    // 4. Action Button Entrance
+    buttonOpacity.value = withDelay(500, withTiming(1, { duration: 600 }));
+    buttonTranslateY.value = withDelay(500, withSpring(0, PREMIUM_SPRING));
+  }, []);
+
+  // Animated Styles
+  const animatedCanvasStyle = useAnimatedStyle(() => ({
+    opacity: canvasOpacity.value,
+    transform: [{ scale: canvasScale.value }],
+  }));
+
+  const animatedOrnamentStyle = useAnimatedStyle(() => ({
+    opacity: ornamentOpacity.value,
+  }));
+
+  const animatedTitleStyle = useAnimatedStyle(() => ({
+    opacity: titleOpacity.value,
+    transform: [{ translateY: titleTranslateY.value }],
+  }));
+
+  const animatedSubtitleStyle = useAnimatedStyle(() => ({
+    opacity: subtitleOpacity.value,
+    transform: [{ translateY: subtitleTranslateY.value }],
+  }));
+
+  const animatedButtonStyle = useAnimatedStyle(() => ({
+    opacity: buttonOpacity.value,
+    transform: [
+      { translateY: buttonTranslateY.value },
+      { scale: buttonPressScale.value },
+    ],
+  }));
+
+  // Press feedback handlers
+  const handlePressIn = () => {
+    buttonPressScale.value = withSpring(0.96, { damping: 12, stiffness: 150 });
+  };
+
+  const handlePressOut = () => {
+    buttonPressScale.value = withSpring(1, PREMIUM_SPRING);
+  };
+
   return (
     <PremiumScreen>
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        {/* Visual Illustration Section */}
         <View style={styles.illustrationFrame}>
-          <View style={styles.abstractCanvasGraphic}>
+          <Animated.View style={[styles.abstractCanvasGraphic, animatedCanvasStyle]}>
             <MaterialCommunityIcons name="hanger" size={64} color="#1C1917" />
-            <View style={styles.accentOrnamentDot} />
-          </View>
+            <Animated.View style={[styles.accentOrnamentDot, animatedOrnamentStyle]} />
+          </Animated.View>
         </View>
 
+        {/* Text Container */}
         <View style={styles.textContainer}>
-          <Text style={styles.editorialTitleText}>Create beautiful outfits</Text>
-          <Text style={styles.editorialSubtitleText}>
-            Build looks from your own wardrobe in seconds.
-          </Text>
+          <Animated.View style={animatedTitleStyle}>
+            <Text style={styles.editorialTitleText}>Create beautiful outfits</Text>
+          </Animated.View>
+          
+          <Animated.View style={animatedSubtitleStyle}>
+            <Text style={styles.editorialSubtitleText}>
+              Build looks from your own wardrobe in seconds.
+            </Text>
+          </Animated.View>
         </View>
 
-        <View style={styles.actionContainer}>
-          <PremiumTouchable 
-            style={styles.primaryPremiumButton}
-            activeOpacity={0.85}
+        {/* Call to Action Container */}
+        <Animated.View style={[styles.actionContainer, animatedButtonStyle]}>
+          <Pressable
+            onPressIn={handlePressIn}
+            onPressOut={handlePressOut}
             onPress={() => router.push('/onboarding/planner')}
+            style={styles.primaryPremiumButton}
           >
             <Text style={styles.primaryButtonText}>Continue</Text>
-          </PremiumTouchable>
-        </View>
+          </Pressable>
+        </Animated.View>
       </SafeAreaView>
     </PremiumScreen>
   );

@@ -1,18 +1,83 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, View, Dimensions, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, Text, View, Dimensions, Alert, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
-import { PremiumTouchable } from '../../components/ui/PremiumTouchable';
 import { PremiumLoader } from '../../components/ui/PremiumLoader';
 import { supabase } from '../../lib/supabase';
 
+// React Native Reanimated 3
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSpring,
+  withDelay,
+} from 'react-native-reanimated';
+
 const { width } = Dimensions.get('window');
+
+// Luxury spring physics configuration
+const PREMIUM_SPRING = {
+  damping: 18,
+  stiffness: 100,
+  mass: 0.8,
+};
+
+const BUTTON_SPRING = {
+  damping: 12,
+  stiffness: 150,
+};
 
 export default function FirstGarmentScreen() {
   const router = useRouter();
   const [isFinalizing, setIsFinalizing] = useState<boolean>(false);
+
+  // --- Animation Shared Values ---
+  const illustrationScale = useSharedValue(0.85);
+  const illustrationOpacity = useSharedValue(0);
+
+  const textOpacity = useSharedValue(0);
+  const textTranslateY = useSharedValue(20);
+
+  const actionOpacity = useSharedValue(0);
+  const actionTranslateY = useSharedValue(30);
+  const buttonPressScale = useSharedValue(1);
+
+  // Staggered Entrance on Mount
+  useEffect(() => {
+    // Illustration Graphic Card
+    illustrationOpacity.value = withDelay(100, withTiming(1, { duration: 600 }));
+    illustrationScale.value = withDelay(100, withSpring(1, PREMIUM_SPRING));
+
+    // Editorial Text block
+    textOpacity.value = withDelay(250, withTiming(1, { duration: 600 }));
+    textTranslateY.value = withDelay(250, withSpring(0, PREMIUM_SPRING));
+
+    // Bottom Action Button
+    actionOpacity.value = withDelay(400, withTiming(1, { duration: 600 }));
+    actionTranslateY.value = withDelay(400, withSpring(0, PREMIUM_SPRING));
+  }, []);
+
+  // --- Animated Styles ---
+  const animatedIllustrationStyle = useAnimatedStyle(() => ({
+    opacity: illustrationOpacity.value,
+    transform: [{ scale: illustrationScale.value }],
+  }));
+
+  const animatedTextStyle = useAnimatedStyle(() => ({
+    opacity: textOpacity.value,
+    transform: [{ translateY: textTranslateY.value }],
+  }));
+
+  const animatedActionStyle = useAnimatedStyle(() => ({
+    opacity: actionOpacity.value,
+    transform: [
+      { translateY: actionTranslateY.value },
+      { scale: buttonPressScale.value }
+    ],
+  }));
 
   const completeOnboardingAndNavigateToCreation = async () => {
     try {
@@ -20,7 +85,6 @@ export default function FirstGarmentScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Session authentication missing context parameters.');
 
-      // Commit isolation completion tag tracking metrics securely
       const { error } = await supabase
         .from('profiles')
         .update({ onboarding_completed: true })
@@ -28,7 +92,6 @@ export default function FirstGarmentScreen() {
 
       if (error) throw error;
 
-      // Deep link router directly to existing piece catalog configuration form parameters
       router.replace('/clothing/add-garment');
     } catch (err: any) {
       Alert.alert('Finalization Blocked', err.message || 'Could not close out sequence safely.');
@@ -36,6 +99,7 @@ export default function FirstGarmentScreen() {
     }
   };
 
+  // ✅ FIXED: Conditional return moved safely below all hooks
   if (isFinalizing) {
     return (
       <PremiumScreen style={styles.centerBox}>
@@ -47,28 +111,34 @@ export default function FirstGarmentScreen() {
   return (
     <PremiumScreen>
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        
+        {/* GRAPHIC FRAME */}
         <View style={styles.illustrationFrame}>
-          <View style={styles.abstractCanvasGraphic}>
+          <Animated.View style={[styles.abstractCanvasGraphic, animatedIllustrationStyle]}>
             <MaterialCommunityIcons name="plus-box-outline" size={64} color="#1C1917" />
-          </View>
+          </Animated.View>
         </View>
 
-        <View style={styles.textContainer}>
+        {/* COPY */}
+        <Animated.View style={[styles.textContainer, animatedTextStyle]}>
           <Text style={styles.editorialTitleText}>Let's build your wardrobe</Text>
           <Text style={styles.editorialSubtitleText}>
             Start by adding your first garment.
           </Text>
-        </View>
+        </Animated.View>
 
-        <View style={styles.actionContainer}>
-          <PremiumTouchable 
-            style={styles.primaryPremiumButton}
-            activeOpacity={0.85}
+        {/* BOTTOM ACTION */}
+        <Animated.View style={[styles.actionContainer, animatedActionStyle]}>
+          <Pressable 
+            onPressIn={() => (buttonPressScale.value = withSpring(0.96, BUTTON_SPRING))}
+            onPressOut={() => (buttonPressScale.value = withSpring(1, PREMIUM_SPRING))}
             onPress={completeOnboardingAndNavigateToCreation}
+            style={styles.primaryPremiumButton}
           >
             <Text style={styles.primaryButtonText}>Add First Garment</Text>
-          </PremiumTouchable>
-        </View>
+          </Pressable>
+        </Animated.View>
+
       </SafeAreaView>
     </PremiumScreen>
   );

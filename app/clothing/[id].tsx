@@ -4,7 +4,7 @@ import {
   Text,
   View,
   ScrollView,
-  TouchableOpacity,
+  Pressable,
   Image,
   Dimensions,
   Share,
@@ -19,6 +19,16 @@ import { SectionTitle } from '../../components/ui/SectionTitle';
 
 import { supabase } from '../../lib/supabase';
 
+// High Performance Reanimated imports
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSpring,
+  withDelay,
+  Easing,
+} from 'react-native-reanimated';
+
 const { width } = Dimensions.get('window');
 
 type ClothingDetailSearchParams = {
@@ -31,12 +41,19 @@ type ClothingDetailSearchParams = {
   refresh?: string;
 };
 
+// Setup spring default presets similar to Linear or Apple's UI
+const SPRING_CONFIG = {
+  damping: 15,
+  stiffness: 150,
+  mass: 0.8,
+};
+
 export default function ClothingDetailScreen() {
   const params = useLocalSearchParams<ClothingDetailSearchParams>();
   
   console.log("[Detail Screen] Received incoming routing parameters:", JSON.stringify(params));
 
-  // Initialize unified state blueprint directly from search parameters safely
+  // Initialize state
   const [garment, setGarment] = useState({
     id: params.id,
     name: params.name || 'Unnamed Garment',
@@ -50,6 +67,42 @@ export default function ClothingDetailScreen() {
   const [isFavoriteLoading, setIsFavoriteLoading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isImageLoading, setIsImageLoading] = useState(true);
+
+  // ==========================================
+  // ANIMATION SHARED VALUES
+  // ==========================================
+  // Entrance states
+  const heroOpacity = useSharedValue(0);
+  const heroScale = useSharedValue(0.96);
+  
+  const navBarOpacity = useSharedValue(0);
+  const navBarTranslateY = useSharedValue(-15);
+
+  const headerOpacity = useSharedValue(0);
+  const headerTranslateY = useSharedValue(10);
+
+  const specsTitleOpacity = useSharedValue(0);
+  const specsTitleTranslateY = useSharedValue(10);
+
+  const cardOneOpacity = useSharedValue(0);
+  const cardOneTranslateY = useSharedValue(15);
+  
+  const cardTwoOpacity = useSharedValue(0);
+  const cardTwoTranslateY = useSharedValue(15);
+
+  const buttonsOpacity = useSharedValue(0);
+  const buttonsTranslateY = useSharedValue(15);
+
+  // Micro-interaction states
+  const backBtnScale = useSharedValue(1);
+  const favBtnScale = useSharedValue(1);
+  const shareBtnScale = useSharedValue(1);
+  const editBtnScale = useSharedValue(1);
+  const deleteBtnScale = useSharedValue(1);
+  
+  // Custom image loader skeleton opacity
+  const skeletonOpacity = useSharedValue(1);
 
   // Helper utility to safely format IDs depending on whether your schema uses integers or UUID strings
   const getNormalizedId = (rawId: string): string | number => {
@@ -57,6 +110,40 @@ export default function ClothingDetailScreen() {
     const normalized = isNumeric ? parseInt(rawId, 10) : rawId;
     console.log(`[ID Normalizer] Raw string "${rawId}" converted to token type [${typeof normalized}]:`, normalized);
     return normalized;
+  };
+
+  // ==========================================
+  // ENTRANCE SEQUENCE GENERATOR
+  // ==========================================
+  const triggerEntranceAnimations = () => {
+    const easeOutCubic = Easing.out(Easing.cubic);
+
+    // Hero visual elements
+    heroOpacity.value = withTiming(1, { duration: 500, easing: easeOutCubic });
+    heroScale.value = withTiming(1, { duration: 600, easing: easeOutCubic });
+
+    // Header nav overlay
+    navBarOpacity.value = withTiming(1, { duration: 400, easing: easeOutCubic });
+    navBarTranslateY.value = withTiming(0, { duration: 400, easing: easeOutCubic });
+
+    // Text & Badge Headers
+    headerOpacity.value = withDelay(150, withTiming(1, { duration: 400, easing: easeOutCubic }));
+    headerTranslateY.value = withDelay(150, withTiming(0, { duration: 400, easing: easeOutCubic }));
+
+    // Specifications Segment Header
+    specsTitleOpacity.value = withDelay(230, withTiming(1, { duration: 400, easing: easeOutCubic }));
+    specsTitleTranslateY.value = withDelay(230, withTiming(0, { duration: 400, easing: easeOutCubic }));
+
+    // Staggered Spec Attribute Cells (+80ms delays)
+    cardOneOpacity.value = withDelay(290, withTiming(1, { duration: 450, easing: easeOutCubic }));
+    cardOneTranslateY.value = withDelay(290, withTiming(0, { duration: 450, easing: easeOutCubic }));
+
+    cardTwoOpacity.value = withDelay(370, withTiming(1, { duration: 450, easing: easeOutCubic }));
+    cardTwoTranslateY.value = withDelay(370, withTiming(0, { duration: 450, easing: easeOutCubic }));
+
+    // Bottom action trigger buttons shelf
+    buttonsOpacity.value = withDelay(450, withTiming(1, { duration: 450, easing: easeOutCubic }));
+    buttonsTranslateY.value = withDelay(450, withTiming(0, { duration: 450, easing: easeOutCubic }));
   };
 
   // Sync state data from the database whenever params change or a refresh token arrives
@@ -78,7 +165,7 @@ export default function ClothingDetailScreen() {
           .from('clothing_items')
           .select('*')
           .eq('id', targetedId)
-          .maybeSingle(); // Prevents crashing if the row was just removed completely
+          .maybeSingle();
 
         console.log(`[Sync Engine] Supabase raw server network payload response:`, { status, data, error });
 
@@ -100,7 +187,6 @@ export default function ClothingDetailScreen() {
           });
         } else if (!data && isMounted) {
           console.warn("[Sync Engine] No record row returned from Supabase. Falling back onto initial route parameter matrix.");
-          // Fallback to local parameter values if row was not found
           setGarment({
             id: params.id,
             name: params.name || 'Unnamed Garment',
@@ -118,6 +204,10 @@ export default function ClothingDetailScreen() {
         if (isMounted) {
           setIsInitialLoading(false);
           console.log("[Sync Engine] Finished refresh synchronization cycle.");
+          // Trigger animations right after loading finishes
+          setTimeout(() => {
+            triggerEntranceAnimations();
+          }, 50);
         }
       }
     }
@@ -141,7 +231,11 @@ export default function ClothingDetailScreen() {
 
     console.log(`[Favorite Action] Toggling favorite state for ID: ${targetedId}. Target visual setting state:`, nextFavoriteState);
 
-    // Optimistically update UI state to preserve ultra-premium responsiveness
+    // Dynamic Micro-interaction scale bounce on like
+    favBtnScale.value = withSpring(1.3, SPRING_CONFIG, () => {
+      favBtnScale.value = withSpring(1, SPRING_CONFIG);
+    });
+
     setGarment(prev => ({ ...prev, is_favorite: nextFavoriteState }));
     setIsFavoriteLoading(true);
 
@@ -166,7 +260,6 @@ export default function ClothingDetailScreen() {
         'Policy Exception', 
         `Could not save favorite configuration status. Verify that row level modifications are supported.\nDetail: ${error.message || 'RLS Lock'}`
       );
-      // Revert optimistic state mapping if transaction fails
       setGarment(prev => ({ ...prev, is_favorite: !nextFavoriteState }));
     } finally {
       setIsFavoriteLoading(false);
@@ -293,6 +386,74 @@ export default function ClothingDetailScreen() {
     );
   };
 
+  // Image load helper trigger
+  const handleImageLoadComplete = () => {
+    setIsImageLoading(false);
+    skeletonOpacity.value = withTiming(0, { duration: 250, easing: Easing.out(Easing.quad) });
+  };
+
+  // ==========================================
+  // REANIMATED STYLE ASSIGNMENTS
+  // ==========================================
+  const animatedHeroStyle = useAnimatedStyle(() => ({
+    opacity: heroOpacity.value,
+    transform: [{ scale: heroScale.value }],
+  }));
+
+  const animatedNavBarStyle = useAnimatedStyle(() => ({
+    opacity: navBarOpacity.value,
+    transform: [{ translateY: navBarTranslateY.value }],
+  }));
+
+  const animatedHeaderStyle = useAnimatedStyle(() => ({
+    opacity: headerOpacity.value,
+    transform: [{ translateY: headerTranslateY.value }],
+  }));
+
+  const animatedSpecsTitleStyle = useAnimatedStyle(() => ({
+    opacity: specsTitleOpacity.value,
+    transform: [{ translateY: specsTitleTranslateY.value }],
+  }));
+
+  const animatedCardOneStyle = useAnimatedStyle(() => ({
+    opacity: cardOneOpacity.value,
+    transform: [{ translateY: cardOneTranslateY.value }],
+  }));
+
+  const animatedCardTwoStyle = useAnimatedStyle(() => ({
+    opacity: cardTwoOpacity.value,
+    transform: [{ translateY: cardTwoTranslateY.value }],
+  }));
+
+  const animatedButtonsStyle = useAnimatedStyle(() => ({
+    opacity: buttonsOpacity.value,
+    transform: [{ translateY: buttonsTranslateY.value }],
+  }));
+
+  const animatedBackBtnStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: backBtnScale.value }],
+  }));
+
+  const animatedFavBtnStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: favBtnScale.value }],
+  }));
+
+  const animatedShareBtnStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: shareBtnScale.value }],
+  }));
+
+  const animatedEditBtnStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: editBtnScale.value }],
+  }));
+
+  const animatedDeleteBtnStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: deleteBtnScale.value }],
+  }));
+
+  const animatedSkeletonStyle = useAnimatedStyle(() => ({
+    opacity: skeletonOpacity.value,
+  }));
+
   if (isInitialLoading) {
     return (
       <PremiumScreen>
@@ -307,56 +468,78 @@ export default function ClothingDetailScreen() {
   return (
     <PremiumScreen>
       {/* Absolute Header Navigation Overlay */}
-      <View style={styles.navBarFloatingOverlay}>
-        <TouchableOpacity 
+      <Animated.View style={[styles.navBarFloatingOverlay, animatedNavBarStyle]}>
+        <Pressable 
+          onPressIn={() => { backBtnScale.value = withSpring(0.9, SPRING_CONFIG); }}
+          onPressOut={() => { backBtnScale.value = withSpring(1, SPRING_CONFIG); }}
           style={styles.navCircleActionButton} 
           onPress={() => {
             console.log("[Navigation] Returning control focus back to home closet context.");
             router.replace({ pathname: '/(tabs)/closet', params: { refresh: `back-${Date.now()}` } });
           }}
-          activeOpacity={0.8}
         >
-          <Ionicons name="arrow-back" size={20} color="#1C1917" />
-        </TouchableOpacity>
+          <Animated.View style={animatedBackBtnStyle}>
+            <Ionicons name="arrow-back" size={20} color="#1C1917" />
+          </Animated.View>
+        </Pressable>
         
         <View style={styles.navActionRightBlock}>
-          <TouchableOpacity 
+          <Pressable 
+            onPressIn={() => { favBtnScale.value = withSpring(0.9, SPRING_CONFIG); }}
+            onPressOut={() => { favBtnScale.value = withSpring(1, SPRING_CONFIG); }}
             style={styles.navCircleActionButton} 
-            activeOpacity={0.8}
             onPress={handleToggleFavorite}
             disabled={isFavoriteLoading}
           >
-            <Ionicons 
-              name={garment.is_favorite ? "heart" : "heart-outline"} 
-              size={20} 
-              color={garment.is_favorite ? "#DC2626" : "#1C1917"} 
-            />
-          </TouchableOpacity>
-          <TouchableOpacity 
+            <Animated.View style={animatedFavBtnStyle}>
+              <Ionicons 
+                name={garment.is_favorite ? "heart" : "heart-outline"} 
+                size={20} 
+                color={garment.is_favorite ? "#DC2626" : "#1C1917"} 
+              />
+            </Animated.View>
+          </Pressable>
+          
+          <Pressable 
+            onPressIn={() => { shareBtnScale.value = withSpring(0.9, SPRING_CONFIG); }}
+            onPressOut={() => { shareBtnScale.value = withSpring(1, SPRING_CONFIG); }}
             style={styles.navCircleActionButton} 
-            activeOpacity={0.8}
             onPress={handleNativeShare}
           >
-            <Ionicons name="share-social-outline" size={20} color="#1C1917" />
-          </TouchableOpacity>
+            <Animated.View style={animatedShareBtnStyle}>
+              <Ionicons name="share-social-outline" size={20} color="#1C1917" />
+            </Animated.View>
+          </Pressable>
         </View>
-      </View>
+      </Animated.View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollLayout}>
         {/* Core Hero Showcase Image Framework */}
-        <View style={styles.heroImageFrame}>
+        <Animated.View style={[styles.heroImageFrame, animatedHeroStyle]}>
           {garment.image ? (
-            <Image source={{ uri: garment.image }} style={styles.garmentCoverImage} />
+            <>
+              <Image 
+                source={{ uri: garment.image }} 
+                style={styles.garmentCoverImage} 
+                onLoadEnd={handleImageLoadComplete}
+              />
+              {/* Premium image loading skeleton overlay */}
+              {isImageLoading && (
+                <Animated.View style={[StyleSheet.absoluteFillObject, styles.placeholderGraphicContainer, animatedSkeletonStyle]}>
+                  <ActivityIndicator size="small" color="#78716C" />
+                </Animated.View>
+              )}
+            </>
           ) : (
             <View style={[styles.garmentCoverImage, styles.placeholderGraphicContainer]}>
               <Ionicons name="shirt-outline" size={48} color="#A8A29E" />
             </View>
           )}
-        </View>
+        </Animated.View>
 
         {/* Informational Presentation Shell */}
         <View style={styles.detailCardBody}>
-          <View style={styles.identityHeaderRow}>
+          <Animated.View style={[styles.identityHeaderRow, animatedHeaderStyle]}>
             <SectionHeader
               title={garment.name}
               subtitle={garment.brand}
@@ -365,14 +548,16 @@ export default function ClothingDetailScreen() {
             <View style={styles.categoryBadgeContainer}>
               <Text style={styles.categoryBadgeText}>{garment.category}</Text>
             </View>
-          </View>
+          </Animated.View>
 
           {/* Attribute Structured Parameters Data Grid */}
           <View style={styles.attributesSection}>
-            <SectionTitle withBottomMargin>Garment Details</SectionTitle>
+            <Animated.View style={animatedSpecsTitleStyle}>
+              <SectionTitle withBottomMargin>Garment Details</SectionTitle>
+            </Animated.View>
             
             <View style={styles.attributesSpecificationGrid}>
-              <View style={styles.gridAttributeCell}>
+              <Animated.View style={[styles.gridAttributeCell, animatedCardOneStyle]}>
                 <Text style={styles.attributeLabelText}>Color</Text>
                 <View style={styles.colorIndicatorRow}>
                   <View 
@@ -385,45 +570,51 @@ export default function ClothingDetailScreen() {
                     {garment.color.startsWith('#') ? garment.color.toUpperCase() : garment.color}
                   </Text>
                 </View>
-              </View>
+              </Animated.View>
 
-              <View style={styles.gridAttributeCell}>
+              <Animated.View style={[styles.gridAttributeCell, animatedCardTwoStyle]}>
                 <Text style={styles.attributeLabelText}>Catalog ID</Text>
                 <Text style={styles.attributeValueText} numberOfLines={1}>
                   #{garment.id ? garment.id.toString().substring(0, 8) : 'N/A'}
                 </Text>
-              </View>
+              </Animated.View>
             </View>
           </View>
 
           {/* Destructive Control Management Button Group Shelf */}
-          <View style={styles.actionButtonGroupHorizontalRow}>
-            <TouchableOpacity 
+          <Animated.View style={[styles.actionButtonGroupHorizontalRow, animatedButtonsStyle]}>
+            <Pressable 
+              onPressIn={() => { editBtnScale.value = withSpring(0.96, SPRING_CONFIG); }}
+              onPressOut={() => { editBtnScale.value = withSpring(1, SPRING_CONFIG); }}
               style={styles.secondaryOutlineActionButton} 
-              activeOpacity={0.7}
               onPress={handleNavigateEdit}
               disabled={isDeleting}
             >
-              <Ionicons name="create-outline" size={16} color="#1C1917" style={styles.actionButtonIconStyle} />
-              <Text style={styles.secondaryButtonLabelText}>Edit Item</Text>
-            </TouchableOpacity>
+              <Animated.View style={[styles.buttonInnerRow, animatedEditBtnStyle]}>
+                <Ionicons name="create-outline" size={16} color="#1C1917" style={styles.actionButtonIconStyle} />
+                <Text style={styles.secondaryButtonLabelText}>Edit Item</Text>
+              </Animated.View>
+            </Pressable>
 
-            <TouchableOpacity 
+            <Pressable 
+              onPressIn={() => { deleteBtnScale.value = withSpring(0.96, SPRING_CONFIG); }}
+              onPressOut={() => { deleteBtnScale.value = withSpring(1, SPRING_CONFIG); }}
               style={[styles.destructiveOutlineActionButton, isDeleting && styles.disabledActionOpacity]} 
-              activeOpacity={0.7}
               onPress={handleExecuteDelete}
               disabled={isDeleting}
             >
-              {isDeleting ? (
-                <ActivityIndicator size="small" color="#DC2626" />
-              ) : (
-                <>
-                  <Ionicons name="trash-outline" size={16} color="#DC2626" style={styles.actionButtonIconStyle} />
-                  <Text style={styles.destructiveButtonLabelText}>Delete</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
+              <Animated.View style={[styles.buttonInnerRow, animatedDeleteBtnStyle]}>
+                {isDeleting ? (
+                  <ActivityIndicator size="small" color="#DC2626" />
+                ) : (
+                  <>
+                    <Ionicons name="trash-outline" size={16} color="#DC2626" style={styles.actionButtonIconStyle} />
+                    <Text style={styles.destructiveButtonLabelText}>Delete</Text>
+                  </>
+                )}
+              </Animated.View>
+            </Pressable>
+          </Animated.View>
         </View>
       </ScrollView>
     </PremiumScreen>
@@ -562,16 +753,20 @@ const styles = StyleSheet.create({
     gap: 12,
     marginTop: 8,
   },
+  buttonInnerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    height: '100%',
+  },
   secondaryOutlineActionButton: {
     flex: 1,
-    flexDirection: 'row',
     height: 48,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#E7E5E4',
     backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   secondaryButtonLabelText: {
     fontSize: 14,
@@ -580,14 +775,11 @@ const styles = StyleSheet.create({
   },
   destructiveOutlineActionButton: {
     flex: 1,
-    flexDirection: 'row',
     height: 48,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#FCA5A5',
     backgroundColor: '#FFF5F5',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   destructiveButtonLabelText: {
     fontSize: 14,

@@ -1,42 +1,139 @@
-import React from 'react';
-import { StyleSheet, Text, View, Dimensions } from 'react-native';
+import React, { useEffect } from 'react';
+import { StyleSheet, Text, View, Dimensions, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
-import { PremiumTouchable } from '../../components/ui/PremiumTouchable';
+
+// React Native Reanimated 3
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSpring,
+  withDelay,
+} from 'react-native-reanimated';
 
 const { width } = Dimensions.get('window');
+
+// Premium calibration spring physics
+const PREMIUM_SPRING = {
+  damping: 18,
+  stiffness: 100,
+  mass: 0.8,
+};
 
 export default function PlannerScreen() {
   const router = useRouter();
 
+  // Animation Shared Values
+  const canvasOpacity = useSharedValue(0);
+  const canvasScale = useSharedValue(0.85);
+  const ornamentScaleX = useSharedValue(0.2);
+
+  const titleOpacity = useSharedValue(0);
+  const titleTranslateY = useSharedValue(20);
+
+  const subtitleOpacity = useSharedValue(0);
+  const subtitleTranslateY = useSharedValue(15);
+
+  const buttonOpacity = useSharedValue(0);
+  const buttonTranslateY = useSharedValue(20);
+  const buttonPressScale = useSharedValue(1);
+
+  useEffect(() => {
+    // 1. Graphic Canvas Entrance
+    canvasOpacity.value = withTiming(1, { duration: 600 });
+    canvasScale.value = withSpring(1, PREMIUM_SPRING);
+
+    // Ornament line expands elegantly once canvas finishes initial arrival
+    ornamentScaleX.value = withDelay(400, withSpring(1, { damping: 15, stiffness: 80 }));
+
+    // 2. Title Entrance
+    titleOpacity.value = withDelay(200, withTiming(1, { duration: 600 }));
+    titleTranslateY.value = withDelay(200, withSpring(0, PREMIUM_SPRING));
+
+    // 3. Subtitle Entrance
+    subtitleOpacity.value = withDelay(350, withTiming(1, { duration: 600 }));
+    subtitleTranslateY.value = withDelay(350, withSpring(0, PREMIUM_SPRING));
+
+    // 4. Action Button Entrance
+    buttonOpacity.value = withDelay(500, withTiming(1, { duration: 600 }));
+    buttonTranslateY.value = withDelay(500, withSpring(0, PREMIUM_SPRING));
+  }, []);
+
+  // Animated Styles
+  const animatedCanvasStyle = useAnimatedStyle(() => ({
+    opacity: canvasOpacity.value,
+    transform: [{ scale: canvasScale.value }],
+  }));
+
+  const animatedOrnamentStyle = useAnimatedStyle(() => ({
+    transform: [{ scaleX: ornamentScaleX.value }],
+  }));
+
+  const animatedTitleStyle = useAnimatedStyle(() => ({
+    opacity: titleOpacity.value,
+    transform: [{ translateY: titleTranslateY.value }],
+  }));
+
+  const animatedSubtitleStyle = useAnimatedStyle(() => ({
+    opacity: subtitleOpacity.value,
+    transform: [{ translateY: subtitleTranslateY.value }],
+  }));
+
+  const animatedButtonStyle = useAnimatedStyle(() => ({
+    opacity: buttonOpacity.value,
+    transform: [
+      { translateY: buttonTranslateY.value },
+      { scale: buttonPressScale.value },
+    ],
+  }));
+
+  // Tactile touch handlers
+  const handlePressIn = () => {
+    buttonPressScale.value = withSpring(0.96, { damping: 12, stiffness: 150 });
+  };
+
+  const handlePressOut = () => {
+    buttonPressScale.value = withSpring(1, PREMIUM_SPRING);
+  };
+
   return (
     <PremiumScreen>
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        {/* Illustration Canvas Grid */}
         <View style={styles.illustrationFrame}>
-          <View style={styles.abstractCanvasGraphic}>
+          <Animated.View style={[styles.abstractCanvasGraphic, animatedCanvasStyle]}>
             <MaterialCommunityIcons name="calendar-blank-outline" size={64} color="#1C1917" />
-            <View style={styles.accentOrnamentLine} />
-          </View>
+            <Animated.View style={[styles.accentOrnamentLine, animatedOrnamentStyle]} />
+          </Animated.View>
         </View>
 
+        {/* Messaging Text block */}
         <View style={styles.textContainer}>
-          <Text style={styles.editorialTitleText}>Plan what to wear</Text>
-          <Text style={styles.editorialSubtitleText}>
-            Schedule outfits directly from your calendar.
-          </Text>
+          <Animated.View style={animatedTitleStyle}>
+            <Text style={styles.editorialTitleText}>Plan what to wear</Text>
+          </Animated.View>
+          
+          <Animated.View style={animatedSubtitleStyle}>
+            <Text style={styles.editorialSubtitleText}>
+              Schedule outfits directly from your calendar.
+            </Text>
+          </Animated.View>
         </View>
 
-        <View style={styles.actionContainer}>
-          <PremiumTouchable 
-            style={styles.primaryPremiumButton}
-            activeOpacity={0.85}
+        {/* Action Button Segment */}
+        <Animated.View style={[styles.actionContainer, animatedButtonStyle]}>
+          <Pressable
+            onPressIn={handlePressIn}
+            onPressOut={handlePressOut}
             onPress={() => router.push('/onboarding/ai-preview')}
+            style={styles.primaryPremiumButton}
           >
             <Text style={styles.primaryButtonText}>Continue</Text>
-          </PremiumTouchable>
-        </View>
+          </Pressable>
+        </Animated.View>
       </SafeAreaView>
     </PremiumScreen>
   );

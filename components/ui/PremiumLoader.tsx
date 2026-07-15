@@ -17,43 +17,84 @@ export const PremiumLoader: React.FC<PremiumLoaderProps> = ({
   fullscreen = false,
 }) => {
   const pulseAnim = useRef(new Animated.Value(0)).current;
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+  const breathAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const animation = Animated.loop(
+    // Breathing/Pulse Loop
+    Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
           toValue: 1,
-          duration: 1600,
-          easing: Easing.bezier(0.25, 1, 0.5, 1), // Premium ease-out
+          duration: 2500,
+          easing: Easing.bezier(0.445, 0.05, 0.55, 0.95),
           useNativeDriver: true,
         }),
         Animated.timing(pulseAnim, {
           toValue: 0,
-          duration: 1400,
-          easing: Easing.bezier(0.33, 0, 0.67, 1), // Calm ease-in-out
+          duration: 2500,
+          easing: Easing.bezier(0.445, 0.05, 0.55, 0.95),
           useNativeDriver: true,
         }),
       ])
-    );
+    ).start();
 
-    animation.start();
-    return () => animation.stop();
-  }, [pulseAnim]);
+    // Shimmer Loop
+    Animated.loop(
+      Animated.timing(shimmerAnim, {
+        toValue: 1,
+        duration: 2000,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    ).start();
 
-  // Subtle architectural micro-interactions
+    // Subtle breathing for label/y-axis
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(breathAnim, {
+          toValue: 1,
+          duration: 3000,
+          easing: Easing.bezier(0.445, 0.05, 0.55, 0.95),
+          useNativeDriver: true,
+        }),
+        Animated.timing(breathAnim, {
+          toValue: 0,
+          duration: 3000,
+          easing: Easing.bezier(0.445, 0.05, 0.55, 0.95),
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+    return () => {
+      pulseAnim.stopAnimation();
+      shimmerAnim.stopAnimation();
+      breathAnim.stopAnimation();
+    };
+  }, [pulseAnim, shimmerAnim, breathAnim]);
+
+  // Interpolations
   const trackScaleX = pulseAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.6, 1.05],
+    outputRange: [0.8, 1.2],
   });
-
-  const trackOpacity = pulseAnim.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [0.25, 0.8, 0.4],
-  });
-
-  const labelOpacity = pulseAnim.interpolate({
+  const trackScaleY = pulseAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.4, 0.7],
+    outputRange: [1, 1.5],
+  });
+  const trackOpacity = pulseAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.3, 0.7],
+  });
+
+  const shimmerTranslateX = shimmerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-50, 50],
+  });
+
+  const labelTranslateY = breathAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 2],
   });
 
   return (
@@ -71,17 +112,37 @@ export const PremiumLoader: React.FC<PremiumLoaderProps> = ({
             {
               backgroundColor: colors.primary,
               opacity: trackOpacity,
-              transform: [{ scaleX: trackScaleX }],
+              transform: [
+                { scaleX: trackScaleX },
+                { scaleY: trackScaleY }
+              ],
+              shadowColor: colors.primary,
+              shadowOffset: { width: 0, height: 0 },
+              shadowOpacity: 0.5,
+              shadowRadius: 4,
+              elevation: 4,
             },
           ]}
-        />
+        >
+          {/* Shimmer Highlight */}
+          <Animated.View
+            style={[
+              styles.shimmer,
+              { transform: [{ translateX: shimmerTranslateX }] }
+            ]}
+          />
+        </Animated.View>
       </View>
 
       {label && (
         <Animated.Text
           style={[
             styles.editorialLabel,
-            { color: colors.secondaryText, marginTop: spacing.md, opacity: labelOpacity },
+            {
+              color: colors.secondaryText,
+              marginTop: spacing.md,
+              transform: [{ translateY: labelTranslateY }],
+            },
           ]}
         >
           {label}
@@ -102,8 +163,8 @@ const styles = StyleSheet.create({
     zIndex: 999,
   },
   trackWrapper: {
-    width: 48,
-    height: 1,
+    width: 60,
+    height: 2,
     overflow: 'hidden',
     backgroundColor: 'transparent',
     justifyContent: 'center',
@@ -112,6 +173,14 @@ const styles = StyleSheet.create({
   indicatorTrack: {
     width: '100%',
     height: '100%',
+    borderRadius: 1,
+  },
+  shimmer: {
+    position: 'absolute',
+    width: '40%',
+    height: '200%',
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    opacity: 0.5,
   },
   editorialLabel: {
     fontSize: 10,

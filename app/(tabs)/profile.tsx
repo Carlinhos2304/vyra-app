@@ -4,13 +4,12 @@ import {
   Text,
   View,
   ScrollView,
-  TouchableOpacity,
+  Pressable,
   Image,
   Switch,
   Dimensions,
   Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
@@ -21,6 +20,16 @@ import { useNotifications } from '../../hooks/useNotifications';
 
 // Supabase client instance integration
 import { supabase } from '../../lib/supabase';
+
+// React Native Reanimated v4 Integrations
+import Animated, { 
+  useSharedValue, 
+  useAnimatedStyle, 
+  withTiming, 
+  withDelay, 
+  withSpring,
+  Easing 
+} from 'react-native-reanimated';
 
 const { width } = Dimensions.get('window');
 
@@ -34,7 +43,6 @@ interface UserProfileState {
   email: string;
 }
 
-// Fixed: Defined the missing static menu architecture constant
 const MENU_SECTIONS = [
   {
     title: 'My Activity',
@@ -63,17 +71,119 @@ export default function ProfileScreen() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const { syncNotifications } = useNotifications();
   
-  // State variables for managing loading, error, and profile parameters
   const [profile, setProfile] = useState<UserProfileState | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Asynchronous database aggregate metrics states
   const [garmentsCount, setGarmentsCount] = useState<number>(0);
   const [favoritesCount, setFavoritesCount] = useState<number>(0);
   const [outfitsCount, setOutfitsCount] = useState<number>(0);
   const [weeklyCount, setWeeklyCount] = useState<number>(0);
   const [stylePreferences, setStylePreferences] = useState<string[]>([]);
+
+  // ==========================================
+  // ANIMATION SETUP (Reanimated Shared Values)
+  // ==========================================
+  const screenOpacity = useSharedValue(0);
+  const screenTranslateY = useSharedValue(20);
+
+  const logoScale = useSharedValue(0.9);
+  const logoOpacity = useSharedValue(0);
+
+  const nameOpacity = useSharedValue(0);
+  const nameTranslateY = useSharedValue(15);
+
+  const statsOpacity = useSharedValue(0);
+  const statsTranslateY = useSharedValue(15);
+
+  const tagsOpacity = useSharedValue(0);
+  const tagsTranslateY = useSharedValue(15);
+
+  const menuOpacity = useSharedValue(0);
+  const menuTranslateY = useSharedValue(15);
+
+  const footerOpacity = useSharedValue(0);
+  const footerTranslateY = useSharedValue(15);
+
+  // Press interaction scales
+  const settingsBtnScale = useSharedValue(1);
+  const retryBtnScale = useSharedValue(1);
+
+  // Trigger entering animations once mounted
+  const runEntranceAnimations = () => {
+    const easeOutCubic = Easing.out(Easing.cubic);
+
+    // 1. Entire screen transition
+    screenOpacity.value = withTiming(1, { duration: 600, easing: easeOutCubic });
+    screenTranslateY.value = withTiming(0, { duration: 600, easing: easeOutCubic });
+
+    // 2. Logo / Hero zoom
+    logoScale.value = withDelay(150, withTiming(1, { duration: 500, easing: easeOutCubic }));
+    logoOpacity.value = withDelay(150, withTiming(1, { duration: 500, easing: easeOutCubic }));
+
+    // 3. Staggered Text Blocks (+80ms increments)
+    nameOpacity.value = withDelay(230, withTiming(1, { duration: 500, easing: easeOutCubic }));
+    nameTranslateY.value = withDelay(230, withTiming(0, { duration: 500, easing: easeOutCubic }));
+
+    statsOpacity.value = withDelay(310, withTiming(1, { duration: 500, easing: easeOutCubic }));
+    statsTranslateY.value = withDelay(310, withTiming(0, { duration: 500, easing: easeOutCubic }));
+
+    tagsOpacity.value = withDelay(390, withTiming(1, { duration: 500, easing: easeOutCubic }));
+    tagsTranslateY.value = withDelay(390, withTiming(0, { duration: 500, easing: easeOutCubic }));
+
+    menuOpacity.value = withDelay(470, withTiming(1, { duration: 500, easing: easeOutCubic }));
+    menuTranslateY.value = withDelay(470, withTiming(0, { duration: 500, easing: easeOutCubic }));
+
+    // 4. Primary Footer / App Detail Elements
+    footerOpacity.value = withDelay(550, withTiming(1, { duration: 500, easing: easeOutCubic }));
+    footerTranslateY.value = withDelay(550, withTiming(0, { duration: 500, easing: easeOutCubic }));
+  };
+
+  // ==========================================
+  // ANIMATED STYLE SHEETS
+  // ==========================================
+  const animatedScreenStyle = useAnimatedStyle(() => ({
+    opacity: screenOpacity.value,
+    transform: [{ translateY: screenTranslateY.value }],
+  }));
+
+  const animatedLogoStyle = useAnimatedStyle(() => ({
+    opacity: logoOpacity.value,
+    transform: [{ scale: logoScale.value }],
+  }));
+
+  const animatedNameStyle = useAnimatedStyle(() => ({
+    opacity: nameOpacity.value,
+    transform: [{ translateY: nameTranslateY.value }],
+  }));
+
+  const animatedStatsStyle = useAnimatedStyle(() => ({
+    opacity: statsOpacity.value,
+    transform: [{ translateY: statsTranslateY.value }],
+  }));
+
+  const animatedTagsStyle = useAnimatedStyle(() => ({
+    opacity: tagsOpacity.value,
+    transform: [{ translateY: tagsTranslateY.value }],
+  }));
+
+  const animatedMenuStyle = useAnimatedStyle(() => ({
+    opacity: menuOpacity.value,
+    transform: [{ translateY: menuTranslateY.value }],
+  }));
+
+  const animatedFooterStyle = useAnimatedStyle(() => ({
+    opacity: footerOpacity.value,
+    transform: [{ translateY: footerTranslateY.value }],
+  }));
+
+  const animatedSettingsBtnStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: settingsBtnScale.value }],
+  }));
+
+  const animatedRetryBtnStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: retryBtnScale.value }],
+  }));
 
   const fetchActiveUserProfileAndMetrics = async () => {
     try {
@@ -81,7 +191,6 @@ export default function ProfileScreen() {
       setError(null);
       console.log('[Profile Sync] Resolving secure active authentication token...');
 
-      // 1. Fetch current authenticated identity context parameters
       const { data: { user }, error: authError } = await supabase.auth.getUser();
 
       if (authError || !user) {
@@ -91,10 +200,6 @@ export default function ProfileScreen() {
         return;
       }
 
-      console.log(`[Profile Sync Data] Token verification pass. User ID target resolved: ${user.id}`);
-      console.log(`[Profile Sync Data] Querying database record where public.profiles.id = ${user.id}`);
-
-      // 2. Fetch profile data from database matching user identity token coordinates
       const { data: dbProfile, error: dbError } = await supabase
         .from('profiles')
         .select('*')
@@ -102,15 +207,11 @@ export default function ProfileScreen() {
         .single();
 
       if (dbError) {
-        console.error('[Profile Sync Database Failure] Query returned a bad schema response:', dbError);
         throw dbError;
       }
 
       setNotificationsEnabled(dbProfile?.notifications_enabled || false);
 
-      console.log('[Profile Sync Complete] Payload matched. Username:', dbProfile?.username);
-      
-      // Merge secure auth credentials metadata with public profiles relational record
       setProfile({
         id: user.id,
         username: dbProfile?.username || 'Vyra Curator',
@@ -121,52 +222,40 @@ export default function ProfileScreen() {
         email: user.email || 'unassigned@vyra.app',
       });
 
-      // 3. System Statistics Queries execution pipeline
-      console.log('[Statistics Async Engine] Launching parallel analytical aggregation sequences...');
-
-      // A. Calculate Total Garments Count
-      const { count: totalGarments, error: garmentsErr } = await supabase
+      // Stats Queries execution pipeline
+      const { count: totalGarments } = await supabase
         .from('clothing_items')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user.id);
-
-      if (garmentsErr) console.error('[Stats Failure] Total garments count trace failed:', garmentsErr);
+      
       const stableGarmentsCount = totalGarments || 0;
       setGarmentsCount(stableGarmentsCount);
 
-      // B. Calculate Favorites Count
-      const { count: totalFavorites, error: favoritesErr } = await supabase
+      const { count: totalFavorites } = await supabase
         .from('clothing_items')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user.id)
         .eq('is_favorite', true);
 
-      if (favoritesErr) console.error('[Stats Failure] Favorites count trace failed:', favoritesErr);
       setFavoritesCount(totalFavorites || 0);
 
-      // C. Calculate Items Catalogued This Week (Past 7 Days rolling)
       const sevenDaysAgoISO = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-      const { count: recentGarments, error: weeklyErr } = await supabase
+      const { count: recentGarments } = await supabase
         .from('clothing_items')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user.id)
         .gte('created_at', sevenDaysAgoISO);
 
-      if (weeklyErr) console.error('[Stats Failure] Weekly accumulation trace failed:', weeklyErr);
       setWeeklyCount(recentGarments || 0);
 
-      // D. Outfits Aggregator Integration Hook
-      const { count: totalOutfits, error: outfitsErr } = await supabase
+      const { count: totalOutfits } = await supabase
         .from('outfits')
         .select('*', { count: 'exact', head: true })
-          .eq('user_id', user.id);
+        .eq('user_id', user.id);
 
-      if (outfitsErr) console.error('[Stats Failure] Outfits count trace failed:', outfitsErr);
       setOutfitsCount(totalOutfits || 0);
 
-      // E. Dynamic Style Profile Preference Chip Engine Generation
       if (stableGarmentsCount > 0) {
-        console.log('[Style Analyzer Engine] Wardrobe entries identified. Processing tag distribution weights...');
         const { data: garmentPool, error: poolErr } = await supabase
           .from('clothing_items')
           .select('category, tags')
@@ -174,22 +263,20 @@ export default function ProfileScreen() {
 
         if (!poolErr && garmentPool) {
           const contentMap: { [key: string]: number } = {};
-          
-          let garmentPoolIter = garmentPool;
-          garmentPoolIter.forEach(item => {
+          garmentPool.forEach(item => {
             if (item.category) {
-              contentMap[item.category] = (contentMap[item.category] || 0) + 2; // Category weights
+              contentMap[item.category] = (contentMap[item.category] || 0) + 2;
             }
             if (item.tags && Array.isArray(item.tags)) {
               item.tags.forEach((tag: string) => {
-                contentMap[tag] = (contentMap[tag] || 0) + 1; // Explicit user tags weight
+                contentMap[tag] = (contentMap[tag] || 0) + 1;
               });
             }
           });
 
           const sortedPreferences = Object.keys(contentMap)
             .sort((a, b) => contentMap[b] - contentMap[a])
-            .slice(0, 4); // Capture topmost unique identifiers
+            .slice(0, 4);
 
           setStylePreferences(sortedPreferences.length > 0 ? sortedPreferences : ['Wardrobe Fresh']);
         } else {
@@ -199,7 +286,8 @@ export default function ProfileScreen() {
         setStylePreferences([]);
       }
 
-      console.log(`[Statistics Diagnostics] Complete metrics loaded: Garments: ${stableGarmentsCount}, Favorites: ${totalFavorites || 0}, Weekly: ${recentGarments || 0}, Outfits: ${totalOutfits || 0}`);
+      // Fire entrance animations as soon as data loading has succeeded
+      runEntranceAnimations();
 
     } catch (err: any) {
       console.error('[Profile Processing Breakdown Exception]:', err);
@@ -214,29 +302,20 @@ export default function ProfileScreen() {
   }, []);
 
   const handleSystemSignOutRequest = () => {
-    console.log('[Logout Flow] User initiated sign out request confirmation sequence.');
     Alert.alert(
       'Log Out Account',
       'Are you sure you want to log out of your Vyra profile session?',
       [
-        { text: 'Cancel', style: 'cancel', onPress: () => console.log('[Logout Flow] Request cancelled by user.') },
+        { text: 'Cancel', style: 'cancel' },
         { 
           text: 'Log Out', 
           style: 'destructive',
           onPress: async () => {
             try {
-              console.log('[Logout Flow] Access token eviction sequence executed. Clearing cookies...');
               const { error: logOutError } = await supabase.auth.signOut();
-              
-              if (logOutError) {
-                console.error('[Logout Flow] Supabase auth subsystem rejected signOut request:', logOutError);
-                throw logOutError;
-              }
-              
-              console.log('[Logout Flow] Eviction success. Breaking down router state. Hard redirecting view...');
+              if (logOutError) throw logOutError;
               router.replace('/auth/login');
             } catch (err: any) {
-              console.error('[Logout Flow] Crash detected during terminal exit execution pipeline:', err);
               Alert.alert('Session Error', 'An unexpected error occurred while processing your log-out request.');
             }
           }
@@ -247,7 +326,6 @@ export default function ProfileScreen() {
 
   const handleToggleNotifications = async (value: boolean) => {
     setNotificationsEnabled(value);
-
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -258,12 +336,10 @@ export default function ProfileScreen() {
         .eq('id', user.id);
 
       if (error) throw error;
-
       await syncNotifications(value);
     } catch (err) {
-      console.error('Error toggling notifications:', err);
       Alert.alert('Error', 'Could not update notification settings.');
-      setNotificationsEnabled(!value); // Rollback
+      setNotificationsEnabled(!value);
     }
   };
 
@@ -275,10 +351,7 @@ export default function ProfileScreen() {
     } else if (item.id === 'favs') {
       router.push('/profile/favorites');
     } else if (item.id === 'history') {
-      // Routed link implementation matching file destination coordinates
       router.push('/profile/history');
-    } else {
-      console.log(`Navigation link processing redirected for action item: ${item.label}`);
     }
   };
 
@@ -312,138 +385,161 @@ export default function ProfileScreen() {
     <PremiumScreen>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         
-        <View style={styles.headerRow}>
-          <SectionHeader 
-            title="Profile" 
-            style={styles.headerFlexOverride}
-          />
-          <TouchableOpacity 
-            style={styles.settingsIconButton} 
-            activeOpacity={0.7}
-            onPress={() => console.log('Settings Interaction Link Activated')}
-          >
-            <Ionicons name="settings-outline" size={22} color="#1C1917" />
-          </TouchableOpacity>
-        </View>
-
-        {isLoading ? (
-          <View style={styles.stateCenterLoaderFrame}>
-            <PremiumLoader label="Syncing profile files..." />
+        {/* Main Content Animated Assembly Area */}
+        <Animated.View style={[styles.mainLayoutWrapper, animatedScreenStyle]}>
+          
+          <View style={styles.headerRow}>
+            <SectionHeader 
+              title="Profile" 
+              style={styles.headerFlexOverride}
+            />
+            {/* Settings button with spring interactive gesture scaling */}
+            <Pressable 
+              style={styles.settingsIconButton} 
+              onPressIn={() => { settingsBtnScale.value = withSpring(0.92); }}
+              onPressOut={() => { settingsBtnScale.value = withSpring(1); }}
+              onPress={() => console.log('Settings Interaction Link Activated')}
+            >
+              <Animated.View style={animatedSettingsBtnStyle}>
+                <Ionicons name="settings-outline" size={22} color="#1C1917" />
+              </Animated.View>
+            </Pressable>
           </View>
-        ) : error ? (
-          <View style={styles.stateCenterLoaderFrame}>
-            <MaterialCommunityIcons name="cloud-off-outline" size={32} color="#EF4444" />
-            <Text style={styles.errorHeaderTypography}>Profile Load Fault</Text>
-            <Text style={styles.errorSubTypography}>{error}</Text>
-            <TouchableOpacity style={styles.retryControlActionButton} onPress={fetchActiveUserProfileAndMetrics}>
-              <Text style={styles.retryButtonLabelText}>Retry Connection</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <>
-            <View style={styles.profileHero}>
-              <Image
-                source={resolveProfileAvatarSource()}
-                style={styles.avatarImage}
-              />
-              <Text style={styles.profileName}>{profile?.username}</Text>
-              <Text style={styles.profileEmail}>{profile?.email}</Text>
-            </View>
 
-            <View style={styles.statsRowGrid}>
-              {DYNAMIC_STATS.map((stat) => (
-                <View key={stat.id} style={styles.statMiniCard}>
-                  <MaterialCommunityIcons name={stat.icon as any} size={20} color="#78716C" style={styles.statIcon} />
-                  <Text style={styles.statValueText}>{stat.value}</Text>
-                  <Text style={styles.statLabelText}>{stat.label}</Text>
-                </View>
-              ))}
+          {isLoading ? (
+            <View style={styles.stateCenterLoaderFrame}>
+              <PremiumLoader label="Syncing profile files..." />
             </View>
+          ) : error ? (
+            <View style={styles.stateCenterLoaderFrame}>
+              <MaterialCommunityIcons name="cloud-off-outline" size={32} color="#EF4444" />
+              <Text style={styles.errorHeaderTypography}>Profile Load Fault</Text>
+              <Text style={styles.errorSubTypography}>{error}</Text>
+              
+              <Pressable 
+                style={styles.retryControlActionButton} 
+                onPressIn={() => { retryBtnScale.value = withSpring(0.95); }}
+                onPressOut={() => { retryBtnScale.value = withSpring(1); }}
+                onPress={fetchActiveUserProfileAndMetrics}
+              >
+                <Animated.View style={animatedRetryBtnStyle}>
+                  <Text style={styles.retryButtonLabelText}>Retry Connection</Text>
+                </Animated.View>
+              </Pressable>
+            </View>
+          ) : (
+            <>
+              {/* Profile Hero Zoom Card */}
+              <Animated.View style={[styles.profileHero, animatedLogoStyle]}>
+                <Image
+                  source={resolveProfileAvatarSource()}
+                  style={styles.avatarImage}
+                />
+                <Animated.View style={[styles.metaTextWrapper, animatedNameStyle]}>
+                  <Text style={styles.profileName}>{profile?.username}</Text>
+                  <Text style={styles.profileEmail}>{profile?.email}</Text>
+                </Animated.View>
+              </Animated.View>
 
-            <View style={styles.sectionBlock}>
-              <SectionTitle withBottomMargin>Style Preferences</SectionTitle>
-              <View style={styles.tagsContainerRow}>
-                {stylePreferences.length > 0 ? (
-                  stylePreferences.map((preference, index) => (
-                    <View key={index} style={styles.preferenceTagBadge}>
-                      <Text style={styles.preferenceTagText}>{preference}</Text>
-                    </View>
-                  ))
-                ) : (
-                  <View style={styles.emptyPreferencesTagBadge}>
-                    <Text style={styles.emptyPreferencesTagText}>No style profile generated yet</Text>
+              {/* Dynamic Stats Row Grid */}
+              <Animated.View style={[styles.statsRowGrid, animatedStatsStyle]}>
+                {DYNAMIC_STATS.map((stat) => (
+                  <View key={stat.id} style={styles.statMiniCard}>
+                    <MaterialCommunityIcons name={stat.icon as any} size={20} color="#78716C" style={styles.statIcon} />
+                    <Text style={styles.statValueText}>{stat.value}</Text>
+                    <Text style={styles.statLabelText}>{stat.label}</Text>
                   </View>
-                )}
-              </View>
-            </View>
+                ))}
+              </Animated.View>
 
-            {DYNAMIC_MENU_SECTIONS.map((section, sectionIdx) => (
-              <View key={sectionIdx} style={styles.sectionBlock}>
-                <SectionTitle withBottomMargin>{section.title}</SectionTitle>
-                <View style={styles.menuGroupCard}>
-                  {section.items.map((item, itemIdx) => {
-                    const isLastItem = itemIdx === section.items.length - 1;
-                    return (
-                      <View key={item.id}>
-                        <TouchableOpacity
-                          activeOpacity={item.type === 'toggle' ? 1 : 0.7}
-                          style={styles.menuRowItem}
-                          onPress={() => handleItemNavigationTriggers(item)}
-                        >
-                          <View style={styles.menuRowLeftBlock}>
-                            <MaterialCommunityIcons
-                              name={item.icon as any}
-                              size={20}
-                              color={item.danger ? '#DC2626' : '#78716C'}
-                              style={styles.menuItemIcon}
-                            />
-                            <Text style={[styles.menuItemLabel, item.danger && styles.dangerItemLabel]}>
-                              {item.label}
-                            </Text>
-                            {item.badge && (
-                              <View style={styles.counterBadge}>
-                                <Text style={styles.counterBadgeText}>{item.badge}</Text>
-                              </View>
-                            )}
-                          </View>
-
-                          {item.type === 'toggle' && (
-                            <Switch
-                              value={item.id === 'notifications' ? notificationsEnabled : isDarkMode}
-                              onValueChange={item.id === 'notifications' ? handleToggleNotifications : setIsDarkMode}
-                              trackColor={{ false: '#D6D3D1', true: '#1C1917' }}
-                              thumbColor="#FFFFFF"
-                              ios_backgroundColor="#D6D3D1"
-                            />
-                          )}
-
-                          {item.type === 'chevron' && (
-                            <Ionicons name="chevron-forward" size={18} color="#78716C" />
-                          )}
-                        </TouchableOpacity>
-                        {!isLastItem && <View style={styles.rowDividerSeparator} />}
+              {/* Style Preferences Section */}
+              <Animated.View style={[styles.sectionBlock, animatedTagsStyle]}>
+                <SectionTitle withBottomMargin>Style Preferences</SectionTitle>
+                <View style={styles.tagsContainerRow}>
+                  {stylePreferences.length > 0 ? (
+                    stylePreferences.map((preference, index) => (
+                      <View key={index} style={styles.preferenceTagBadge}>
+                        <Text style={styles.preferenceTagText}>{preference}</Text>
                       </View>
-                    );
-                  })}
+                    ))
+                  ) : (
+                    <View style={styles.emptyPreferencesTagBadge}>
+                      <Text style={styles.emptyPreferencesTagText}>No style profile generated yet</Text>
+                    </View>
+                  )}
                 </View>
-              </View>
-            ))}
+              </Animated.View>
 
-            <View style={styles.appFooterDetailsContainer}>
-              <Text style={styles.footerBrandText}>VYRA v1.0.0</Text>
-              <Text style={styles.footerSecondaryText}>Made with love for fashion lovers</Text>
-            </View>
-          </>
-        )}
+              {/* Menu Sections Container */}
+              <Animated.View style={[styles.sectionBlock, animatedMenuStyle]}>
+                {DYNAMIC_MENU_SECTIONS.map((section, sectionIdx) => (
+                  <View key={sectionIdx} style={styles.menuSectionSpacer}>
+                    <SectionTitle withBottomMargin>{section.title}</SectionTitle>
+                    <View style={styles.menuGroupCard}>
+                      {section.items.map((item, itemIdx) => {
+                        const isLastItem = itemIdx === section.items.length - 1;
+                        return (
+                          <View key={item.id}>
+                            <Pressable
+                              style={styles.menuRowItem}
+                              onPress={() => handleItemNavigationTriggers(item)}
+                            >
+                              <View style={styles.menuRowLeftBlock}>
+                                <MaterialCommunityIcons
+                                  name={item.icon as any}
+                                  size={20}
+                                  color={item.danger ? '#DC2626' : '#78716C'}
+                                  style={styles.menuItemIcon}
+                                />
+                                <Text style={[styles.menuItemLabel, item.danger && styles.dangerItemLabel]}>
+                                  {item.label}
+                                </Text>
+                                {item.badge && (
+                                  <View style={styles.counterBadge}>
+                                    <Text style={styles.counterBadgeText}>{item.badge}</Text>
+                                  </View>
+                                )}
+                              </View>
+
+                              {item.type === 'toggle' && (
+                                <Switch
+                                  value={item.id === 'notifications' ? notificationsEnabled : isDarkMode}
+                                  onValueChange={item.id === 'notifications' ? handleToggleNotifications : setIsDarkMode}
+                                  trackColor={{ false: '#D6D3D1', true: '#1C1917' }}
+                                  thumbColor="#FFFFFF"
+                                  ios_backgroundColor="#D6D3D1"
+                                />
+                              )}
+
+                              {item.type === 'chevron' && (
+                                <Ionicons name="chevron-forward" size={18} color="#78716C" />
+                              )}
+                            </Pressable>
+                            {!isLastItem && <View style={styles.rowDividerSeparator} />}
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </View>
+                ))}
+              </Animated.View>
+
+              {/* Bottom Layout footer text elements */}
+              <Animated.View style={[styles.appFooterDetailsContainer, animatedFooterStyle]}>
+                <Text style={styles.footerBrandText}>VYRA v1.0.0</Text>
+                <Text style={styles.footerSecondaryText}>Made with love for fashion lovers</Text>
+              </Animated.View>
+            </>
+          )}
+        </Animated.View>
       </ScrollView>
     </PremiumScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  mainLayoutWrapper: {
     flex: 1,
-    backgroundColor: '#FAFAF9',
   },
   scrollContent: {
     paddingBottom: 48,
@@ -467,6 +563,9 @@ const styles = StyleSheet.create({
   profileHero: {
     alignItems: 'center',
     marginBottom: 28,
+  },
+  metaTextWrapper: {
+    alignItems: 'center',
   },
   avatarImage: {
     width: 88,
@@ -523,6 +622,9 @@ const styles = StyleSheet.create({
   },
   sectionBlock: {
     paddingHorizontal: 16,
+    marginBottom: 24,
+  },
+  menuSectionSpacer: {
     marginBottom: 24,
   },
   tagsContainerRow: {

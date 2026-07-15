@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,12 +7,26 @@ import {
   TextInput,
   Image,
   Dimensions,
-  LayoutAnimation,
   Platform,
   UIManager,
   ActivityIndicator,
-  Animated,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  withSequence,
+  FadeInUp,
+  FadeOutDown,
+  Layout,
+  ZoomIn,
+  ZoomOut,
+  SlideInRight,
+  SlideOutRight,
+  interpolate,
+  Extrapolation,
+} from 'react-native-reanimated';
 import { useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
@@ -76,6 +90,9 @@ export default function CreateOutfitScreen() {
   const { mode, outfitId } = useLocalSearchParams<{ mode: string; outfitId: string }>();
   const isEditMode = mode === 'edit' && !!outfitId;
 
+  // Animation Hooks
+  const saveButtonScale = useSharedValue(1);
+
   const [outfitName, setOutfitName] = useState('');
   const [occasion, setOccasion] = useState<string | null>(null);
   
@@ -90,8 +107,12 @@ export default function CreateOutfitScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const successFadeAnim = useRef(new Animated.Value(0)).current;
+  // Removed useRef for fadeAnim and successFadeAnim, as reanimated handles declarative animations
+
+  // Animate the Save button on press
+  const saveButtonStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: saveButtonScale.value }],
+  }));
 
   // Dedicated workflow to scrub inputs and runtime selection cache
   const resetFormState = useCallback(() => {
@@ -104,28 +125,16 @@ export default function CreateOutfitScreen() {
 
   // Track error state transitions to fire smooth fade configurations
   useEffect(() => {
-    if (errorMessage) {
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      fadeAnim.setValue(0);
-    }
+    // Replaced Animated.timing with reanimated's declarative `entering` and `exiting` props
+    // on the Animated.View components for banners.
+    // The previous imperative animation logic for fadeAnim and successFadeAnim is no longer needed.
   }, [errorMessage]);
 
   // Track success state transitions to fire smooth fade configurations
   useEffect(() => {
-    if (successMessage) {
-      Animated.timing(successFadeAnim, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      successFadeAnim.setValue(0);
-    }
+    // Replaced Animated.timing with reanimated's declarative `entering` and `exiting` props
+    // on the Animated.View components for banners.
+    // The previous imperative animation logic for fadeAnim and successFadeAnim is no longer needed.
   }, [successMessage]);
 
   // Dismiss error and success banners automatically when user modifies parameters
@@ -169,7 +178,7 @@ export default function CreateOutfitScreen() {
             try {
               setIsOutfitLoading(true);
               console.log(`[Outfit Edit Engine] Querying deep relations matching public.outfits.id = ${outfitId}`);
-              
+
               const { data: currentOutfit, error: outfitErr } = await supabase
                 .from('outfits')
                 .select(`
@@ -199,7 +208,7 @@ export default function CreateOutfitScreen() {
               if (currentOutfit) {
                 setOutfitName(currentOutfit.name || '');
                 setOccasion(currentOutfit.occasion);
-                
+
                 const rawJunctionItems = currentOutfit.outfit_items || [];
                 const deepParsedGarments: Garment[] = rawJunctionItems
                   .map((junction: any) => junction.clothing_items)
@@ -211,9 +220,9 @@ export default function CreateOutfitScreen() {
             } catch (editFetchErr: any) {
               console.error('[Outfit Edit Engine Error] Query processing collapsed:', editFetchErr);
               setErrorMessage('Failed to pre-populate look profile configurations.');
-            } finally {
+    } finally {
               setIsOutfitLoading(false);
-            }
+    }
           } else if (!isEditMode && isActive) {
             // Clean slate configuration check if swapping context directly from edit to setup
             resetFormState();
@@ -226,15 +235,14 @@ export default function CreateOutfitScreen() {
         } finally {
           if (isActive) setIsLoading(false);
         }
-      };
+  };
 
       fetchInitialDataFlow();
-
       return () => {
         isActive = false;
       };
     }, [isEditMode, outfitId, resetFormState])
-  );
+    );
 
   // Grouped and sorted structure initialization preferred layout matrixes
   const groupedGarments = useMemo(() => {
@@ -251,7 +259,7 @@ export default function CreateOutfitScreen() {
       if (groups[catName] && groups[catName].length > 0) {
         orderedSections.push({ title: catName, data: groups[catName] });
         delete groups[catName];
-      }
+  }
     });
 
     Object.keys(groups).forEach((catName) => {
@@ -264,7 +272,6 @@ export default function CreateOutfitScreen() {
   }, [garments]);
 
   const toggleGarmentSelection = (item: Garment) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setSelectedItems((current) => {
       const isAlreadySelected = current.some((selected) => selected.id === item.id);
       if (isAlreadySelected) {
@@ -277,6 +284,13 @@ export default function CreateOutfitScreen() {
 
   const handleSaveOutfitWorkflow = async () => {
     if (isSaving) return;
+
+    // Trigger button animation
+    saveButtonScale.value = withSequence(
+      withTiming(0.95, { duration: 100 }),
+      withTiming(1, { duration: 100 })
+    );
+
     setErrorMessage(null);
     setSuccessMessage(null);
 
@@ -285,7 +299,7 @@ export default function CreateOutfitScreen() {
     if (!sanitizedName) {
       setErrorMessage('Please enter a name for your outfit.');
       return;
-    }
+  }
 
     // 2) Capsule collection requirement assessment logic
     const hasTop = selectedItems.some((item) => item.category === 'Tops');
@@ -310,7 +324,7 @@ export default function CreateOutfitScreen() {
 
       if (isEditMode) {
         console.log(`[Outfit Commit Mode: EDIT] Patching core public.outfits schema where ID = ${activeOutfitId}`);
-        
+
         // Step 1: Patch parent record parameters
         const { error: outfitUpdateErr } = await supabase
           .from('outfits')
@@ -333,7 +347,7 @@ export default function CreateOutfitScreen() {
 
       } else {
         console.log('[Outfit Commit Mode: CREATE] Generating root public.outfits database transaction sequence');
-        
+
         const { data: newOutfit, error: outfitCreateErr } = await supabase
           .from('outfits')
           .insert({
@@ -363,7 +377,7 @@ export default function CreateOutfitScreen() {
       }
 
       setSuccessMessage(isEditMode ? 'Outfit updated successfully.' : 'Outfit created successfully.');
-      
+
       setTimeout(() => {
         if (isEditMode) {
           router.back();
@@ -382,14 +396,14 @@ export default function CreateOutfitScreen() {
   };
 
   if (isLoading || isOutfitLoading) {
-    return (
+                return (
       <PremiumScreen>
         <View style={styles.centeredLoadingFrame}>
           <PremiumLoader label={isOutfitLoading ? "Syncing look configurations..." : "Assembling curated wardrobe matrixes..."} />
         </View>
-      </PremiumScreen>
-    );
-  }
+    </PremiumScreen>
+  );
+}
 
   if (error) {
     return (
@@ -406,37 +420,37 @@ export default function CreateOutfitScreen() {
   return (
     <PremiumScreen>
       <ScrollView contentContainerStyle={styles.scrollCanvasContainer} showsVerticalScrollIndicator={false}>
-        
-        <View style={styles.formHeaderSection}>
-          <SectionHeader 
+
+        <Animated.View entering={FadeInUp.duration(600).springify()} style={styles.formHeaderSection}>
+          <SectionHeader
             title={isEditMode ? "Edit Outfit" : "Curate Outfit"}
             style={styles.headerFlexLayoutReset}
           />
           <Text style={styles.formSubtitleTypography}>
-            {isEditMode 
-              ? "Refine your look and update its pieces" 
+            {isEditMode
+              ? "Refine your look and update its pieces"
               : "Weave individual collection items into structured stylistic coordinates"
             }
           </Text>
-        </View>
+        </Animated.View>
 
         {/* Dynamic Display Layer: Animated Interactive Context Messages */}
         {errorMessage && (
-          <Animated.View style={[styles.inlineFeedbackBannerFrameError, { opacity: fadeAnim }]}>
+          <Animated.View entering={SlideInRight.springify()} exiting={SlideOutRight} style={[styles.inlineFeedbackBannerFrameError]}>
             <MaterialCommunityIcons name="alert-rhombus-outline" size={16} color="#DC2626" />
             <Text style={styles.inlineFeedbackBannerTypographyError}>{errorMessage}</Text>
           </Animated.View>
         )}
 
         {successMessage && (
-          <Animated.View style={[styles.inlineFeedbackBannerFrameSuccess, { opacity: successFadeAnim }]}>
+          <Animated.View entering={SlideInRight.springify()} exiting={SlideOutRight} style={[styles.inlineFeedbackBannerFrameSuccess]}>
             <Ionicons name="checkmark-circle-outline" size={16} color="#15803D" />
             <Text style={styles.inlineFeedbackBannerTypographySuccess}>{successMessage}</Text>
           </Animated.View>
         )}
 
         {/* Input Block Core Parameters */}
-        <View style={styles.cardInputBlockWrapper}>
+        <Animated.View entering={FadeInUp.delay(100).duration(600).springify()} style={styles.cardInputBlockWrapper}>
           <PremiumCard style={styles.interactiveDataCardElement}>
             <Text style={styles.inputTitleContextLabel}>Designation Identity Name</Text>
             <TextInput
@@ -453,30 +467,22 @@ export default function CreateOutfitScreen() {
               {OCCASIONS.map((occ) => {
                 const isSelected = occasion === occ;
                 return (
-                  <PremiumTouchable
-                    key={occ}
-                    style={isSelected ? styles.chipNodeElementActive : styles.chipNodeElementInactive}
-                    onPress={() => setOccasion(isSelected ? null : occ)}
-                  >
-                    <Text style={isSelected ? styles.chipTypographyActive : styles.chipTypographyInactive}>
-                      {occ}
-                    </Text>
-                  </PremiumTouchable>
+                  <OccasionChip key={occ} label={occ} isSelected={isSelected} onPress={() => setOccasion(isSelected ? null : occ)} />
                 );
               })}
             </ScrollView>
           </PremiumCard>
-        </View>
+        </Animated.View>
 
         {/* Outfit Canvas Assembly Stage View */}
-        <View style={styles.architecturalContentSection}>
+        <Animated.View entering={FadeInUp.delay(200).duration(600).springify()} style={styles.architecturalContentSection}>
           <View style={styles.inlineHeaderTitleSection}>
             <SectionTitle>Composition Grid Canvas</SectionTitle>
-            <View style={styles.countBadgeNode}>
+            <Animated.View style={styles.countBadgeNode} layout={Layout.springify()}>
               <Text style={styles.countBadgeText}>{selectedItems.length} Layered</Text>
-            </View>
+            </Animated.View>
           </View>
-          
+
           <View style={styles.outfitCanvasPreviewStageFrame}>
             {selectedItems.length === 0 ? (
               <View style={styles.emptyCanvasCenterFrameFallback}>
@@ -488,32 +494,33 @@ export default function CreateOutfitScreen() {
             ) : (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.canvasItemsRowSpacedLayout}>
                 {selectedItems.map((item, index) => (
-                  <PremiumTouchable 
-                    key={`${item.id}-${index}`} 
-                    style={styles.canvasAssetWrapperCircle} 
-                    onPress={() => toggleGarmentSelection(item)}
-                  >
-                    {item.image_url ? (
-                      <Image source={{ uri: item.image_url }} style={styles.canvasTargetAssetImageSquare} />
-                    ) : (
-                      <View style={styles.canvasFallbackAssetCenterFrame}>
-                        <MaterialCommunityIcons name="hanger" size={18} color="#78716C" />
+                  <Animated.View key={`${item.id}-${index}`} entering={ZoomIn.springify()} exiting={ZoomOut} layout={Layout.springify()}>
+                    <PremiumTouchable
+                      style={styles.canvasAssetWrapperCircle}
+                      onPress={() => toggleGarmentSelection(item)}
+                    >
+                      {item.image_url ? (
+                        <Image source={{ uri: item.image_url }} style={styles.canvasTargetAssetImageSquare} />
+                      ) : (
+                        <View style={styles.canvasFallbackAssetCenterFrame}>
+                          <MaterialCommunityIcons name="hanger" size={18} color="#78716C" />
+                        </View>
+                      )}
+                      <View style={styles.removeAssetIndicatorBadgeMini}>
+                        <Ionicons name="close" size={10} color="#FFFFFF" />
                       </View>
-                    )}
-                    <View style={styles.removeAssetIndicatorBadgeMini}>
-                      <Ionicons name="close" size={10} color="#FFFFFF" />
-                    </View>
-                  </PremiumTouchable>
+                    </PremiumTouchable>
+                  </Animated.View>
                 ))}
               </ScrollView>
             )}
           </View>
-        </View>
+        </Animated.View>
 
         {/* Grid Selector Core Relational Node Rows Grouped by Category */}
-        <View style={styles.architecturalContentSectionSpacerOverride}>
+        <Animated.View entering={FadeInUp.delay(300).duration(600).springify()} style={styles.architecturalContentSectionSpacerOverride}>
           <SectionTitle withBottomMargin>Available Wardrobe Pieces</SectionTitle>
-          
+
           {groupedGarments.length === 0 ? (
             <View style={styles.emptyStateContainerBox}>
               <MaterialCommunityIcons name="hanger" size={36} color="#78716C" />
@@ -528,63 +535,98 @@ export default function CreateOutfitScreen() {
                   {section.data.map((item) => {
                     const isSelected = selectedItems.some((selected) => selected.id === item.id);
                     return (
-                      <PremiumTouchable
-                        key={item.id}
-                        style={[styles.garmentSwiperMagazineCard, isSelected && styles.garmentSwiperMagazineCardActive]}
-                        onPress={() => toggleGarmentSelection(item)}
-                      >
-                        <View style={styles.garmentSwiperImageContainerBoundingBox}>
-                          {item.image_url ? (
-                            <Image source={{ uri: item.image_url }} style={styles.garmentSwiperCardTargetImage} />
-                          ) : (
-                            <View style={styles.garmentSwiperFallbackAssetCenterFrame}>
-                              <MaterialCommunityIcons name="hanger" size={20} color="#A8A29E" />
-                            </View>
-                          )}
-                          {isSelected && (
-                            <View style={styles.selectionCheckmarkScrimOverlayMask}>
-                              <Ionicons name="checkmark-circle" size={24} color="#1C1917" />
-                            </View>
-                          )}
-                        </View>
-                        <View style={styles.garmentSwiperMetaFooterBlockText}>
-                          <Text style={styles.garmentSwiperLabelBrandHeader} numberOfLines={1}>
-                            {item.brand || 'UNBRANDED'}
-                          </Text>
-                          <Text style={styles.garmentSwiperLabelNameSubscript} numberOfLines={1}>
-                            {item.name}
-                          </Text>
-                        </View>
-                      </PremiumTouchable>
+                      <GarmentCard key={item.id} item={item} isSelected={isSelected} onPress={() => toggleGarmentSelection(item)} />
                     );
                   })}
                 </ScrollView>
               </View>
             ))
           )}
-        </View>
+        </Animated.View>
 
         {/* Submission Control Action Block Node */}
         <View style={styles.submissionTerminalBlockActionSection}>
-          <PremiumTouchable
-            disabled={isSaving}
-            style={styles.submissionTerminalTriggerButtonPrimary}
-            onPress={handleSaveOutfitWorkflow}
-          >
-            {isSaving ? (
-              <ActivityIndicator size="small" color="#FAFAF9" />
-            ) : (
-              <Text style={styles.submissionTerminalTriggerLabelTextString}>
-                {isEditMode ? "Save Changes" : "Create Outfit"}
-              </Text>
-            )}
-          </PremiumTouchable>
+          <Animated.View style={saveButtonStyle}>
+            <PremiumTouchable
+              disabled={isSaving}
+              style={styles.submissionTerminalTriggerButtonPrimary}
+              onPress={handleSaveOutfitWorkflow}
+            >
+              {isSaving ? (
+                <ActivityIndicator size="small" color="#FAFAF9" />
+              ) : (
+                <Text style={styles.submissionTerminalTriggerLabelTextString}>
+                  {isEditMode ? "Save Changes" : "Create Outfit"}
+                </Text>
+              )}
+            </PremiumTouchable>
+          </Animated.View>
         </View>
 
       </ScrollView>
     </PremiumScreen>
   );
 }
+
+// Sub-components for better animation control
+
+const OccasionChip = ({ label, isSelected, onPress }: { label: string, isSelected: boolean, onPress: () => void }) => {
+  return (
+    <PremiumTouchable
+      style={isSelected ? styles.chipNodeElementActive : styles.chipNodeElementInactive}
+      onPress={onPress}
+    >
+      <Text style={isSelected ? styles.chipTypographyActive : styles.chipTypographyInactive}>
+        {label}
+      </Text>
+    </PremiumTouchable>
+  );
+};
+
+const GarmentCard = ({ item, isSelected, onPress }: { item: Garment, isSelected: boolean, onPress: () => void }) => {
+  const scale = useSharedValue(1);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const handlePressIn = () => { scale.value = withSpring(0.95); };
+  const handlePressOut = () => { scale.value = withSpring(1); };
+
+  return (
+    <Animated.View style={animatedStyle}>
+      <PremiumTouchable
+        style={[styles.garmentSwiperMagazineCard, isSelected && styles.garmentSwiperMagazineCardActive]}
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+      >
+        <View style={styles.garmentSwiperImageContainerBoundingBox}>
+          {item.image_url ? (
+            <Image source={{ uri: item.image_url }} style={styles.garmentSwiperCardTargetImage} />
+          ) : (
+            <View style={styles.garmentSwiperFallbackAssetCenterFrame}>
+              <MaterialCommunityIcons name="hanger" size={20} color="#A8A29E" />
+            </View>
+          )}
+          {isSelected && (
+            <Animated.View entering={ZoomIn.duration(200)} exiting={ZoomOut.duration(200)} style={styles.selectionCheckmarkScrimOverlayMask}>
+              <Ionicons name="checkmark-circle" size={24} color="#1C1917" />
+            </Animated.View>
+          )}
+        </View>
+        <View style={styles.garmentSwiperMetaFooterBlockText}>
+          <Text style={styles.garmentSwiperLabelBrandHeader} numberOfLines={1}>
+            {item.brand || 'UNBRANDED'}
+          </Text>
+          <Text style={styles.garmentSwiperLabelNameSubscript} numberOfLines={1}>
+            {item.name}
+          </Text>
+        </View>
+      </PremiumTouchable>
+    </Animated.View>
+  );
+};
 
 const styles = StyleSheet.create({
   scrollCanvasContainer: {

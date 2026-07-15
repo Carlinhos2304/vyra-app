@@ -1,7 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { StyleSheet, Text, View, ScrollView, Image, Dimensions } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
+import Animated, { FadeIn, FadeInDown, FadeInUp, Layout, SlideInRight, SlideOutLeft, useAnimatedStyle, useSharedValue, withSpring, withTiming, interpolateColor } from 'react-native-reanimated';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { PremiumCard } from '../../components/ui/PremiumCard';
 import { PremiumTouchable } from '../../components/ui/PremiumTouchable';
@@ -39,11 +40,48 @@ export default function CalendarScreen() {
   const [currentPivotDate, setCurrentPivotDate] = useState<Date>(new Date());
   const [selectedDateISO, setSelectedDateISO] = useState<string>(getLocalTodayISODate());
 
+  // Week change animation
+  const weekListAnim = useSharedValue(1);
+
+  const handleWeekChange = (direction: number) => {
+    weekListAnim.value = 0;
+    setTimeout(() => {
+      setCurrentPivotDate(new Date(currentPivotDate.setDate(currentPivotDate.getDate() + (direction * 7))));
+      weekListAnim.value = withTiming(1, { duration: 300 });
+    }, 150);
+  };
+
+  const animatedWeekStyle = useAnimatedStyle(() => ({
+    opacity: weekListAnim.value,
+    transform: [{ scale: 0.98 + (weekListAnim.value * 0.02) }],
+  }));
+
   const [plans, setPlans] = useState<Record<string, PlanDetails>>({});
   const [selectedDayEvents, setSelectedDayEvents] = useState<DBEvent[]>([]);
   const [upcomingEvents, setUpcomingEvents] = useState<DBEvent[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Animation values
+  const entranceAnim = useSharedValue(0);
+  const loadingAnim = useSharedValue(1);
+
+  useEffect(() => {
+    entranceAnim.value = withTiming(1, { duration: 600 });
+  }, []);
+
+  useEffect(() => {
+    loadingAnim.value = isLoading ? 0.6 : 1;
+  }, [isLoading]);
+
+  const animatedScreenStyle = useAnimatedStyle(() => ({
+    opacity: entranceAnim.value,
+    transform: [{ translateY: (1 - entranceAnim.value) * 20 }],
+  }));
+
+  const animatedContentStyle = useAnimatedStyle(() => ({
+    opacity: loadingAnim.value,
+  }));
 
   const generateWeeklyTrackSequence = (pivot: Date): CalendarDayModel[] => {
     const trackingDay = new Date(pivot);
@@ -122,142 +160,179 @@ export default function CalendarScreen() {
 
   return (
     <PremiumScreen>
-      {isLoading ? (
-        <View style={styles.centeredStateFrame}>
-          <PremiumLoader label="Synchronizing schedule metrics..." />
-        </View>
-      ) : (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollLayout}>
-          <View style={styles.headerStack}>
-            <View style={styles.headerTopRow}>
-              <SectionHeader title="Outfit Planner" subtitle={formattedMonthHeaderLabel} style={styles.headerFlexOverride} />
-              <PremiumTouchable style={styles.addButtonCircle} onPress={() => router.push({ pathname: '/planner/create-event', params: { date: selectedDateISO } })}>
-                <Ionicons name="add" size={24} color="#FAFAF9" />
-              </PremiumTouchable>
-            </View>
-
-            <View style={styles.calendarControlStrip}>
-              <View style={styles.stripHeader}>
-                <SectionTitle>This Week</SectionTitle>
-                <View style={styles.chevronControls}>
-                  <PremiumTouchable style={styles.chevronInlineButton} onPress={() => setCurrentPivotDate(new Date(currentPivotDate.setDate(currentPivotDate.getDate() - 7)))}>
-                    <Ionicons name="chevron-back" size={16} color="#1C1917" />
-                  </PremiumTouchable>
-                  <PremiumTouchable style={styles.chevronInlineButton} onPress={() => setCurrentPivotDate(new Date(currentPivotDate.setDate(currentPivotDate.getDate() + 7)))}>
-                    <Ionicons name="chevron-forward" size={16} color="#1C1917" />
-                  </PremiumTouchable>
-                </View>
-              </View>
-
-              <View style={styles.daysRowLayout}>
-                {activeWeekMatrix.map((day) => {
-                  const isSelected = selectedDateISO === day.isoString;
-                  const hasDotIndicator = !!plans[day.isoString];
-                  return (
-                    <PremiumTouchable key={day.isoString} onPress={() => setSelectedDateISO(day.isoString)} style={[styles.dayGridCell, isSelected ? styles.cellActive : styles.cellInactive]}>
-                      <Text style={[styles.cellDayName, isSelected && styles.textActive]}>{day.dayNameLabel}</Text>
-                      <Text style={[styles.cellDateValue, isSelected && styles.textActive]}>{day.dayNumberLabel}</Text>
-                      {hasDotIndicator && <View style={[styles.indicatorDot, isSelected ? styles.dotActive : styles.dotInactive]} />}
-                    </PremiumTouchable>
-                  );
-                })}
-              </View>
-            </View>
+      <Animated.View style={[{ flex: 1 }, animatedScreenStyle]}>
+        {isLoading ? (
+          <View style={styles.centeredStateFrame}>
+            <PremiumLoader label="Synchronizing schedule metrics..." />
           </View>
-
-          {/* Dynamic Section: Outfit Plan Preview Area */}
-          <View style={styles.sectionContainer}>
-            <SectionTitle withBottomMargin>Selected Day Outfit</SectionTitle>
-            {activePlanInstance ? (
-              <PremiumCard style={styles.plannedOutfitCard} onPress={() => router.push({ pathname: '/outfit/[id]', params: { id: activePlanInstance.outfitId } })}>
-                <View style={styles.cardImageContainer}>
-                  {activePlanInstance.coverImage ? <Image source={{ uri: activePlanInstance.coverImage }} style={styles.outfitCoverImage} /> : <View style={styles.assetImageBlankContainer}><MaterialCommunityIcons name="hanger" size={24} color="#A8A29E" /></View>}
-                </View>
-                <View style={styles.cardDetailsPane}>
-                  <View style={styles.cardMetadataRow}>
-                    <Text style={styles.outfitTitleText} numberOfLines={1}>{activePlanInstance.outfitName}</Text>
-                    {activePlanInstance.occasion && <View style={styles.categoryBadge}><Text style={styles.categoryBadgeText}>{activePlanInstance.occasion}</Text></View>}
-                  </View>
-                  <Text style={styles.cardScheduleTimelineText}>{formattedFocusDayTitleString}</Text>
-                  <View style={styles.actionRowContainerHorizontal}>
-                    <PremiumTouchable style={styles.inlineActionTextButton} onPress={() => router.push({ pathname: '/outfit/[id]', params: { id: activePlanInstance.outfitId } })}>
-                      <Text style={styles.actionButtonText}>View Look</Text>
-                    </PremiumTouchable>
-                    <PremiumTouchable style={styles.inlineActionTextButtonSecondary} onPress={() => router.push({ pathname: '/planner/select-outfit', params: { date: selectedDateISO } })}>
-                      <Text style={styles.actionButtonTextSecondary}>Change</Text>
-                    </PremiumTouchable>
-                  </View>
-                </View>
-              </PremiumCard>
-            ) : (
-              <View style={styles.emptyStateCardContainer}>
-                <Text style={styles.emptyStateHeading}>No day outfit planned</Text>
-                <PremiumTouchable style={styles.assignOutfitActionBtn} onPress={() => router.push({ pathname: '/planner/select-outfit', params: { date: selectedDateISO } })}>
-                  <Text style={styles.assignActionBtnLabel}>Assign Day Outfit</Text>
+        ) : (
+          <Animated.ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollLayout}
+            style={animatedContentStyle}
+          >
+            <View style={styles.headerStack}>
+              <View style={styles.headerTopRow}>
+                <SectionHeader title="Outfit Planner" subtitle={formattedMonthHeaderLabel} style={styles.headerFlexOverride} />
+                <PremiumTouchable
+                  style={styles.addButtonCircle}
+                  onPress={() => router.push({ pathname: '/planner/create-event', params: { date: selectedDateISO } })}
+                >
+                  <Ionicons name="add" size={24} color="#FAFAF9" />
                 </PremiumTouchable>
               </View>
-            )}
-          </View>
-
-          {/* Dynamic Section: Selected Day Connected Events Stack Frame */}
-          <View style={styles.sectionContainer}>
-            <SectionTitle withBottomMargin>{`Events on ${currentSelectedDayMetadata.dayNameLabel} ${currentSelectedDayMetadata.dayNumberLabel}`}</SectionTitle>
-            {selectedDayEvents.length > 0 ? (
-              selectedDayEvents.map((ev) => (
-                <PremiumCard key={ev.id} style={styles.eventRowCard} onPress={() => router.push({ pathname: '/planner/event-details', params: { id: ev.id } })}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.eventNameMainText}>{ev.name}</Text>
-                    <Text style={styles.eventDateSubText}>{ev.location || 'No defined location venue'}</Text>
+              <View style={styles.calendarControlStrip}>
+                <View style={styles.stripHeader}>
+                  <SectionTitle>This Week</SectionTitle>
+                  <View style={styles.chevronControls}>
+                    <PremiumTouchable style={styles.chevronInlineButton} onPress={() => handleWeekChange(-1)}>
+                      <Ionicons name="chevron-back" size={16} color="#1C1917" />
+                    </PremiumTouchable>
+                    <PremiumTouchable style={styles.chevronInlineButton} onPress={() => handleWeekChange(1)}>
+                      <Ionicons name="chevron-forward" size={16} color="#1C1917" />
+                    </PremiumTouchable>
                   </View>
-                  <View style={styles.suggestionTagBadge}><Text style={styles.suggestionTagText}>{ev.category}</Text></View>
+                </View>
+
+                <Animated.View style={[styles.daysRowLayout, animatedWeekStyle]}>
+                  {activeWeekMatrix.map((day) => {
+                    const isSelected = selectedDateISO === day.isoString;
+                    const hasDotIndicator = !!plans[day.isoString];
+                    return (
+                      <CalendarDayItem
+                        key={day.isoString}
+                        day={day}
+                        isSelected={isSelected}
+                        hasDot={hasDotIndicator}
+                        onPress={() => setSelectedDateISO(day.isoString)}
+                      />
+                    );
+                  })}
+                </Animated.View>
+              </View>
+            </View>
+
+            <Animated.View style={styles.sectionContainer} entering={FadeInDown.delay(100).springify()}>
+              <SectionTitle withBottomMargin>Selected Day Outfit</SectionTitle>
+              {activePlanInstance ? (
+                <PremiumCard key={activePlanInstance.id} style={styles.plannedOutfitCard} onPress={() => router.push({ pathname: '/outfit/[id]', params: { id: activePlanInstance.outfitId } })}>
+                  <View style={styles.cardImageContainer}>
+                    {activePlanInstance.coverImage ? <Image source={{ uri: activePlanInstance.coverImage }} style={styles.outfitCoverImage} /> : <View style={styles.assetImageBlankContainer}><MaterialCommunityIcons name="hanger" size={24} color="#A8A29E" /></View>}
+                  </View>
+                  <View style={styles.cardDetailsPane}>
+                    <View style={styles.cardMetadataRow}>
+                      <Text style={styles.outfitTitleText} numberOfLines={1}>{activePlanInstance.outfitName}</Text>
+                      {activePlanInstance.occasion && <View style={styles.categoryBadge}><Text style={styles.categoryBadgeText}>{activePlanInstance.occasion}</Text></View>}
+                    </View>
+                    <Text style={styles.cardScheduleTimelineText}>{formattedFocusDayTitleString}</Text>
+                    <View style={styles.actionRowContainerHorizontal}>
+                      <PremiumTouchable style={styles.inlineActionTextButton} onPress={() => router.push({ pathname: '/outfit/[id]', params: { id: activePlanInstance.outfitId } })}>
+                        <Text style={styles.actionButtonText}>View Look</Text>
+                      </PremiumTouchable>
+                      <PremiumTouchable style={styles.inlineActionTextButtonSecondary} onPress={() => router.push({ pathname: '/planner/select-outfit', params: { date: selectedDateISO } })}>
+                        <Text style={styles.actionButtonTextSecondary}>Change</Text>
+                      </PremiumTouchable>
+                    </View>
+                  </View>
                 </PremiumCard>
-              ))
-            ) : (
-              <Text style={styles.emptySectionTextFallback}>No contextual items anchored to this date timeline.</Text>
-            )}
-          </View>
+              ) : (
+                <View style={styles.emptyStateCardContainer}>
+                  <Text style={styles.emptyStateHeading}>No day outfit planned</Text>
+                  <PremiumTouchable style={styles.assignOutfitActionBtn} onPress={() => router.push({ pathname: '/planner/select-outfit', params: { date: selectedDateISO } })}>
+                    <Text style={styles.assignActionBtnLabel}>Assign Day Outfit</Text>
+                  </PremiumTouchable>
+                </View>
+              )}
+            </Animated.View>
 
-          {/* Section Infrastructure: Upcoming Events Dynamic List Frame */}
-          <View style={styles.sectionContainer}>
-            <SectionTitle withBottomMargin>Upcoming Events Horizon</SectionTitle>
-            {upcomingEvents.length > 0 ? (
-              <View style={styles.eventsVerticalStackLayout}>
-                {upcomingEvents.map((event) => {
-                  const hasAssignedOutfit = !!event.outfit_id;
-                  return (
-                    <PremiumCard key={event.id} style={styles.eventRowCard} onPress={() => router.push({ pathname: '/planner/event-details', params: { id: event.id } })}>
-                      <View style={styles.eventRowLeftBlock}>
-                        <View style={styles.eventAccentBoxContainer}>
-                          <MaterialCommunityIcons name={hasAssignedOutfit ? "calendar-check" : "calendar-alert"} size={18} color="#1C1917" />
-                        </View>
-                        <View style={styles.eventMetaTextBlock}>
-                          <Text style={styles.eventNameMainText} numberOfLines={1}>{event.name}</Text>
-                          <Text style={styles.eventDateSubText}>{event.event_date} • {event.outfits?.name || 'No Look Connected'}</Text>
-                        </View>
+            <Animated.View style={styles.sectionContainer} entering={FadeInDown.delay(200).springify()}>
+              <SectionTitle withBottomMargin>{`Events on ${currentSelectedDayMetadata.dayNameLabel} ${currentSelectedDayMetadata.dayNumberLabel}`}</SectionTitle>
+              {selectedDayEvents.length > 0 ? (
+                selectedDayEvents.map((ev, index) => (
+                  <Animated.View key={ev.id} entering={FadeInDown.delay(300 + index * 50).springify()}>
+                    <PremiumCard style={styles.eventRowCard} onPress={() => router.push({ pathname: '/planner/event-details', params: { id: ev.id } })}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.eventNameMainText}>{ev.name}</Text>
+                        <Text style={styles.eventDateSubText}>{ev.location || 'No defined location venue'}</Text>
                       </View>
-                      {!hasAssignedOutfit && (
-                        <View style={styles.warningBadge}>
-                          <Text style={styles.warningBadgeText}>Outfit Needed</Text>
-                        </View>
-                      )}
+                      <View style={styles.suggestionTagBadge}><Text style={styles.suggestionTagText}>{ev.category}</Text></View>
                     </PremiumCard>
-                  );
-                })}
-              </View>
-            ) : (
-              <View style={styles.emptyStateCardContainer}>
-                <MaterialCommunityIcons name="calendar-remove" size={28} color="#78716C" style={styles.emptyStateIcon} />
-                <Text style={styles.emptyStateHeading}>Your calendar is clear.</Text>
-                <Text style={styles.emptyStateBodyText}>Create an event and plan your perfect look.</Text>
-                <PremiumTouchable style={styles.assignOutfitActionBtn} onPress={() => router.push('/planner/create-event')}>
-                  <Text style={styles.assignActionBtnLabel}>Create Event</Text>
-                </PremiumTouchable>
-              </View>
-            )}
-          </View>
-        </ScrollView>
-      )}
+                  </Animated.View>
+                ))
+              ) : (
+                <Text style={styles.emptySectionTextFallback}>No contextual items anchored to this date timeline.</Text>
+              )}
+            </Animated.View>
+
+            <Animated.View style={styles.sectionContainer} entering={FadeInDown.delay(400).springify()}>
+              <SectionTitle withBottomMargin>Upcoming Events Horizon</SectionTitle>
+              {upcomingEvents.length > 0 ? (
+                <View style={styles.eventsVerticalStackLayout}>
+                  {upcomingEvents.map((event, index) => {
+                    const hasAssignedOutfit = !!event.outfit_id;
+                    return (
+                      <Animated.View key={event.id} entering={FadeInDown.delay(500 + index * 50).springify()}>
+                        <PremiumCard style={styles.eventRowCard} onPress={() => router.push({ pathname: '/planner/event-details', params: { id: event.id } })}>
+                          <View style={styles.eventRowLeftBlock}>
+                            <View style={styles.eventAccentBoxContainer}>
+                              <MaterialCommunityIcons name={hasAssignedOutfit ? "calendar-check" : "calendar-alert"} size={18} color="#1C1917" />
+                            </View>
+                            <View style={styles.eventMetaTextBlock}>
+                              <Text style={styles.eventNameMainText} numberOfLines={1}>{event.name}</Text>
+                              <Text style={styles.eventDateSubText}>{event.event_date} • {event.outfits?.name || 'No Look Connected'}</Text>
+                            </View>
+                          </View>
+                          {!hasAssignedOutfit && (
+                            <View style={styles.warningBadge}>
+                              <Text style={styles.warningBadgeText}>Outfit Needed</Text>
+                            </View>
+                          )}
+                        </PremiumCard>
+                      </Animated.View>
+                    );
+                  })}
+                </View>
+              ) : (
+                <View style={styles.emptyStateCardContainer}>
+                  <MaterialCommunityIcons name="calendar-remove" size={28} color="#78716C" style={styles.emptyStateIcon} />
+                  <Text style={styles.emptyStateHeading}>Your calendar is clear.</Text>
+                  <Text style={styles.emptyStateBodyText}>Create an event and plan your perfect look.</Text>
+                  <PremiumTouchable style={styles.assignOutfitActionBtn} onPress={() => router.push('/planner/create-event')}>
+                    <Text style={styles.assignActionBtnLabel}>Create Event</Text>
+                  </PremiumTouchable>
+                </View>
+              )}
+            </Animated.View>
+          </Animated.ScrollView>
+        )}
+      </Animated.View>
     </PremiumScreen>
+  );
+}
+
+// ... CalendarDayItem helper component ...
+function CalendarDayItem({ day, isSelected, hasDot, onPress }: { day: CalendarDayModel, isSelected: boolean, hasDot: boolean, onPress: () => void }) {
+  const animatedScale = useSharedValue(1);
+  const bgColor = useSharedValue(0);
+
+  useEffect(() => {
+    animatedScale.value = isSelected ? withSpring(1.1) : withSpring(1);
+    bgColor.value = isSelected ? 1 : 0;
+  }, [isSelected]);
+
+  const style = useAnimatedStyle(() => ({
+    transform: [{ scale: animatedScale.value }],
+    backgroundColor: interpolateColor(bgColor.value, [0, 1], ['transparent', '#1C1917']),
+  }));
+
+  return (
+    <PremiumTouchable onPress={onPress}>
+      <Animated.View style={[styles.dayGridCell, style]}>
+        <Text style={[styles.cellDayName, isSelected && styles.textActive]}>{day.dayNameLabel}</Text>
+        <Text style={[styles.cellDateValue, isSelected && styles.textActive]}>{day.dayNumberLabel}</Text>
+        {hasDot && <Animated.View style={[styles.indicatorDot, isSelected ? styles.dotActive : styles.dotInactive]} />}
+      </Animated.View>
+    </PremiumTouchable>
   );
 }
 

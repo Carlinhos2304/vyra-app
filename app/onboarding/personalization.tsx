@@ -1,12 +1,20 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, Switch, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, Text, View, ScrollView, Switch, Alert, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { SectionTitle } from '../../components/ui/SectionTitle';
-import { PremiumTouchable } from '../../components/ui/PremiumTouchable';
 import { PremiumLoader } from '../../components/ui/PremiumLoader';
 import { supabase } from '../../lib/supabase';
+
+// React Native Reanimated 3
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSpring,
+  withDelay,
+} from 'react-native-reanimated';
 
 const STYLE_OPTIONS = ['Casual', 'Minimal', 'Streetwear', 'Elegant', 'Sport', 'Old Money', 'Vintage', 'Business'];
 const COLOR_OPTIONS = [
@@ -19,6 +27,116 @@ const COLOR_OPTIONS = [
 ];
 const CLIMATE_OPTIONS = ['Mostly Hot', 'Mixed', 'Mostly Cold'];
 
+// Luxury calibration spring physics
+const PREMIUM_SPRING = {
+  damping: 18,
+  stiffness: 100,
+  mass: 0.8,
+};
+
+const CHIP_SPRING = {
+  damping: 15,
+  stiffness: 120,
+};
+
+// ==========================================
+// Sub-Components to handle hooks safely
+// ==========================================
+
+interface StyleChipProps {
+  styleName: string;
+  isActive: boolean;
+  onPress: () => void;
+}
+
+function StyleChip({ styleName, isActive, onPress }: StyleChipProps) {
+  const scale = useSharedValue(1);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  return (
+    <Animated.View style={animatedStyle}>
+      <Pressable
+        onPressIn={() => (scale.value = withSpring(0.97, CHIP_SPRING))}
+        onPressOut={() => (scale.value = withSpring(1, CHIP_SPRING))}
+        onPress={onPress}
+        style={[styles.chipSelectionItem, isActive && styles.chipSelectionItemActive]}
+      >
+        <Text style={[styles.chipText, isActive && styles.chipTextActive]}>{styleName}</Text>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+interface ColorCircleProps {
+  colorName: string;
+  hex?: string;
+  isSelected: boolean;
+  onPress: () => void;
+}
+
+function ColorCircle({ colorName, hex, isSelected, onPress }: ColorCircleProps) {
+  const scale = useSharedValue(1);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  return (
+    <Animated.View style={animatedStyle}>
+      <Pressable
+        onPressIn={() => (scale.value = withSpring(0.95, CHIP_SPRING))}
+        onPressOut={() => (scale.value = withSpring(1, CHIP_SPRING))}
+        onPress={onPress}
+        style={[
+          styles.colorCircleOuterBorder,
+          isSelected && styles.colorCircleOuterBorderActive
+        ]}
+      >
+        <View
+          style={[
+            styles.colorCircleInnerFill,
+            hex ? { backgroundColor: hex } : undefined
+          ]}
+        />
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+interface ClimateChipProps {
+  climateName: string;
+  isActive: boolean;
+  onPress: () => void;
+}
+
+function ClimateChip({ climateName, isActive, onPress }: ClimateChipProps) {
+  const scale = useSharedValue(1);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  return (
+    <Animated.View style={animatedStyle}>
+      <Pressable
+        onPressIn={() => (scale.value = withSpring(0.97, CHIP_SPRING))}
+        onPressOut={() => (scale.value = withSpring(1, CHIP_SPRING))}
+        onPress={onPress}
+        style={[styles.chipSelectionItem, isActive && styles.chipSelectionItemActive]}
+      >
+        <Text style={[styles.chipText, isActive && styles.chipTextActive]}>{climateName}</Text>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+// ==========================================
+// Main Personalization Screen
+// ==========================================
+
 export default function PersonalizationScreen() {
   const router = useRouter();
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null);
@@ -26,6 +144,81 @@ export default function PersonalizationScreen() {
   const [selectedClimate, setSelectedClimate] = useState<string | null>(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  // --- Animation Shared Values ---
+  const headingOpacity = useSharedValue(0);
+  const headingTranslateY = useSharedValue(20);
+
+  const styleSecOpacity = useSharedValue(0);
+  const styleSecTranslateY = useSharedValue(20);
+
+  const colorSecOpacity = useSharedValue(0);
+  const colorSecTranslateY = useSharedValue(20);
+
+  const climateSecOpacity = useSharedValue(0);
+  const climateSecTranslateY = useSharedValue(20);
+
+  const notifySecOpacity = useSharedValue(0);
+  const notifySecTranslateY = useSharedValue(20);
+
+  const footerOpacity = useSharedValue(0);
+  const footerTranslateY = useSharedValue(30);
+  const buttonPressScale = useSharedValue(1);
+
+  // Staggered Entrance on Mount
+  useEffect(() => {
+    headingOpacity.value = withTiming(1, { duration: 600 });
+    headingTranslateY.value = withSpring(0, PREMIUM_SPRING);
+
+    styleSecOpacity.value = withDelay(150, withTiming(1, { duration: 600 }));
+    styleSecTranslateY.value = withDelay(150, withSpring(0, PREMIUM_SPRING));
+
+    colorSecOpacity.value = withDelay(250, withTiming(1, { duration: 600 }));
+    colorSecTranslateY.value = withDelay(250, withSpring(0, PREMIUM_SPRING));
+
+    climateSecOpacity.value = withDelay(350, withTiming(1, { duration: 600 }));
+    climateSecTranslateY.value = withDelay(350, withSpring(0, PREMIUM_SPRING));
+
+    notifySecOpacity.value = withDelay(450, withTiming(1, { duration: 600 }));
+    notifySecTranslateY.value = withDelay(450, withSpring(0, PREMIUM_SPRING));
+
+    footerOpacity.value = withDelay(550, withTiming(1, { duration: 600 }));
+    footerTranslateY.value = withDelay(550, withSpring(0, PREMIUM_SPRING));
+  }, []);
+
+  // --- Animated Styles ---
+  const animatedHeadingStyle = useAnimatedStyle(() => ({
+    opacity: headingOpacity.value,
+    transform: [{ translateY: headingTranslateY.value }],
+  }));
+
+  const animatedStyleSecStyle = useAnimatedStyle(() => ({
+    opacity: styleSecOpacity.value,
+    transform: [{ translateY: styleSecTranslateY.value }],
+  }));
+
+  const animatedColorSecStyle = useAnimatedStyle(() => ({
+    opacity: colorSecOpacity.value,
+    transform: [{ translateY: colorSecTranslateY.value }],
+  }));
+
+  const animatedClimateSecStyle = useAnimatedStyle(() => ({
+    opacity: climateSecOpacity.value,
+    transform: [{ translateY: climateSecTranslateY.value }],
+  }));
+
+  const animatedNotifySecStyle = useAnimatedStyle(() => ({
+    opacity: notifySecOpacity.value,
+    transform: [{ translateY: notifySecTranslateY.value }],
+  }));
+
+  const animatedFooterStyle = useAnimatedStyle(() => ({
+    opacity: footerOpacity.value,
+    transform: [
+      { translateY: footerTranslateY.value },
+      { scale: buttonPressScale.value },
+    ],
+  }));
 
   const toggleColorSelection = (colorName: string) => {
     setSelectedColors(prev => 
@@ -63,6 +256,8 @@ export default function PersonalizationScreen() {
     }
   };
 
+  // ✅ SAFE CONDITIONAL RETURN
+  // Placed down here so React executes all above top-level hooks without skipping.
   if (isSubmitting) {
     return (
       <PremiumScreen style={styles.centerBox}>
@@ -76,76 +271,59 @@ export default function PersonalizationScreen() {
       <SafeAreaView style={styles.rootContainer} edges={['top', 'bottom']}>
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollPadding}>
           
-          <Text style={styles.formMainHeading}>Let's personalize your wardrobe.</Text>
+          {/* MAIN HEADING */}
+          <Animated.View style={animatedHeadingStyle}>
+            <Text style={styles.formMainHeading}>Let's personalize your wardrobe.</Text>
+          </Animated.View>
           
           {/* SECTION 1: STYLE CONFIGURATION MATRIX */}
-          <View style={styles.formSection}>
+          <Animated.View style={[styles.formSection, animatedStyleSecStyle]}>
             <SectionTitle withBottomMargin>Favorite Style</SectionTitle>
             <View style={styles.gridContainerRow}>
-              {STYLE_OPTIONS.map(style => {
-                const isActive = selectedStyle === style;
-                return (
-                  <PremiumTouchable
-                    key={style}
-                    style={[styles.chipSelectionItem, isActive && styles.chipSelectionItemActive]}
-                    onPress={() => setSelectedStyle(style)}
-                  >
-                    <Text style={[styles.chipText, isActive && styles.chipTextActive]}>{style}</Text>
-                  </PremiumTouchable>
-                );
-              })}
+              {STYLE_OPTIONS.map(style => (
+                <StyleChip
+                  key={style}
+                  styleName={style}
+                  isActive={selectedStyle === style}
+                  onPress={() => setSelectedStyle(style)}
+                />
+              ))}
             </View>
-          </View>
+          </Animated.View>
 
           {/* SECTION 2: COLOR CONFIGURATION CIRCLES */}
-          <View style={styles.formSection}>
+          <Animated.View style={[styles.formSection, animatedColorSecStyle]}>
             <SectionTitle withBottomMargin>Favorite Colors</SectionTitle>
             <View style={styles.colorsSelectionRow}>
-              {COLOR_OPTIONS.map(color => {
-                const isSelected = selectedColors.includes(color.name);
-                return (
-                  <PremiumTouchable
-                    key={color.name}
-                    style={[
-                      styles.colorCircleOuterBorder,
-                      isSelected && styles.colorCircleOuterBorderActive
-                    ]}
-                    onPress={() => toggleColorSelection(color.name)}
-                  >
-                    <View
-                      style={[
-                        styles.colorCircleInnerFill,
-                        // Use hex when available; otherwise don't add an extra style to avoid TS errors
-                        color.hex ? { backgroundColor: color.hex } : undefined
-                      ]}
-                    />
-                  </PremiumTouchable>
-                );
-              })}
+              {COLOR_OPTIONS.map(color => (
+                <ColorCircle
+                  key={color.name}
+                  colorName={color.name}
+                  hex={color.hex}
+                  isSelected={selectedColors.includes(color.name)}
+                  onPress={() => toggleColorSelection(color.name)}
+                />
+              ))}
             </View>
-          </View>
+          </Animated.View>
 
           {/* SECTION 3: CLIMATE */}
-          <View style={styles.formSection}>
+          <Animated.View style={[styles.formSection, animatedClimateSecStyle]}>
             <SectionTitle withBottomMargin>Climate Zone</SectionTitle>
             <View style={styles.gridContainerRow}>
-              {CLIMATE_OPTIONS.map(climate => {
-                const isActive = selectedClimate === climate;
-                return (
-                  <PremiumTouchable
-                    key={climate}
-                    style={[styles.chipSelectionItem, isActive && styles.chipSelectionItemActive]}
-                    onPress={() => setSelectedClimate(climate)}
-                  >
-                    <Text style={[styles.chipText, isActive && styles.chipTextActive]}>{climate}</Text>
-                  </PremiumTouchable>
-                );
-              })}
+              {CLIMATE_OPTIONS.map(climate => (
+                <ClimateChip
+                  key={climate}
+                  climateName={climate}
+                  isActive={selectedClimate === climate}
+                  onPress={() => setSelectedClimate(climate)}
+                />
+              ))}
             </View>
-          </View>
+          </Animated.View>
 
           {/* SECTION 4: NOTIFICATIONS */}
-          <View style={[styles.formSection, styles.toggleRowSpace]}>
+          <Animated.View style={[styles.formSection, styles.toggleRowSpace, animatedNotifySecStyle]}>
             <View style={styles.toggleTextLeftColumn}>
               <Text style={styles.toggleMainLabelText}>Outfit Reminders</Text>
               <Text style={styles.toggleSubLabelText}>Receive premium styling schedule updates.</Text>
@@ -157,19 +335,21 @@ export default function PersonalizationScreen() {
               thumbColor="#FFFFFF"
               ios_backgroundColor="#D6D3D1"
             />
-          </View>
+          </Animated.View>
 
         </ScrollView>
 
-        <View style={styles.stickyFooterActionButton}>
-          <PremiumTouchable 
-            style={styles.primaryPremiumButton}
-            activeOpacity={0.85}
+        {/* STICKY FOOTER */}
+        <Animated.View style={[styles.stickyFooterActionButton, animatedFooterStyle]}>
+          <Pressable
+            onPressIn={() => (buttonPressScale.value = withSpring(0.96, { damping: 12, stiffness: 150 }))}
+            onPressOut={() => (buttonPressScale.value = withSpring(1, PREMIUM_SPRING))}
             onPress={handleSavePreferences}
+            style={styles.primaryPremiumButton}
           >
             <Text style={styles.primaryButtonText}>Save Preferences</Text>
-          </PremiumTouchable>
-        </View>
+          </Pressable>
+        </Animated.View>
       </SafeAreaView>
     </PremiumScreen>
   );
@@ -248,9 +428,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.05)',
-  },
-  stoneBg: {
-    backgroundColor: '#E7E5E4',
   },
   toggleRowSpace: {
     flexDirection: 'row',

@@ -1,38 +1,130 @@
-import React from 'react';
-import { StyleSheet, Text, View, Dimensions } from 'react-native';
+import React, { useEffect } from 'react';
+import { StyleSheet, Text, View, Dimensions, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import VyraLogo from '../../components/branding/VyraLogo';
-import { PremiumTouchable } from '../../components/ui/PremiumTouchable';
+
+// React Native Reanimated 3 Animations
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSpring,
+  withDelay,
+} from 'react-native-reanimated';
 
 const { width } = Dimensions.get('window');
 
+// Luxury-calibrated spring physics
+const PREMIUM_SPRING = {
+  damping: 18,
+  stiffness: 100,
+  mass: 0.8,
+};
+
 export default function WelcomeScreen() {
   const router = useRouter();
+
+  // Animation Shared Values
+  const logoOpacity = useSharedValue(0);
+  const logoScale = useSharedValue(0.85);
+
+  const titleOpacity = useSharedValue(0);
+  const titleTranslateY = useSharedValue(20);
+
+  const subtitleOpacity = useSharedValue(0);
+  const subtitleTranslateY = useSharedValue(15);
+
+  const buttonOpacity = useSharedValue(0);
+  const buttonTranslateY = useSharedValue(20);
+  const buttonPressScale = useSharedValue(1);
+
+  // Trigger sequential animation cascade on mount
+  useEffect(() => {
+    // 1. Logo Reveal
+    logoOpacity.value = withTiming(1, { duration: 600 });
+    logoScale.value = withSpring(1, PREMIUM_SPRING);
+
+    // 2. Title Slide Up
+    titleOpacity.value = withDelay(200, withTiming(1, { duration: 600 }));
+    titleTranslateY.value = withDelay(200, withSpring(0, PREMIUM_SPRING));
+
+    // 3. Subtitle Slide Up
+    subtitleOpacity.value = withDelay(350, withTiming(1, { duration: 600 }));
+    subtitleTranslateY.value = withDelay(350, withSpring(0, PREMIUM_SPRING));
+
+    // 4. Action Button Entrance
+    buttonOpacity.value = withDelay(500, withTiming(1, { duration: 600 }));
+    buttonTranslateY.value = withDelay(500, withSpring(0, PREMIUM_SPRING));
+  }, []);
+
+  // Animated Styles
+  const animatedLogoStyle = useAnimatedStyle(() => ({
+    opacity: logoOpacity.value,
+    transform: [{ scale: logoScale.value }],
+  }));
+
+  const animatedTitleStyle = useAnimatedStyle(() => ({
+    opacity: titleOpacity.value,
+    transform: [{ translateY: titleTranslateY.value }],
+  }));
+
+  const animatedSubtitleStyle = useAnimatedStyle(() => ({
+    opacity: subtitleOpacity.value,
+    transform: [{ translateY: subtitleTranslateY.value }],
+  }));
+
+  const animatedButtonStyle = useAnimatedStyle(() => ({
+    opacity: buttonOpacity.value,
+    transform: [
+      { translateY: buttonTranslateY.value },
+      { scale: buttonPressScale.value },
+    ],
+  }));
+
+  // Press feedback handlers
+  const handlePressIn = () => {
+    buttonPressScale.value = withSpring(0.96, { damping: 12, stiffness: 150 });
+  };
+
+  const handlePressOut = () => {
+    buttonPressScale.value = withSpring(1, PREMIUM_SPRING);
+  };
 
   return (
     <PremiumScreen>
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.brandContainer}>
-          <View style={styles.logoScaleWrapper}>
+          {/* Logo container */}
+          <Animated.View style={[styles.logoScaleWrapper, animatedLogoStyle]}>
             <VyraLogo />
-          </View>
-          <Text style={styles.brandTitleText}>Welcome to Vyra</Text>
-          <Text style={styles.brandSubtitleText}>
-            Organize your wardrobe effortlessly.
-          </Text>
+          </Animated.View>
+
+          {/* Title */}
+          <Animated.View style={animatedTitleStyle}>
+            <Text style={styles.brandTitleText}>Welcome to Vyra</Text>
+          </Animated.View>
+
+          {/* Subtitle */}
+          <Animated.View style={animatedSubtitleStyle}>
+            <Text style={styles.brandSubtitleText}>
+              Organize your wardrobe effortlessly.
+            </Text>
+          </Animated.View>
         </View>
 
-        <View style={styles.actionContainer}>
-          <PremiumTouchable 
-            style={styles.primaryPremiumButton}
-            activeOpacity={0.85}
+        {/* Call to Action Container */}
+        <Animated.View style={[styles.actionContainer, animatedButtonStyle]}>
+          <Pressable
+            onPressIn={handlePressIn}
+            onPressOut={handlePressOut}
             onPress={() => router.push('/onboarding/features')}
+            style={styles.primaryPremiumButton}
           >
             <Text style={styles.primaryButtonText}>Get Started</Text>
-          </PremiumTouchable>
-        </View>
+          </Pressable>
+        </Animated.View>
       </SafeAreaView>
     </PremiumScreen>
   );
