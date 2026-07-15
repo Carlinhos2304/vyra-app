@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,10 +7,19 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import Animated, {
+  FadeIn,
+  FadeOut,
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withDelay,
+  Easing,
+  LinearTransition,
+} from 'react-native-reanimated';
 
 import VyraLogo from '../../components/branding/VyraLogo';
 import { PremiumButton } from '../../components/ui/PremiumButton'; 
@@ -21,6 +30,35 @@ import { SectionTitle } from '../../components/ui/SectionTitle';
 import { PremiumLoader } from '../../components/ui/PremiumLoader';
 import { supabase } from '../../lib/supabase';
 
+// Ultra-premium cubic easing curve (Calm, confident, matching iOS/Apple system curves)
+const PREMIUM_EASING = Easing.bezier(0.25, 0.1, 0.25, 1);
+const ENTRANCE_DURATION = 260; // Deliberate, calm transition duration
+const SLIGHT_Y = 6;            // Quiet-luxury micro-translation (6px)
+
+// High-performance custom entering transition (No overshoot, precise control)
+const createPremiumEntrance = (delayMs: number) => {
+  return () => {
+    'worklet';
+    return {
+      initialValues: {
+        opacity: 0,
+        transform: [{ translateY: SLIGHT_Y }],
+      },
+      animations: {
+        opacity: withDelay(delayMs, withTiming(1, { duration: ENTRANCE_DURATION, easing: PREMIUM_EASING })),
+        transform: [
+          {
+            translateY: withDelay(
+              delayMs,
+              withTiming(0, { duration: ENTRANCE_DURATION, easing: PREMIUM_EASING })
+            ),
+          },
+        ],
+      },
+    };
+  };
+};
+
 export default function LoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -28,21 +66,14 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Pure React Native Animated opacity tracker
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  // Focus-state tracking values for Inputs
+  const emailFocusValue = useSharedValue(0);
+  const passwordFocusValue = useSharedValue(0);
 
-  // Track error state transitions to fire smooth fade configurations
-  useEffect(() => {
-    if (errorMessage) {
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      fadeAnim.setValue(0);
-    }
-  }, [errorMessage]);
+  // Continuous micro-interaction state values
+  const googleButtonScale = useSharedValue(1);
+  const googleButtonOpacity = useSharedValue(1);
+  const footerLinkOpacity = useSharedValue(1);
 
   // Dismiss errors automatically when user adjusts inputs
   useEffect(() => {
@@ -135,6 +166,30 @@ export default function LoginScreen() {
     }
   };
 
+  // Border highlight overrides for input focus states (no size resizing or scale pops)
+  const emailAnimatedStyle = useAnimatedStyle(() => ({
+    borderColor: withTiming(emailFocusValue.value === 1 ? '#000000' : '#EAEAEA', {
+      duration: 200,
+      easing: PREMIUM_EASING,
+    }),
+  }));
+
+  const passwordAnimatedStyle = useAnimatedStyle(() => ({
+    borderColor: withTiming(passwordFocusValue.value === 1 ? '#000000' : '#EAEAEA', {
+      duration: 200,
+      easing: PREMIUM_EASING,
+    }),
+  }));
+
+  const googleButtonAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: withTiming(googleButtonScale.value, { duration: 90, easing: PREMIUM_EASING }) }],
+    opacity: withTiming(googleButtonOpacity.value, { duration: 90, easing: PREMIUM_EASING }),
+  }));
+
+  const footerLinkAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: withTiming(footerLinkOpacity.value, { duration: 120, easing: PREMIUM_EASING }),
+  }));
+
   return (
     <PremiumScreen>
       <KeyboardAvoidingView
@@ -142,49 +197,72 @@ export default function LoginScreen() {
         style={styles.keyboardView}
       >
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          {/* Logo Section */}
-          <View style={styles.logoContainer}>
+          
+          {/* 1. Logo Section (Sequence 1: delay 0ms) */}
+          <Animated.View 
+            entering={createPremiumEntrance(0)}
+            style={styles.logoContainer}
+          >
             <View style={styles.iconWrapper}>
               <View style={styles.starIconContainer}>
                 <VyraLogo size={56} />
               </View>
             </View>
-            <SectionHeader 
-              title="Vyra" 
-              subtitle="Welcome back" 
-              style={styles.headerCenteredOverride} 
-            />
-          </View>
+            {/* 2. Title & Subtitle Section (Sequence 2: delay 50ms) */}
+            <Animated.View entering={createPremiumEntrance(50)}>
+              <SectionHeader 
+                title="Vyra" 
+                subtitle="Welcome back" 
+                style={styles.headerCenteredOverride} 
+              />
+            </Animated.View>
+          </Animated.View>
 
-          {/* Form Section */}
-          <View style={styles.formContainer}>
+          {/* 3. Form Section Container (Sequence 3: delay 100ms) */}
+          <Animated.View 
+            entering={createPremiumEntrance(100)}
+            style={styles.formContainer}
+          >
             <SectionTitle withBottomMargin>Account Access</SectionTitle>
 
-            <PremiumInput
-              label="Email"
-              placeholder="your@email.com"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              editable={!isLoading}
-            />
+            <Animated.View style={[styles.inputWrapperBorder, emailAnimatedStyle]}>
+              <PremiumInput
+                label="Email"
+                placeholder="your@email.com"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                editable={!isLoading}
+                onFocus={() => { emailFocusValue.value = 1; }}
+                onBlur={() => { emailFocusValue.value = 0; }}
+              />
+            </Animated.View>
 
             <View style={styles.inputSpacer} />
 
-            <PremiumInput
-              label="Password"
-              placeholder="••••••••"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              autoCapitalize="none"
-              editable={!isLoading}
-            />
+            <Animated.View style={[styles.inputWrapperBorder, passwordAnimatedStyle]}>
+              <PremiumInput
+                label="Password"
+                placeholder="••••••••"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                autoCapitalize="none"
+                editable={!isLoading}
+                onFocus={() => { passwordFocusValue.value = 1; }}
+                onBlur={() => { passwordFocusValue.value = 0; }}
+              />
+            </Animated.View>
 
-            {/* Standard React Native Animated Error Layout Container */}
+            {/* Error Banner transition: Calm, minimal, zero spring overshoot */}
             {errorMessage && (
-              <Animated.View style={[styles.errorInlineBanner, { opacity: fadeAnim }]}>
+              <Animated.View 
+                entering={createPremiumEntrance(0)} // Triggers instantly on state render
+                exiting={FadeOut.duration(150).easing(PREMIUM_EASING)}
+                layout={LinearTransition.duration(200).easing(PREMIUM_EASING)}
+                style={styles.errorInlineBanner}
+              >
                 <MaterialCommunityIcons name="alert-circle-outline" size={16} color="#EF4444" />
                 <Text style={styles.errorBannerText}>{errorMessage}</Text>
               </Animated.View>
@@ -192,48 +270,85 @@ export default function LoginScreen() {
 
             <View style={styles.buttonSpacingAdjustment} />
             
-            {isLoading ? (
-              <View style={styles.loaderButtonPlaceholder}>
-                <PremiumLoader />
-              </View>
-            ) : (
-              <PremiumButton label="Sign In" onPress={handleSignIn} />
-            )}
-          </View>
+            {/* 4. Primary Button Section (Sequence 4: delay 150ms) */}
+            <Animated.View 
+              entering={createPremiumEntrance(150)}
+              layout={LinearTransition.duration(200).easing(PREMIUM_EASING)}
+            >
+              {isLoading ? (
+                <Animated.View 
+                  entering={FadeIn.duration(150).easing(PREMIUM_EASING)}
+                  exiting={FadeOut.duration(150).easing(PREMIUM_EASING)}
+                  style={styles.loaderButtonPlaceholder}
+                >
+                  <PremiumLoader />
+                </Animated.View>
+              ) : (
+                <Animated.View 
+                  entering={FadeIn.duration(150).easing(PREMIUM_EASING)}
+                  exiting={FadeOut.duration(150).easing(PREMIUM_EASING)}
+                >
+                  <PremiumButton label="Sign In" onPress={handleSignIn} />
+                </Animated.View>
+              )}
+            </Animated.View>
+          </Animated.View>
 
-          {/* Divider */}
-          <View style={styles.dividerContainer}>
+          {/* 5. Divider Section (Sequence 5: delay 190ms) */}
+          <Animated.View 
+            entering={createPremiumEntrance(190)}
+            style={styles.dividerContainer}
+          >
             <View style={styles.dividerLine} />
             <Text style={styles.dividerText}>OR</Text>
             <View style={styles.dividerLine} />
-          </View>
+          </Animated.View>
 
-          {/* OAuth Section */}
-          <TouchableOpacity 
-            style={[styles.googleButton, isLoading && styles.disabledElement]} 
-            activeOpacity={0.8}
-            onPress={handleGoogleSignIn}
-            disabled={isLoading}
+          {/* 6. Google Section (Sequence 6: delay 230ms) */}
+          <Animated.View entering={createPremiumEntrance(230)}>
+            <TouchableOpacity 
+              style={isLoading && styles.disabledElement} 
+              activeOpacity={1}
+              onPressIn={() => {
+                googleButtonScale.value = 0.995;
+                googleButtonOpacity.value = 0.95;
+              }}
+              onPressOut={() => {
+                googleButtonScale.value = 1;
+                googleButtonOpacity.value = 1;
+              }}
+              onPress={handleGoogleSignIn}
+              disabled={isLoading}
+            >
+              <Animated.View style={[styles.googleButton, googleButtonAnimatedStyle]}>
+                <View style={styles.googleContent}>
+                  <View style={styles.envelopeIcon}>
+                    <View style={styles.envelopeFlap} />
+                  </View>
+                  <Text style={styles.googleButtonText}>Continue with Google</Text>
+                </View>
+              </Animated.View>
+            </TouchableOpacity>
+          </Animated.View>
+
+          {/* 7. Footer Section (Sequence 7: delay 270ms) */}
+          <Animated.View 
+            entering={createPremiumEntrance(270)}
+            style={[styles.footerContainer, isLoading && styles.disabledElement]}
           >
-            <View style={styles.googleContent}>
-              <View style={styles.envelopeIcon}>
-                <View style={styles.envelopeFlap} />
-              </View>
-              <Text style={styles.googleButtonText}>Continue with Google</Text>
-            </View>
-          </TouchableOpacity>
-
-          {/* Footer Section */}
-          <View style={[styles.footerContainer, isLoading && styles.disabledElement]}>
             <Text style={styles.footerText}>Don't have an account? </Text>
             <TouchableOpacity 
-              activeOpacity={0.7} 
+              activeOpacity={1}
+              onPressIn={() => { footerLinkOpacity.value = 0.7; }}
+              onPressOut={() => { footerLinkOpacity.value = 1; }}
               onPress={() => !isLoading && router.push('/auth/register')}
               disabled={isLoading}
             >
-              <Text style={styles.signUpText}>Sign up</Text>
+              <Animated.View style={footerLinkAnimatedStyle}>
+                <Text style={styles.signUpText}>Sign up</Text>
+              </Animated.View>
             </TouchableOpacity>
-          </View>
+          </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
     </PremiumScreen>
@@ -273,6 +388,12 @@ const styles = StyleSheet.create({
   formContainer: {
     width: '100%',
     marginBottom: 12,
+  },
+  inputWrapperBorder: {
+    borderWidth: 0,
+    borderRadius: 12,
+    borderColor: '#EAEAEA',
+    overflow: 'hidden',
   },
   inputSpacer: {
     height: 12,
@@ -330,7 +451,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    marginBottom: 44,
+    width: '100%',
   },
   googleContent: {
     flexDirection: 'row',
@@ -366,6 +487,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    marginTop: 44, // Ensures layout spacing remains identical
   },
   footerText: {
     fontSize: 14,

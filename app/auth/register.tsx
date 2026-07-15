@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,11 +7,20 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import Animated, {
+  FadeIn,
+  FadeOut,
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withDelay,
+  Easing,
+  LinearTransition,
+} from 'react-native-reanimated';
 
 import { PremiumButton } from '../../components/ui/PremiumButton'; 
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
@@ -20,6 +29,35 @@ import { SectionHeader } from '../../components/ui/SectionHeader';
 import { SectionTitle } from '../../components/ui/SectionTitle';
 import { PremiumLoader } from '../../components/ui/PremiumLoader';
 import { supabase } from '../../lib/supabase';
+
+// Ultra-premium cubic easing curve (Calm, confident, matching iOS/Apple system curves)
+const PREMIUM_EASING = Easing.bezier(0.25, 0.1, 0.25, 1);
+const ENTRANCE_DURATION = 260; 
+const SLIGHT_Y = 6;            
+
+// Robust worklet-based entrance choreography sequence
+const createPremiumEntrance = (delayMs: number) => {
+  return () => {
+    'worklet';
+    return {
+      initialValues: {
+        opacity: 0,
+        transform: [{ translateY: SLIGHT_Y }],
+      },
+      animations: {
+        opacity: withDelay(delayMs, withTiming(1, { duration: ENTRANCE_DURATION, easing: PREMIUM_EASING })),
+        transform: [
+          {
+            translateY: withDelay(
+              delayMs,
+              withTiming(0, { duration: ENTRANCE_DURATION, easing: PREMIUM_EASING })
+            ),
+          },
+        ],
+      },
+    };
+  };
+};
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -36,6 +74,17 @@ export default function RegisterScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Focus-state tracking values for Input Borders
+  const usernameFocus = useSharedValue(0);
+  const emailFocus = useSharedValue(0);
+  const birthdayFocus = useSharedValue(0);
+  const passwordFocus = useSharedValue(0);
+  const confirmPasswordFocus = useSharedValue(0);
+
+  // Micro-interaction shared values
+  const backBtnScale = useSharedValue(1);
+  const footerOpacity = useSharedValue(1);
+
   // Real-time password validation states
   const hasMinLength = password.length >= 8;
   const hasUppercase = /[A-Z]/.test(password);
@@ -50,29 +99,12 @@ export default function RegisterScreen() {
     isPasswordValid && 
     password === confirmPassword;
 
-  // Pure React Native Animated opacity tracker
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-
-  // Track error state transitions to fire smooth fade configurations
-  useEffect(() => {
-    if (errorMessage) {
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      fadeAnim.setValue(0);
-    }
-  }, [errorMessage]);
-
   // Clean error panel context if inputs change
   useEffect(() => {
     if (errorMessage) setErrorMessage(null);
   }, [username, email, password, confirmPassword, birthDate, gender]);
 
   const handleDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
-    // For Android, dismiss picker panel overlay immediately on select
     if (Platform.OS === 'android') {
       setShowDatePicker(false);
     }
@@ -86,7 +118,6 @@ export default function RegisterScreen() {
     }
   };
 
-  // Translate Supabase / backend validation parameters to user-friendly feedback
   const mapAuthErrorToFriendlyMessage = (error: any): string => {
     if (!error) return 'Registration failed. Please try again.';
     
@@ -139,7 +170,6 @@ export default function RegisterScreen() {
 
       console.log(`[Registration Execution] Auth Account provisioned successfully. ID assigned: ${authenticatedUserInstance.id}`);
 
-      // Ensure profile exists
       const { error: profileError } = await supabase
         .from('profiles')
         .upsert({
@@ -165,84 +195,146 @@ export default function RegisterScreen() {
     }
   };
 
+  // Reanimated style definitions for silent input borders
+  const usernameStyle = useAnimatedStyle(() => ({
+    borderColor: withTiming(usernameFocus.value === 1 ? '#1C1917' : '#E7E5E4', { duration: 200, easing: PREMIUM_EASING }),
+  }));
+
+  const emailStyle = useAnimatedStyle(() => ({
+    borderColor: withTiming(emailFocus.value === 1 ? '#1C1917' : '#E7E5E4', { duration: 200, easing: PREMIUM_EASING }),
+  }));
+
+  const birthdayStyle = useAnimatedStyle(() => ({
+    borderColor: withTiming(birthdayFocus.value === 1 ? '#1C1917' : '#E7E5E4', { duration: 200, easing: PREMIUM_EASING }),
+  }));
+
+  const passwordStyle = useAnimatedStyle(() => ({
+    borderColor: withTiming(passwordFocus.value === 1 ? '#1C1917' : '#E7E5E4', { duration: 200, easing: PREMIUM_EASING }),
+  }));
+
+  const confirmPasswordStyle = useAnimatedStyle(() => ({
+    borderColor: withTiming(confirmPasswordFocus.value === 1 ? '#1C1917' : '#E7E5E4', { duration: 200, easing: PREMIUM_EASING }),
+  }));
+
+  const backBtnAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: withTiming(backBtnScale.value, { duration: 90, easing: PREMIUM_EASING }) }],
+  }));
+
+  const footerAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: withTiming(footerOpacity.value, { duration: 120, easing: PREMIUM_EASING }),
+  }));
+
   return (
     <PremiumScreen>
-      <View style={styles.navigationHeaderContainer}>
+      {/* 1. Header Back Section (Sequence 1: delay 0ms) */}
+      <Animated.View 
+        entering={createPremiumEntrance(0)}
+        style={styles.navigationHeaderContainer}
+      >
         <TouchableOpacity 
-          style={[styles.backCircleActionButton, isLoading && styles.disabledElement]} 
+          style={isLoading && styles.disabledElement} 
           onPress={() => router.back()}
+          onPressIn={() => { backBtnScale.value = 0.97; }}
+          onPressOut={() => { backBtnScale.value = 1; }}
           disabled={isLoading}
-          activeOpacity={0.7}
+          activeOpacity={1}
         >
-          <Ionicons name="arrow-back" size={20} color="#1C1917" />
+          <Animated.View style={[styles.backCircleActionButton, backBtnAnimatedStyle]}>
+            <Ionicons name="arrow-back" size={20} color="#1C1917" />
+          </Animated.View>
         </TouchableOpacity>
-      </View>
+      </Animated.View>
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <View style={styles.titleSectionContainer}>
+          
+          {/* 2. Title Header (Sequence 2: delay 40ms) */}
+          <Animated.View 
+            entering={createPremiumEntrance(40)}
+            style={styles.titleSectionContainer}
+          >
             <SectionHeader 
               title="Create Profile" 
               subtitle="Establish wardrobe configuration coordinates" 
               style={styles.headerAlignmentOverride}
             />
-          </View>
+          </Animated.View>
 
-          <View style={styles.formContainer}>
+          {/* 3. Main Form Section (Sequence 3: delay 80ms) */}
+          <Animated.View 
+            entering={createPremiumEntrance(80)}
+            style={styles.formContainer}
+          >
             <SectionTitle withBottomMargin>Identity Parameters</SectionTitle>
 
-            <PremiumInput
-              label="Username"
-              placeholder="closet_curator"
-              value={username}
-              onChangeText={setUsername}
-              autoCapitalize="none"
-              editable={!isLoading}
-            />
+            <Animated.View style={[styles.inputWrapperBorder, usernameStyle]}>
+              <PremiumInput
+                label="Username"
+                placeholder="closet_curator"
+                value={username}
+                onChangeText={setUsername}
+                autoCapitalize="none"
+                editable={!isLoading}
+                onFocus={() => { usernameFocus.value = 1; }}
+                onBlur={() => { usernameFocus.value = 0; }}
+              />
+            </Animated.View>
 
             <View style={styles.inputSpacer} />
 
-            <PremiumInput
-              label="Email Address"
-              placeholder="curator@vyra.app"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              editable={!isLoading}
-            />
+            <Animated.View style={[styles.inputWrapperBorder, emailStyle]}>
+              <PremiumInput
+                label="Email Address"
+                placeholder="curator@vyra.app"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                editable={!isLoading}
+                onFocus={() => { emailFocus.value = 1; }}
+                onBlur={() => { emailFocus.value = 0; }}
+              />
+            </Animated.View>
 
             <View style={styles.inputSpacer} />
 
             {/* Premium Native Birthday Anchor Field Trigger */}
             <TouchableOpacity 
-              activeOpacity={0.9} 
+              activeOpacity={1} 
+              onPressIn={() => { birthdayFocus.value = 1; }}
+              onPressOut={() => { birthdayFocus.value = 0; }}
               onPress={() => !isLoading && setShowDatePicker(true)}
               disabled={isLoading}
             >
-              <View pointerEvents="none">
-                <PremiumInput
-                  label="Birth Date"
-                  placeholder="Select your birth date"
-                  value={birthDate}
-                  editable={false}
+              <Animated.View style={[styles.inputWrapperBorder, birthdayStyle]}>
+                <View pointerEvents="none">
+                  <PremiumInput
+                    label="Birth Date"
+                    placeholder="Select your birth date"
+                    value={birthDate}
+                    editable={false}
+                  />
+                </View>
+                <MaterialCommunityIcons 
+                  name="calendar-month-outline" 
+                  size={18} 
+                  color="#78716C" 
+                  style={styles.calendarInlineIcon}
                 />
-              </View>
-              <MaterialCommunityIcons 
-                name="calendar-month-outline" 
-                size={18} 
-                color="#78716C" 
-                style={styles.calendarInlineIcon}
-              />
+              </Animated.View>
             </TouchableOpacity>
 
             {/* Platform Modal Native Picker Integration Wrapper */}
             {showDatePicker && (
               Platform.OS === 'ios' ? (
-                <View style={styles.iosPickerWrapper}>
+                <Animated.View 
+                  entering={FadeIn.duration(200).easing(PREMIUM_EASING)}
+                  exiting={FadeOut.duration(150).easing(PREMIUM_EASING)}
+                  style={styles.iosPickerWrapper}
+                >
                   <View style={styles.iosPickerHeaderRow}>
                     <TouchableOpacity onPress={() => setShowDatePicker(false)}>
                       <Text style={styles.iosPickerDoneText}>Done</Text>
@@ -255,7 +347,7 @@ export default function RegisterScreen() {
                     onChange={handleDateChange}
                     maximumDate={new Date()}
                   />
-                </View>
+                </Animated.View>
               ) : (
                 <DateTimePicker
                   value={rawDate}
@@ -278,7 +370,7 @@ export default function RegisterScreen() {
                     isLoading && styles.disabledElement
                   ]}
                   onPress={() => !isLoading && setGender(gender === genderOption ? '' : genderOption)}
-                  activeOpacity={0.8}
+                  activeOpacity={0.85}
                   disabled={isLoading}
                 >
                   <Text style={[
@@ -291,19 +383,28 @@ export default function RegisterScreen() {
               ))}
             </View>
 
-            <PremiumInput
-              label="Choose Password"
-              placeholder="••••••••"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              autoCapitalize="none"
-              editable={!isLoading}
-            />
+            <Animated.View style={[styles.inputWrapperBorder, passwordStyle]}>
+              <PremiumInput
+                label="Choose Password"
+                placeholder="••••••••"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                autoCapitalize="none"
+                editable={!isLoading}
+                onFocus={() => { passwordFocus.value = 1; }}
+                onBlur={() => { passwordFocus.value = 0; }}
+              />
+            </Animated.View>
 
-            {/* Premium Minimalist Real-Time Password Validation Criteria View Panel */}
+            {/* Premium Minimalist Real-Time Password Validation Criteria Panel */}
             {password.length > 0 && (
-              <View style={styles.validationCriteriaCard}>
+              <Animated.View 
+                entering={createPremiumEntrance(0)}
+                exiting={FadeOut.duration(150).easing(PREMIUM_EASING)}
+                layout={LinearTransition.duration(200).easing(PREMIUM_EASING)}
+                style={styles.validationCriteriaCard}
+              >
                 <View style={styles.criteriaLineItem}>
                   <MaterialCommunityIcons 
                     name={hasMinLength ? "check-circle" : "circle-slice-8"} 
@@ -334,24 +435,33 @@ export default function RegisterScreen() {
                     At least 1 special character
                   </Text>
                 </View>
-              </View>
+              </Animated.View>
             )}
 
             <View style={styles.inputSpacer} />
 
-            <PremiumInput
-              label="Confirm Chosen Password"
-              placeholder="••••••••"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry
-              autoCapitalize="none"
-              editable={!isLoading}
-            />
+            <Animated.View style={[styles.inputWrapperBorder, confirmPasswordStyle]}>
+              <PremiumInput
+                label="Confirm Chosen Password"
+                placeholder="••••••••"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry
+                autoCapitalize="none"
+                editable={!isLoading}
+                onFocus={() => { confirmPasswordFocus.value = 1; }}
+                onBlur={() => { confirmPasswordFocus.value = 0; }}
+              />
+            </Animated.View>
 
-            {/* Premium Inline Animated Error Alert Layout Component Slot */}
+            {/* Error Banner Transition */}
             {errorMessage && (
-              <Animated.View style={[styles.errorInlineBanner, { opacity: fadeAnim }]}>
+              <Animated.View 
+                entering={FadeIn.duration(200).easing(PREMIUM_EASING)}
+                exiting={FadeOut.duration(150).easing(PREMIUM_EASING)}
+                layout={LinearTransition.duration(200).easing(PREMIUM_EASING)}
+                style={styles.errorInlineBanner}
+              >
                 <MaterialCommunityIcons name="alert-circle-outline" size={16} color="#EF4444" />
                 <Text style={styles.errorBannerText}>{errorMessage}</Text>
               </Animated.View>
@@ -359,32 +469,50 @@ export default function RegisterScreen() {
 
             <View style={styles.buttonTopGappingWrapper} />
 
-            {isLoading ? (
-              <View style={styles.loaderButtonPlaceholder}>
-                <PremiumLoader />
-              </View>
-            ) : (
-              <PremiumButton 
-                label="Register Wardrobe Account" 
-                onPress={handleRegisterAccount} 
-                disabled={!isFormValid}
-                style={!isFormValid && styles.disabledRegisterButton}
-              />
-            )}
-          </View>
+            <Animated.View layout={LinearTransition.duration(200).easing(PREMIUM_EASING)}>
+              {isLoading ? (
+                <Animated.View 
+                  entering={FadeIn.duration(150).easing(PREMIUM_EASING)}
+                  exiting={FadeOut.duration(150).easing(PREMIUM_EASING)}
+                  style={styles.loaderButtonPlaceholder}
+                >
+                  <PremiumLoader />
+                </Animated.View>
+              ) : (
+                <Animated.View 
+                  entering={FadeIn.duration(150).easing(PREMIUM_EASING)}
+                  exiting={FadeOut.duration(150).easing(PREMIUM_EASING)}
+                >
+                  <PremiumButton 
+                    label="Register Wardrobe Account" 
+                    onPress={handleRegisterAccount} 
+                    disabled={!isFormValid}
+                    style={!isFormValid && styles.disabledRegisterButton}
+                  />
+                </Animated.View>
+              )}
+            </Animated.View>
+          </Animated.View>
           
-          {/* Footer Navigation Link */}
-          <View style={[styles.footerContainer, isLoading && styles.disabledElement]}>
+          {/* 4. Footer Navigation Link (Sequence 4: delay 120ms) */}
+          <Animated.View 
+            entering={createPremiumEntrance(120)}
+            style={[styles.footerContainer, isLoading && styles.disabledElement]}
+          >
             <Text style={styles.footerText}>Already have an account? </Text>
             <TouchableOpacity 
-              activeOpacity={0.7} 
+              activeOpacity={1} 
+              onPressIn={() => { footerOpacity.value = 0.7; }}
+              onPressOut={() => { footerOpacity.value = 1; }}
               onPress={() => !isLoading && router.push('/auth/login')}
               disabled={isLoading}
               style={styles.inlineFooterLink}
             >
-              <Text style={styles.signInLinkText}>Sign in</Text>
+              <Animated.View style={footerAnimatedStyle}>
+                <Text style={styles.signInLinkText}>Sign in</Text>
+              </Animated.View>
             </TouchableOpacity>
-          </View>
+          </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
     </PremiumScreen>
@@ -425,6 +553,12 @@ const styles = StyleSheet.create({
   formContainer: {
     width: '100%',
     marginBottom: 32,
+  },
+  inputWrapperBorder: {
+    borderWidth: 0,
+    borderRadius: 12,
+    borderColor: '#E7E5E4',
+    overflow: 'hidden',
   },
   inputSpacer: {
     height: 12,
