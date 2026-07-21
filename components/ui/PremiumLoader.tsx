@@ -1,7 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { StyleSheet, Text, View, Animated, Easing } from 'react-native';
-import { colors, spacing } from '../../constants/theme'; // Adjust relative path to your token location
-
+import { useTheme } from '../../theme';
 interface PremiumLoaderProps {
   label?: string;
   fullscreen?: boolean;
@@ -19,6 +18,7 @@ export const PremiumLoader: React.FC<PremiumLoaderProps> = ({
   const pulseAnim = useRef(new Animated.Value(0)).current;
   const shimmerAnim = useRef(new Animated.Value(0)).current;
   const breathAnim = useRef(new Animated.Value(0)).current;
+  const { theme } = useTheme();
 
   useEffect(() => {
     // Breathing/Pulse Loop
@@ -102,7 +102,7 @@ export const PremiumLoader: React.FC<PremiumLoaderProps> = ({
       style={[
         styles.container,
         fullscreen && styles.fullscreen,
-        fullscreen && { backgroundColor: colors.background },
+        fullscreen && { backgroundColor: theme.colors.background },
       ]}
     >
       <View style={styles.trackWrapper}>
@@ -110,13 +110,13 @@ export const PremiumLoader: React.FC<PremiumLoaderProps> = ({
           style={[
             styles.indicatorTrack,
             {
-              backgroundColor: colors.primary,
+              backgroundColor: theme.colors.primary,
               opacity: trackOpacity,
               transform: [
                 { scaleX: trackScaleX },
                 { scaleY: trackScaleY }
               ],
-              shadowColor: colors.primary,
+              shadowColor: theme.colors.primary,
               shadowOffset: { width: 0, height: 0 },
               shadowOpacity: 0.5,
               shadowRadius: 4,
@@ -139,8 +139,8 @@ export const PremiumLoader: React.FC<PremiumLoaderProps> = ({
           style={[
             styles.editorialLabel,
             {
-              color: colors.secondaryText,
-              marginTop: spacing.md,
+              color: theme.colors.text,
+              marginTop: 16,
               transform: [{ translateY: labelTranslateY }],
             },
           ]}
@@ -156,7 +156,7 @@ const styles = StyleSheet.create({
   container: {
     justifyContent: 'center',
     alignItems: 'center',
-    padding: spacing.lg,
+    padding: 24,
   },
   fullscreen: {
     ...StyleSheet.absoluteFillObject,

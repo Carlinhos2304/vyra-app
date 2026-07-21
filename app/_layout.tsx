@@ -1,6 +1,7 @@
 import { Stack } from "expo-router";
 import { supabase } from '../lib/supabase';
 import { useEffect } from "react";
+import { ThemeProvider } from "../theme";
 
 
 export default function Layout() {
@@ -20,5 +21,9 @@ export default function Layout() {
   
     testConnection();
   }, []);
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <ThemeProvider>
+      <Stack screenOptions={{ headerShown: false }} />
+    </ThemeProvider>
+  );
 }

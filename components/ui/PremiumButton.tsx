@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, Animated, Pressable, ViewStyle, StyleProp } from 'react-native';
-import { colors, spacing } from '../../constants/theme';
 import { usePremiumPress } from '../../hooks/animation/usePremiumPress';
+import { useTheme } from '../../theme';
 
 interface PremiumButtonProps {
   label: string;
@@ -19,6 +19,7 @@ export const PremiumButton: React.FC<PremiumButtonProps> = ({
   isLoading = false,
 }) => {
   const { pressProps, animatedStyle } = usePremiumPress();
+  const { theme } = useTheme();
   const isInteractive = !disabled && !isLoading;
 
   return (
@@ -30,13 +31,14 @@ export const PremiumButton: React.FC<PremiumButtonProps> = ({
       <Animated.View
         style={[
           styles.buttonBody,
+          { backgroundColor: theme.colors.primary },
           style,
           isInteractive && animatedStyle,
-          (disabled || isLoading) && styles.disabledState,
+          (disabled || isLoading) && { opacity: 0.5 },
         ]}
         {...(isInteractive ? pressProps : {})}
       >
-        <Text style={styles.buttonLabel}>{label}</Text>
+        <Text style={[styles.buttonLabel, { color: theme.colors.background }]}>{label}</Text>
       </Animated.View>
     </Pressable>
   );
@@ -48,14 +50,12 @@ const styles = StyleSheet.create({
   },
   buttonBody: {
     height: 52,
-    backgroundColor: '#1C1917', // Primary Brand Onyx
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
     width: '100%',
   },
   buttonLabel: {
-    color: '#FAFAF9', // Alabaster text token
     fontSize: 15,
     fontWeight: '500',
     letterSpacing: 0.3,

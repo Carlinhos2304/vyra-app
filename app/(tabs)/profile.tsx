@@ -16,6 +16,7 @@ import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { SectionTitle } from '../../components/ui/SectionTitle';
 import { PremiumLoader } from '../../components/ui/PremiumLoader';
+import { useTheme } from '../../theme';
 import { useNotifications } from '../../hooks/useNotifications';
 
 // Supabase client instance integration
@@ -55,6 +56,7 @@ const MENU_SECTIONS = [
     title: 'Preferences',
     items: [
       { id: 'notifications', label: 'Push Notifications', icon: 'bell-outline', type: 'toggle' },
+      { id: 'dark_mode', label: 'Dark Mode', subtitle: 'Switch between Light and Dark appearance', icon: 'theme-light-dark', type: 'theme_toggle' },
     ],
   },
   {
@@ -67,10 +69,11 @@ const MENU_SECTIONS = [
 ];
 
 export default function ProfileScreen() {
-  const [isDarkMode, setIsDarkMode] = useState(false);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const { theme, themeType, setThemeType } = useTheme();
   const { syncNotifications } = useNotifications();
   
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+
   const [profile, setProfile] = useState<UserProfileState | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -343,6 +346,10 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleToggleDarkMode = (enabled: boolean) => {
+    setThemeType(enabled ? 'dark' : 'light');
+  };
+
   const handleItemNavigationTriggers = (item: any) => {
     if (item.type === 'action' && item.label === 'Log Out') {
       handleSystemSignOutRequest();
@@ -401,7 +408,7 @@ export default function ProfileScreen() {
               onPress={() => console.log('Settings Interaction Link Activated')}
             >
               <Animated.View style={animatedSettingsBtnStyle}>
-                <Ionicons name="settings-outline" size={22} color="#1C1917" />
+                <Ionicons name="settings-outline" size={22} color={theme.colors.text} />
               </Animated.View>
             </Pressable>
           </View>
@@ -413,8 +420,8 @@ export default function ProfileScreen() {
           ) : error ? (
             <View style={styles.stateCenterLoaderFrame}>
               <MaterialCommunityIcons name="cloud-off-outline" size={32} color="#EF4444" />
-              <Text style={styles.errorHeaderTypography}>Profile Load Fault</Text>
-              <Text style={styles.errorSubTypography}>{error}</Text>
+              <Text style={[styles.errorHeaderTypography, { color: theme.colors.text }]}>Profile Load Fault</Text>
+              <Text style={[styles.errorSubTypography, { color: theme.colors.secondaryText }]}>{error}</Text>
               
               <Pressable 
                 style={styles.retryControlActionButton} 
@@ -436,18 +443,18 @@ export default function ProfileScreen() {
                   style={styles.avatarImage}
                 />
                 <Animated.View style={[styles.metaTextWrapper, animatedNameStyle]}>
-                  <Text style={styles.profileName}>{profile?.username}</Text>
-                  <Text style={styles.profileEmail}>{profile?.email}</Text>
+                  <Text style={[styles.profileName, { color: theme.colors.text }]}>{profile?.username}</Text>
+                  <Text style={[styles.profileEmail, { color: theme.colors.secondaryText }]}>{profile?.email}</Text>
                 </Animated.View>
               </Animated.View>
 
               {/* Dynamic Stats Row Grid */}
               <Animated.View style={[styles.statsRowGrid, animatedStatsStyle]}>
                 {DYNAMIC_STATS.map((stat) => (
-                  <View key={stat.id} style={styles.statMiniCard}>
-                    <MaterialCommunityIcons name={stat.icon as any} size={20} color="#78716C" style={styles.statIcon} />
-                    <Text style={styles.statValueText}>{stat.value}</Text>
-                    <Text style={styles.statLabelText}>{stat.label}</Text>
+                  <View key={stat.id} style={[styles.statMiniCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                    <MaterialCommunityIcons name={stat.icon as any} size={20} color={theme.colors.secondaryText} style={styles.statIcon} />
+                    <Text style={[styles.statValueText, { color: theme.colors.text }]}>{stat.value}</Text>
+                    <Text style={[styles.statLabelText, { color: theme.colors.secondaryText }]}>{stat.label}</Text>
                   </View>
                 ))}
               </Animated.View>
@@ -458,13 +465,13 @@ export default function ProfileScreen() {
                 <View style={styles.tagsContainerRow}>
                   {stylePreferences.length > 0 ? (
                     stylePreferences.map((preference, index) => (
-                      <View key={index} style={styles.preferenceTagBadge}>
-                        <Text style={styles.preferenceTagText}>{preference}</Text>
+                      <View key={index} style={[styles.preferenceTagBadge, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+                        <Text style={[styles.preferenceTagText, { color: theme.colors.text }]}>{preference}</Text>
                       </View>
                     ))
                   ) : (
                     <View style={styles.emptyPreferencesTagBadge}>
-                      <Text style={styles.emptyPreferencesTagText}>No style profile generated yet</Text>
+                      <Text style={[styles.emptyPreferencesTagText, { color: theme.colors.secondaryText }]}>No style profile generated yet</Text>
                     </View>
                   )}
                 </View>
@@ -475,47 +482,62 @@ export default function ProfileScreen() {
                 {DYNAMIC_MENU_SECTIONS.map((section, sectionIdx) => (
                   <View key={sectionIdx} style={styles.menuSectionSpacer}>
                     <SectionTitle withBottomMargin>{section.title}</SectionTitle>
-                    <View style={styles.menuGroupCard}>
+                    <View style={[styles.menuGroupCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
                       {section.items.map((item, itemIdx) => {
                         const isLastItem = itemIdx === section.items.length - 1;
                         return (
                           <View key={item.id}>
                             <Pressable
-                              style={styles.menuRowItem}
-                              onPress={() => handleItemNavigationTriggers(item)}
+                              style={[styles.menuRowItem, item.subtitle && styles.menuRowItemWithSubtitle]}
+                              onPress={() => item.type !== 'toggle' && item.type !== 'theme_toggle' && handleItemNavigationTriggers(item)}
                             >
                               <View style={styles.menuRowLeftBlock}>
                                 <MaterialCommunityIcons
                                   name={item.icon as any}
                                   size={20}
-                                  color={item.danger ? '#DC2626' : '#78716C'}
+                                  color={item.danger ? '#DC2626' : theme.colors.text}
                                   style={styles.menuItemIcon}
                                 />
-                                <Text style={[styles.menuItemLabel, item.danger && styles.dangerItemLabel]}>
-                                  {item.label}
-                                </Text>
+                                <View style={styles.menuRowTextStack}>
+                                  <Text style={[styles.menuItemLabel, { color: theme.colors.text }, item.danger && styles.dangerItemLabel]}>
+                                    {item.label}
+                                  </Text>
+                                  {item.subtitle && (
+                                    <Text style={[styles.menuItemSubtitle, { color: theme.colors.secondaryText }]}>
+                                      {item.subtitle}
+                                    </Text>
+                                  )}
+                                </View>
                                 {item.badge && (
-                                  <View style={styles.counterBadge}>
-                                    <Text style={styles.counterBadgeText}>{item.badge}</Text>
+                                  <View style={[styles.counterBadge, { backgroundColor: theme.colors.surface }]}>
+                                    <Text style={[styles.counterBadgeText, { color: theme.colors.secondaryText }]}>{item.badge}</Text>
                                   </View>
                                 )}
                               </View>
 
                               {item.type === 'toggle' && (
                                 <Switch
-                                  value={item.id === 'notifications' ? notificationsEnabled : isDarkMode}
-                                  onValueChange={item.id === 'notifications' ? handleToggleNotifications : setIsDarkMode}
-                                  trackColor={{ false: '#D6D3D1', true: '#1C1917' }}
+                                  value={notificationsEnabled}
+                                  onValueChange={handleToggleNotifications}
+                                  trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
                                   thumbColor="#FFFFFF"
-                                  ios_backgroundColor="#D6D3D1"
+                                />
+                              )}
+
+                              {item.type === 'theme_toggle' && (
+                                <Switch
+                                  value={themeType === 'dark'}
+                                  onValueChange={handleToggleDarkMode}
+                                  trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+                                  thumbColor="#FFFFFF"
                                 />
                               )}
 
                               {item.type === 'chevron' && (
-                                <Ionicons name="chevron-forward" size={18} color="#78716C" />
+                                <Ionicons name="chevron-forward" size={18} color={theme.colors.secondaryText} />
                               )}
                             </Pressable>
-                            {!isLastItem && <View style={styles.rowDividerSeparator} />}
+                            {!isLastItem && <View style={[styles.rowDividerSeparator, { backgroundColor: theme.colors.border }]} />}
                           </View>
                         );
                       })}
@@ -526,8 +548,8 @@ export default function ProfileScreen() {
 
               {/* Bottom Layout footer text elements */}
               <Animated.View style={[styles.appFooterDetailsContainer, animatedFooterStyle]}>
-                <Text style={styles.footerBrandText}>VYRA v0.1.0</Text>
-                <Text style={styles.footerSecondaryText}>Made with love for fashion lovers</Text>
+                <Text style={[styles.footerBrandText, { color: theme.colors.secondaryText }]}>VYRA v0.1.0</Text>
+                <Text style={[styles.footerSecondaryText, { color: theme.colors.secondaryText }]}>Made with love for fashion lovers</Text>
               </Animated.View>
             </>
           )}
@@ -577,12 +599,10 @@ const styles = StyleSheet.create({
   profileName: {
     fontSize: 20,
     fontWeight: '500',
-    color: '#1C1917',
     marginBottom: 4,
   },
   profileEmail: {
     fontSize: 14,
-    color: '#78716C',
   },
   statsRowGrid: {
     flexDirection: 'row',
@@ -593,13 +613,11 @@ const styles = StyleSheet.create({
   },
   statMiniCard: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     paddingVertical: 14,
     paddingHorizontal: 8,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#E7E5E4',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.02,
@@ -612,12 +630,10 @@ const styles = StyleSheet.create({
   statValueText: {
     fontSize: 18,
     fontWeight: '500',
-    color: '#1C1917',
     marginBottom: 2,
   },
   statLabelText: {
     fontSize: 11,
-    color: '#78716C',
     fontWeight: '500',
   },
   sectionBlock: {
@@ -633,31 +649,25 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   preferenceTagBadge: {
-    backgroundColor: '#F5F5F4',
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#E7E5E4',
   },
   preferenceTagText: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#1C1917',
   },
   emptyPreferencesTagBadge: {
     paddingVertical: 4,
   },
   emptyPreferencesTagText: {
     fontSize: 13,
-    color: '#78716C',
     fontStyle: 'italic',
   },
   menuGroupCard: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E7E5E4',
     overflow: 'hidden',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
@@ -671,11 +681,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 14,
     paddingHorizontal: 16,
-    height: 52,
+    minHeight: 52,
+  },
+  menuRowItemWithSubtitle: {
+    paddingVertical: 12,
   },
   menuRowLeftBlock: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+  },
+  menuRowTextStack: {
+    flexDirection: 'column',
+    justifyContent: 'center',
     flex: 1,
   },
   menuItemIcon: {
@@ -686,13 +704,15 @@ const styles = StyleSheet.create({
   menuItemLabel: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#1C1917',
+  },
+  menuItemSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
   },
   dangerItemLabel: {
     color: '#DC2626',
   },
   counterBadge: {
-    backgroundColor: '#F5F5F4',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 10,
@@ -701,11 +721,9 @@ const styles = StyleSheet.create({
   counterBadgeText: {
     fontSize: 11,
     fontWeight: '500',
-    color: '#78716C',
   },
   rowDividerSeparator: {
     height: 1,
-    backgroundColor: '#F5F5F4',
     marginLeft: 50,
   },
   appFooterDetailsContainer: {
@@ -715,12 +733,10 @@ const styles = StyleSheet.create({
   },
   footerBrandText: {
     fontSize: 12,
-    color: '#78716C',
     fontWeight: '400',
   },
   footerSecondaryText: {
     fontSize: 11,
-    color: '#78716C',
     opacity: 0.8,
     marginTop: 4,
   },
@@ -732,14 +748,12 @@ const styles = StyleSheet.create({
   },
   errorHeaderTypography: {
     fontSize: 16,
-    color: '#1C1917',
     fontWeight: '600',
     marginTop: 14,
     marginBottom: 4,
   },
   errorSubTypography: {
     fontSize: 13,
-    color: '#78716C',
     textAlign: 'center',
     lineHeight: 18,
     marginBottom: 16,

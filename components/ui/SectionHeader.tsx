@@ -1,11 +1,10 @@
 import React from 'react';
 import { StyleSheet, Text, View, ViewProps } from 'react-native';
-import { colors, spacing } from '../../constants/theme'; // Adjust relative path to your token location
-
+import { useTheme } from '../../theme';
 interface SectionHeaderProps extends ViewProps {
   title: string;
   subtitle?: string;
-  isDark?: boolean;
+  isDark?: boolean; // Keep for internal legacy if needed, or ignore
 }
 
 /**
@@ -16,20 +15,17 @@ interface SectionHeaderProps extends ViewProps {
 export const SectionHeader: React.FC<SectionHeaderProps> = ({
   title,
   subtitle,
-  isDark = false,
   style,
   ...props
 }) => {
-  const primaryTextColor = isDark ? '#FAFAF9' : colors.primary;
-  const secondaryTextColor = isDark ? 'rgba(250, 250, 249, 0.5)' : colors.secondaryText;
-
+  const { theme } = useTheme();
   return (
     <View style={[styles.container, style]} {...props}>
-      <Text style={[styles.title, { color: primaryTextColor }]}>
+      <Text style={[styles.title, { color: theme.colors.primary }]}>
         {title.toUpperCase()}
       </Text>
       {subtitle && (
-        <Text style={[styles.subtitle, { color: secondaryTextColor }]}>
+        <Text style={[styles.subtitle, { color: theme.colors.text }]}>
           {subtitle}
         </Text>
       )}
@@ -40,12 +36,12 @@ export const SectionHeader: React.FC<SectionHeaderProps> = ({
 const styles = StyleSheet.create({
   container: {
     width: '100%',
-    paddingVertical: spacing.sm,
+    paddingVertical: 8,
   },
   title: {
     fontSize: 11,
     fontWeight: '600',
-    letterSpacing: 2.5, // High tracking signature for luxury editorial alignment
+    letterSpacing: 2.5,
     lineHeight: 16,
   },
   subtitle: {
@@ -53,6 +49,6 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     letterSpacing: 0.2,
     lineHeight: 18,
-    marginTop: spacing.xs, // Strict, elegant spacing bounds
+    marginTop: 4,
   },
 });

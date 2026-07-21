@@ -1,6 +1,7 @@
 import React from 'react';
-import { StyleSheet, StyleSheetProperties } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { SafeAreaView, SafeAreaViewProps } from 'react-native-safe-area-context';
+import { useTheme } from '../../theme';
 
 interface PremiumScreenProps extends SafeAreaViewProps {
   children: React.ReactNode;
@@ -15,8 +16,9 @@ export const PremiumScreen: React.FC<PremiumScreenProps> = ({
   style, 
   ...props 
 }) => {
+  const { theme } = useTheme();
   return (
-    <SafeAreaView style={[styles.container, style]} {...props}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }, style]} {...props}>
       {children}
     </SafeAreaView>
   );
@@ -25,6 +27,5 @@ export const PremiumScreen: React.FC<PremiumScreenProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAFAFA',
   },
 });

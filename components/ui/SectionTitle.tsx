@@ -1,10 +1,8 @@
 import React from 'react';
 import { StyleSheet, Text, TextStyle, View, ViewProps } from 'react-native';
-import { colors, spacing } from '../../constants/theme'; // Adjust relative path to your token location
-
+import { useTheme } from '../../theme';
 interface SectionTitleProps extends ViewProps {
   children: string;
-  isDark?: boolean;
   withBottomMargin?: boolean;
 }
 
@@ -15,13 +13,11 @@ interface SectionTitleProps extends ViewProps {
  */
 export const SectionTitle: React.FC<SectionTitleProps> = ({
   children,
-  isDark = false,
   withBottomMargin = false,
   style,
   ...props
 }) => {
-  const textColor = isDark ? '#FAFAF9' : colors.primary;
-
+  const { theme } = useTheme();
   return (
     <View 
       style={[
@@ -31,7 +27,7 @@ export const SectionTitle: React.FC<SectionTitleProps> = ({
       ]} 
       {...props}
     >
-      <Text style={[styles.text, { color: textColor }]}>
+      <Text style={[styles.text, { color: theme.colors.primary }]}>
         {children.toUpperCase()}
       </Text>
     </View>
@@ -43,12 +39,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   bottomMargin: {
-    marginBottom: spacing.sm, // Disciplined, compressed spacing for internal architecture
+    marginBottom: 8,
   },
   text: {
     fontSize: 10,
     fontWeight: '600',
-    letterSpacing: 2.0, // Restrained luxury tracking scale for functional subheadings
+    letterSpacing: 2.0,
     lineHeight: 14,
   } as TextStyle,
 });

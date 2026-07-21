@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View, TextInput, TextInputProps } from 'react-native';
+import { useTheme } from '../../theme';
 
 interface PremiumInputProps extends TextInputProps {
   label: string;
@@ -14,12 +15,17 @@ export const PremiumInput: React.FC<PremiumInputProps> = ({
   style,
   ...props
 }) => {
+  const { theme } = useTheme();
   return (
     <View style={styles.inputFieldContainer}>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={[styles.label, { color: theme.colors.text }]}>{label}</Text>
       <TextInput
-        style={[styles.input, style]}
-        placeholderTextColor="#999999"
+        style={[
+          styles.input,
+          { backgroundColor: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border, borderWidth: 1 },
+          style
+        ]}
+        placeholderTextColor={theme.colors.disabled}
         autoCapitalize="none"
         autoCorrect={false}
         {...props}
@@ -35,16 +41,13 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#000000',
     marginBottom: 8,
     marginTop: 16,
   },
   input: {
     height: 52,
-    backgroundColor: '#F5F5F5',
     borderRadius: 14,
     paddingHorizontal: 16,
     fontSize: 15,
-    color: '#000000',
   },
 });

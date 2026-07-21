@@ -29,6 +29,7 @@ import { SectionHeader } from '../../components/ui/SectionHeader';
 import { SectionTitle } from '../../components/ui/SectionTitle';
 import { PremiumLoader } from '../../components/ui/PremiumLoader';
 import { supabase } from '../../lib/supabase';
+import { useTheme } from '../../theme';
 
 // Ultra-premium cubic easing curve (Calm, confident, matching iOS/Apple system curves)
 const PREMIUM_EASING = Easing.bezier(0.25, 0.1, 0.25, 1);
@@ -61,6 +62,7 @@ const createPremiumEntrance = (delayMs: number) => {
 
 export default function RegisterScreen() {
   const router = useRouter();
+  const { theme } = useTheme();
   
   // Registration State Management Variables
   const [username, setUsername] = useState('');
@@ -197,23 +199,23 @@ export default function RegisterScreen() {
 
   // Reanimated style definitions for silent input borders
   const usernameStyle = useAnimatedStyle(() => ({
-    borderColor: withTiming(usernameFocus.value === 1 ? '#1C1917' : '#E7E5E4', { duration: 200, easing: PREMIUM_EASING }),
+    borderColor: withTiming(usernameFocus.value === 1 ? theme.colors.primary : theme.colors.border, { duration: 200, easing: PREMIUM_EASING }),
   }));
 
   const emailStyle = useAnimatedStyle(() => ({
-    borderColor: withTiming(emailFocus.value === 1 ? '#1C1917' : '#E7E5E4', { duration: 200, easing: PREMIUM_EASING }),
+    borderColor: withTiming(emailFocus.value === 1 ? theme.colors.primary : theme.colors.border, { duration: 200, easing: PREMIUM_EASING }),
   }));
 
   const birthdayStyle = useAnimatedStyle(() => ({
-    borderColor: withTiming(birthdayFocus.value === 1 ? '#1C1917' : '#E7E5E4', { duration: 200, easing: PREMIUM_EASING }),
+    borderColor: withTiming(birthdayFocus.value === 1 ? theme.colors.primary : theme.colors.border, { duration: 200, easing: PREMIUM_EASING }),
   }));
 
   const passwordStyle = useAnimatedStyle(() => ({
-    borderColor: withTiming(passwordFocus.value === 1 ? '#1C1917' : '#E7E5E4', { duration: 200, easing: PREMIUM_EASING }),
+    borderColor: withTiming(passwordFocus.value === 1 ? theme.colors.primary : theme.colors.border, { duration: 200, easing: PREMIUM_EASING }),
   }));
 
   const confirmPasswordStyle = useAnimatedStyle(() => ({
-    borderColor: withTiming(confirmPasswordFocus.value === 1 ? '#1C1917' : '#E7E5E4', { duration: 200, easing: PREMIUM_EASING }),
+    borderColor: withTiming(confirmPasswordFocus.value === 1 ? theme.colors.primary : theme.colors.border, { duration: 200, easing: PREMIUM_EASING }),
   }));
 
   const backBtnAnimatedStyle = useAnimatedStyle(() => ({
@@ -239,8 +241,8 @@ export default function RegisterScreen() {
           disabled={isLoading}
           activeOpacity={1}
         >
-          <Animated.View style={[styles.backCircleActionButton, backBtnAnimatedStyle]}>
-            <Ionicons name="arrow-back" size={20} color="#1C1917" />
+          <Animated.View style={[styles.backCircleActionButton, backBtnAnimatedStyle, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+            <Ionicons name="arrow-back" size={20} color={theme.colors.text} />
           </Animated.View>
         </TouchableOpacity>
       </Animated.View>
@@ -333,11 +335,11 @@ export default function RegisterScreen() {
                 <Animated.View 
                   entering={FadeIn.duration(200).easing(PREMIUM_EASING)}
                   exiting={FadeOut.duration(150).easing(PREMIUM_EASING)}
-                  style={styles.iosPickerWrapper}
+                  style={[styles.iosPickerWrapper, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
                 >
-                  <View style={styles.iosPickerHeaderRow}>
+                  <View style={[styles.iosPickerHeaderRow, { backgroundColor: theme.colors.border }]}>
                     <TouchableOpacity onPress={() => setShowDatePicker(false)}>
-                      <Text style={styles.iosPickerDoneText}>Done</Text>
+                      <Text style={[styles.iosPickerDoneText, { color: theme.colors.text }]}>Done</Text>
                     </TouchableOpacity>
                   </View>
                   <DateTimePicker
@@ -346,6 +348,7 @@ export default function RegisterScreen() {
                     display="spinner"
                     onChange={handleDateChange}
                     maximumDate={new Date()}
+                    textColor={theme.colors.text}
                   />
                 </Animated.View>
               ) : (
@@ -359,14 +362,15 @@ export default function RegisterScreen() {
               )
             )}
 
-            <Text style={styles.genderLabelText}>Gender Selection (Optional)</Text>
+            <Text style={[styles.genderLabelText, { color: theme.colors.secondaryText }]}>Gender Selection (Optional)</Text>
             <View style={styles.genderRowButtonGroup}>
               {(['Male', 'Female', 'Other'] as const).map((genderOption) => (
                 <TouchableOpacity
                   key={genderOption}
                   style={[
                     styles.genderBadgePill,
-                    gender === genderOption && styles.activeGenderPill,
+                    { backgroundColor: theme.colors.surface },
+                    gender === genderOption && [styles.activeGenderPill, { backgroundColor: theme.colors.background, borderColor: theme.colors.primary }],
                     isLoading && styles.disabledElement
                   ]}
                   onPress={() => !isLoading && setGender(gender === genderOption ? '' : genderOption)}
@@ -375,7 +379,8 @@ export default function RegisterScreen() {
                 >
                   <Text style={[
                     styles.genderTextProperty,
-                    gender === genderOption && styles.activeGenderText
+                    { color: theme.colors.secondaryText },
+                    gender === genderOption && [styles.activeGenderText, { color: theme.colors.text }]
                   ]}>
                     {genderOption}
                   </Text>
@@ -409,9 +414,9 @@ export default function RegisterScreen() {
                   <MaterialCommunityIcons 
                     name={hasMinLength ? "check-circle" : "circle-slice-8"} 
                     size={14} 
-                    color={hasMinLength ? "#10B981" : "#A8A29E"} 
+                    color={hasMinLength ? "#10B981" : theme.colors.disabled}
                   />
-                  <Text style={[styles.criteriaItemText, hasMinLength && styles.criteriaItemTextSuccess]}>
+                  <Text style={[styles.criteriaItemText, { color: theme.colors.secondaryText }, hasMinLength && [styles.criteriaItemTextSuccess, { color: theme.colors.text }]]}>
                     At least 8 characters
                   </Text>
                 </View>
@@ -419,9 +424,9 @@ export default function RegisterScreen() {
                   <MaterialCommunityIcons 
                     name={hasUppercase ? "check-circle" : "circle-slice-8"} 
                     size={14} 
-                    color={hasUppercase ? "#10B981" : "#A8A29E"} 
+                    color={hasUppercase ? "#10B981" : theme.colors.disabled}
                   />
-                  <Text style={[styles.criteriaItemText, hasUppercase && styles.criteriaItemTextSuccess]}>
+                  <Text style={[styles.criteriaItemText, { color: theme.colors.secondaryText }, hasUppercase && [styles.criteriaItemTextSuccess, { color: theme.colors.text }]]}>
                     At least 1 uppercase letter
                   </Text>
                 </View>
@@ -429,9 +434,9 @@ export default function RegisterScreen() {
                   <MaterialCommunityIcons 
                     name={hasSpecialChar ? "check-circle" : "circle-slice-8"} 
                     size={14} 
-                    color={hasSpecialChar ? "#10B981" : "#A8A29E"} 
+                    color={hasSpecialChar ? "#10B981" : theme.colors.disabled}
                   />
-                  <Text style={[styles.criteriaItemText, hasSpecialChar && styles.criteriaItemTextSuccess]}>
+                  <Text style={[styles.criteriaItemText, { color: theme.colors.secondaryText }, hasSpecialChar && [styles.criteriaItemTextSuccess, { color: theme.colors.text }]]}>
                     At least 1 special character
                   </Text>
                 </View>
@@ -460,7 +465,7 @@ export default function RegisterScreen() {
                 entering={FadeIn.duration(200).easing(PREMIUM_EASING)}
                 exiting={FadeOut.duration(150).easing(PREMIUM_EASING)}
                 layout={LinearTransition.duration(200).easing(PREMIUM_EASING)}
-                style={styles.errorInlineBanner}
+                style={[styles.errorInlineBanner, { backgroundColor: theme.dark ? '#451a1a' : '#FEF2F2', borderColor: theme.dark ? '#7f1d1d' : '#FEE2E2' }]}
               >
                 <MaterialCommunityIcons name="alert-circle-outline" size={16} color="#EF4444" />
                 <Text style={styles.errorBannerText}>{errorMessage}</Text>
@@ -499,7 +504,7 @@ export default function RegisterScreen() {
             entering={createPremiumEntrance(120)}
             style={[styles.footerContainer, isLoading && styles.disabledElement]}
           >
-            <Text style={styles.footerText}>Already have an account? </Text>
+            <Text style={[styles.footerText, { color: theme.colors.secondaryText }]}>Already have an account? </Text>
             <TouchableOpacity 
               activeOpacity={1} 
               onPressIn={() => { footerOpacity.value = 0.7; }}
@@ -509,7 +514,7 @@ export default function RegisterScreen() {
               style={styles.inlineFooterLink}
             >
               <Animated.View style={footerAnimatedStyle}>
-                <Text style={styles.signInLinkText}>Sign in</Text>
+                <Text style={[styles.signInLinkText, { color: theme.colors.text }]}>Sign in</Text>
               </Animated.View>
             </TouchableOpacity>
           </Animated.View>
