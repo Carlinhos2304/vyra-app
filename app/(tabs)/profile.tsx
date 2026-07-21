@@ -526,7 +526,7 @@ export default function ProfileScreen() {
 
               {/* Bottom Layout footer text elements */}
               <Animated.View style={[styles.appFooterDetailsContainer, animatedFooterStyle]}>
-                <Text style={styles.footerBrandText}>VYRA v1.0.0</Text>
+                <Text style={styles.footerBrandText}>VYRA v0.1.0</Text>
                 <Text style={styles.footerSecondaryText}>Made with love for fashion lovers</Text>
               </Animated.View>
             </>
