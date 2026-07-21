@@ -242,12 +242,12 @@ export default function HomeScreen() {
             <Text style={styles.editorialDateText}>{formattedDate}</Text>
             <PremiumTouchable onPress={() => router.push('/profile')} activeOpacity={0.75}>
               <VyraLogo />
-                </PremiumTouchable>
+            </PremiumTouchable>
           </View>
           <Animated.Text
             entering={FadeInDown.duration(600).delay(80).easing(Easing.out(Easing.cubic))}
             style={styles.editorialGreetingText}
-                >
+          >
             Hello, {profile?.username || 'Curator'}
           </Animated.Text>
 
@@ -285,7 +285,7 @@ export default function HomeScreen() {
                       <View style={styles.magazineFallbackContainer}>
                         <Ionicons name="shirt-outline" size={36} color="#A8A29E" />
                       </View>
-  );
+                    );
                   })()}
 
                   <View style={styles.linearScrimOverlay} />
@@ -324,7 +324,9 @@ export default function HomeScreen() {
 
         {/* SECTION 3: HORIZONTAL WEEKLY LOOKAHEAD */}
         <View style={styles.systemSection}>
-          <SectionHeader title="Weekly Forecast" subtitle="Chronological lookahead tracking parameters" style={styles.headerBindingFix} />
+          <Animated.View entering={FadeInDown.duration(600).delay(250).easing(Easing.out(Easing.cubic))}>
+            <SectionHeader title="Weekly Forecast" subtitle="Chronological lookahead tracking parameters" style={styles.headerBindingFix} />
+          </Animated.View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.forecastStripScroll}>
             {weeklyPreview.map((item, index) => (
               <Animated.View
