@@ -8,6 +8,7 @@ import { plannerEn, plannerEs } from './planner';
 import { clothingEn, clothingEs } from './clothing';
 import { tabsCoreEn, tabsCoreEs } from './tabsCore';
 import { outfitAiEn, outfitAiEs } from './outfitAi';
+import { notificationsEn, notificationsEs } from './notifications';
 
 /**
  * Central merge point — every namespace file lives in this directory and
@@ -33,6 +34,7 @@ export const translations = {
     clothing: clothingEn,
     tabs: tabsCoreEn,
     outfitAi: outfitAiEn,
+    notifications: notificationsEn,
   },
   es: {
     common: commonEs,
@@ -47,6 +49,7 @@ export const translations = {
     clothing: clothingEs,
     tabs: tabsCoreEs,
     outfitAi: outfitAiEs,
+    notifications: notificationsEs,
   },
 };
 

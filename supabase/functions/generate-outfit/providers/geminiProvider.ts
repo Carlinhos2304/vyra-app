@@ -9,7 +9,10 @@ import { AIProvider, AIProviderError, OutfitGenerationContext, OutfitSuggestion 
 import { buildSystemPrompt, buildUserPrompt, normalizeOutfitSuggestions } from './normalize.ts';
 
 const DEFAULT_MODEL = 'gemini-3.5-flash-lite';
-const REQUEST_TIMEOUT_MS = 25_000;
+// Bumped from 25s — the free tier can take a while under load, and this
+// call reasons over the full wardrobe/profile/history context with up to
+// 900 output tokens, so 25s was clipping legitimate (if slow) responses.
+const REQUEST_TIMEOUT_MS = 40_000;
 
 export class GeminiProvider implements AIProvider {
   readonly name = 'gemini';

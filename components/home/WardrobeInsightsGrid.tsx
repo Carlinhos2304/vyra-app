@@ -1,7 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown, Easing } from 'react-native-reanimated';
-import { PremiumCard } from '../ui/PremiumCard';
 import { SectionTitle } from '../ui/SectionTitle';
 import { useTheme } from '../../theme';
 import { WardrobeInsights } from '../../lib/services/wardrobeInsightsService';
@@ -72,12 +71,24 @@ export const WardrobeInsightsGrid: React.FC<WardrobeInsightsGridProps> = ({ insi
 
       <View style={styles.grid}>
         {tiles.map((tile) => (
-          <PremiumCard key={tile.label} style={styles.tile} disabled>
+          // Deliberately NOT PremiumCard here: its outer Pressable hardcodes
+          // `flex: 1`, which fights this grid's `width: '48%'` two-column
+          // wrap (every tile ends up squeezed into one 6-across row instead
+          // of wrapping) — same incompatibility already worked around in
+          // outfit/[id].tsx's garment carousel and generate-outfit.tsx's
+          // result cards. This View replicates PremiumCard's visual (surface
+          // background, border, 20px radius) without inheriting that flex.
+          <View
+            key={tile.label}
+            style={[styles.tile, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+          >
             <Text style={[styles.tileValue, { color: theme.colors.textPrimary }]} numberOfLines={1}>
               {tile.value}
             </Text>
-            <Text style={[styles.tileLabel, { color: theme.colors.textSecondary }]}>{tile.label}</Text>
-          </PremiumCard>
+            <Text style={[styles.tileLabel, { color: theme.colors.textSecondary }]} numberOfLines={2}>
+              {tile.label}
+            </Text>
+          </View>
         ))}
       </View>
     </Animated.View>
@@ -102,6 +113,9 @@ const styles = StyleSheet.create({
     width: '48%',
     padding: 16,
     alignItems: 'flex-start',
+    borderRadius: 20,
+    borderWidth: 1,
+    overflow: 'hidden',
   },
   tileValue: {
     fontSize: 17,

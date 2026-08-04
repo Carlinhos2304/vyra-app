@@ -25,6 +25,7 @@ import { SectionTitle } from '../../components/ui/SectionTitle';
 import { PremiumLoader } from '../../components/ui/PremiumLoader';
 import { useTheme } from '../../theme';
 import { useLanguage } from '../../i18n';
+import { useTabBarClearance } from '../../hooks/useTabBarClearance';
 
 // Supabase client instance integration
 import { supabase } from '../../lib/supabase';
@@ -92,6 +93,7 @@ const INITIAL_FILTERS: FilterState = {
 
 export default function ClosetScreen() {
   const { theme } = useTheme();
+  const tabBarClearance = useTabBarClearance();
   const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<ClosetTab>('Garments');
   const [activeCategory, setActiveCategory] = useState('All');
@@ -503,7 +505,7 @@ export default function ClosetScreen() {
         keyExtractor={(item) => item.id}
         numColumns={2}
         columnWrapperStyle={styles.gridRow}
-        contentContainerStyle={styles.listContainer}
+        contentContainerStyle={[styles.listContainer, { paddingBottom: 24 + tabBarClearance }]}
         showsVerticalScrollIndicator={false}
         extraData={[activeCategory, activeTab, garments, outfits, persistedFilters, theme.dark]}
         ListHeaderComponent={

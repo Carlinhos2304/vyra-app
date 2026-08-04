@@ -5,6 +5,7 @@ import Animated, {
   Easing,
   FadeIn,
   FadeInDown,
+  FadeOut,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
@@ -62,6 +63,7 @@ export const AIDailySuggestionCard: React.FC<AIDailySuggestionCardProps> = ({ su
   return (
     <Animated.View
       entering={FadeInDown.duration(600).delay(delay).easing(Easing.out(Easing.cubic))}
+      exiting={FadeOut.duration(250)}
       style={styles.section}
     >
       <SectionHeader title={t('home.dailySuggestion.title')} style={styles.headerSpacing} />

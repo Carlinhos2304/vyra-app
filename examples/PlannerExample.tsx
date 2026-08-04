@@ -1,5 +1,5 @@
 // Example usage in the Planner Screen
-import * as NotificationsService from '../services/notificationService';
+import * as NotificationsService from '../lib/services/notificationService';
 
 const handleAddOutfit = async (outfit: { id: string, scheduledFor: Date }) => {
     // Logic to save to DB...

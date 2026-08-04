@@ -17,6 +17,7 @@ import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, router, useNavigation } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
+import Animated, { FadeIn, Easing } from 'react-native-reanimated';
 
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { PremiumTouchable } from '../../components/ui/PremiumTouchable';
@@ -299,6 +300,7 @@ export default function EditGarmentScreen() {
           />
         </View>
 
+        <Animated.View style={styles.animatedFormBody} entering={FadeIn.duration(450).easing(Easing.out(Easing.cubic))}>
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollBodyContainer}>
           {/* Media Profile Element Selector Container */}
           <Text style={[styles.fieldSectionLabel, { color: theme.colors.textSecondary }]}>{t('clothing.editGarment.fields.visualProfile')}</Text>
@@ -428,6 +430,7 @@ export default function EditGarmentScreen() {
             )}
           </PremiumTouchable>
         </ScrollView>
+        </Animated.View>
       </SafeAreaView>
 
       {/* Custom HSV Precision Mathematical Color Overlay BottomSheet Modal */}
@@ -491,6 +494,7 @@ const styles = StyleSheet.create({
   navigationRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 8 },
   backTouchTarget: { padding: 8, marginLeft: -8, marginRight: 8 },
   headerTitleSpacing: { flex: 1, paddingVertical: 0 },
+  animatedFormBody: { flex: 1 },
   scrollBodyContainer: { paddingHorizontal: 16, paddingBottom: 40 },
   fieldSectionLabel: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1, marginTop: 20, marginBottom: 8 },
   mediaContainerBox: { width: '100%', height: 200, borderRadius: 16, borderStyle: 'dashed', borderWidth: 1, overflow: 'hidden' },

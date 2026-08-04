@@ -157,3 +157,87 @@ export async function planOutfitForToday(outfitId: string): Promise<void> {
     throw new SaveOutfitError(insertError.message);
   }
 }
+
+/**
+ * Assigns an already-saved outfit to a specific event (`events.outfit_id`).
+ * Added for the Smart Planner's Outfit Assignment feature (Recommended /
+ * Generated / Saved / Change) — previously this exact update was inlined
+ * ad hoc inside select-outfit.tsx's handleSelectOutfit instead of living in
+ * the service layer alongside planOutfitForToday(). No RLS bypass here: the
+ * `.eq('id', eventId)` update is scoped by Supabase's row-level security to
+ * rows the authenticated user owns, same as every other events write in the
+ * app.
+ */
+export async function planOutfitForEvent(eventId: string, outfitId: string): Promise<void> {
+  if (!eventId) {
+    throw new SaveOutfitError('An event id is required to assign an outfit.');
+  }
+  if (!outfitId) {
+    throw new SaveOutfitError('An outfit id is required to assign it to an event.');
+  }
+
+  const { error } = await supabase.from('events').update({ outfit_id: outfitId }).eq('id', eventId);
+
+  if (error) {
+    throw new SaveOutfitError(error.message);
+  }
+}
+
+/**
+ * Assigns an already-saved outfit to a specific calendar date's
+ * outfit_plans row (select-then-branch, same rationale as
+ * planOutfitForToday — no documented unique constraint on
+ * (user_id, planned_date) to target an upsert's onConflict against).
+ * Extracted from select-outfit.tsx's Mode B branch so that screen no longer
+ * inlines Supabase writes directly.
+ */
+export async function planOutfitForDate(dateISO: string, outfitId: string): Promise<void> {
+  if (!dateISO) {
+    throw new SaveOutfitError('A date is required to assign an outfit.');
+  }
+  if (!outfitId) {
+    throw new SaveOutfitError('An outfit id is required to assign it to a date.');
+  }
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    throw new SaveOutfitError('Your session has expired. Please sign in again.');
+  }
+
+  const { data: existingPlan, error: lookupError } = await supabase
+    .from('outfit_plans')
+    .select('id')
+    .eq('user_id', user.id)
+    .eq('planned_date', dateISO)
+    .maybeSingle();
+
+  if (lookupError) {
+    throw new SaveOutfitError(lookupError.message);
+  }
+
+  if (existingPlan?.id) {
+    const { error: updateError } = await supabase
+      .from('outfit_plans')
+      .update({ outfit_id: outfitId })
+      .eq('id', existingPlan.id);
+
+    if (updateError) {
+      throw new SaveOutfitError(updateError.message);
+    }
+    return;
+  }
+
+  const { error: insertError } = await supabase.from('outfit_plans').insert({
+    user_id: user.id,
+    outfit_id: outfitId,
+    planned_date: dateISO,
+  });
+
+  if (insertError) {
+    throw new SaveOutfitError(insertError.message);
+  }
+}

@@ -85,7 +85,7 @@ export interface OutfitSuggestion {
  * on failure) lives on error.context, a raw Response we have to read
  * ourselves. See: https://supabase.com/docs/guides/functions/error-handling
  */
-async function extractInvokeErrorMessage(error: unknown, fallback: string): Promise<string> {
+export async function extractInvokeErrorMessage(error: unknown, fallback: string): Promise<string> {
   let detailedMessage = (error as { message?: string })?.message || fallback;
 
   if (error instanceof FunctionsHttpError) {

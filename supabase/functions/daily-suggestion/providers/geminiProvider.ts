@@ -7,7 +7,8 @@ import { AIProvider, AIProviderError, DailySuggestionContext, DailySuggestionRes
 import { buildSystemPrompt, buildUserPrompt, normalizeDailySuggestion } from './normalize.ts';
 
 const DEFAULT_MODEL = 'gemini-3.5-flash-lite';
-const REQUEST_TIMEOUT_MS = 20_000;
+// Bumped from 20s — same free-tier latency issue as generate-outfit's provider.
+const REQUEST_TIMEOUT_MS = 35_000;
 
 export class GeminiProvider implements AIProvider {
   readonly name = 'gemini';

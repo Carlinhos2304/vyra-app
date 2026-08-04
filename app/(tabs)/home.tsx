@@ -18,6 +18,7 @@ import { useNextEvent } from '../../hooks/useNextEvent';
 import { useWardrobeInsights } from '../../hooks/useWardrobeInsights';
 import { useDailySuggestion } from '../../hooks/useDailySuggestion';
 import { useHomeGreeting } from '../../hooks/useHomeGreeting';
+import { useTabBarClearance } from '../../hooks/useTabBarClearance';
 
 /**
  * Home — the personal briefing, not a dashboard. Every section is its own
@@ -36,6 +37,7 @@ import { useHomeGreeting } from '../../hooks/useHomeGreeting';
  */
 export default function HomeScreen() {
   const router = useRouter();
+  const tabBarClearance = useTabBarClearance();
 
   const weather = useWeather();
   const { todayPlan, isLoading: isTodayOutfitLoading } = useTodayOutfit();
@@ -57,7 +59,7 @@ export default function HomeScreen() {
 
   return (
     <PremiumScreen>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, { paddingBottom: 40 + tabBarClearance }]}>
         <GreetingHeader greeting={greeting} subtitle={subtitle} onAvatarPress={() => router.push('/profile')} />
 
         <WeatherCard weather={weather.current} isLoading={weather.isLoading} delay={200} />

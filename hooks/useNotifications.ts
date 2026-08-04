@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import * as NotificationsService from '../services/notificationService';
+import * as NotificationsService from '../lib/services/notificationService';
 
 export const useNotifications = () => {
   const enableNotifications = async () => {

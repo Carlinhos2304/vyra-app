@@ -37,6 +37,13 @@
         {
           "locationWhenInUsePermission": "Vyra uses your location to show accurate local weather for your outfit recommendations."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon_white.png",
+          "color": "#1C1917"
+        }
       ]
     ],
     "extra": {

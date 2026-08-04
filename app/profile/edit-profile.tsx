@@ -16,6 +16,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import Animated, { FadeIn, Easing } from 'react-native-reanimated';
 
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { SectionHeader } from '../../components/ui/SectionHeader';
@@ -186,6 +187,7 @@ export default function EditProfileScreen() {
         </View>
 
         {/* Form Body Scroll Arena */}
+        <Animated.View style={styles.animatedFormBody} entering={FadeIn.duration(450).easing(Easing.out(Easing.cubic))}>
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
 
           {/* Section 1: Profile Information Card */}
@@ -245,6 +247,7 @@ export default function EditProfileScreen() {
             </View>
           </View>
         </ScrollView>
+        </Animated.View>
 
         {/* Inline Native Picker Render Strategy */}
         {showDatePicker && (
@@ -329,6 +332,9 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  animatedFormBody: {
+    flex: 1,
   },
   scrollContent: {
     paddingBottom: 140, // Keeps content well above the floating dock layout boundary

@@ -20,6 +20,7 @@ import { PremiumTouchable } from '../../components/ui/PremiumTouchable';
 import { useNotifications } from '../../hooks/useNotifications';
 import { useTheme } from '../../theme';
 import { useLanguage, LanguageType } from '../../i18n';
+import { useTabBarClearance } from '../../hooks/useTabBarClearance';
 
 // Supabase client instance integration
 import { supabase } from '../../lib/supabase';
@@ -61,6 +62,7 @@ function buildMenuSections(t: (key: string) => string) {
         { id: 'appearance', label: t('profile.main.appearance'), icon: 'theme-light-dark', type: 'segmented' },
         { id: 'language', label: t('profile.main.language'), icon: 'translate', type: 'language-segmented' },
         { id: 'notifications', label: t('profile.main.pushNotifications'), icon: 'bell-outline', type: 'toggle' },
+        { id: 'notification_prefs', label: t('profile.main.notificationPreferences'), icon: 'tune-vertical', type: 'chevron' },
       ],
     },
     {
@@ -96,6 +98,7 @@ export default function ProfileScreen() {
   const LANGUAGE_OPTIONS = buildLanguageOptions(t);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const { syncNotifications } = useNotifications();
+  const tabBarClearance = useTabBarClearance();
 
   const [profile, setProfile] = useState<UserProfileState | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -373,6 +376,8 @@ export default function ProfileScreen() {
       handleSystemSignOutRequest();
     } else if (item.id === 'edit_prof') {
       router.push('/profile/edit-profile');
+    } else if (item.id === 'notification_prefs') {
+      router.push('/profile/notification-preferences');
     } else if (item.id === 'favs') {
       router.push('/profile/favorites');
     } else if (item.id === 'history') {
@@ -407,7 +412,7 @@ export default function ProfileScreen() {
 
   return (
     <PremiumScreen>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, { paddingBottom: 48 + tabBarClearance }]}>
 
         {/* Main Content Animated Assembly Area */}
         <Animated.View style={[styles.mainLayoutWrapper, animatedScreenStyle]}>

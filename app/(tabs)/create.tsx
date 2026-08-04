@@ -38,6 +38,7 @@ import { PremiumLoader } from '../../components/ui/PremiumLoader';
 import { useTheme } from '../../theme';
 import type { Theme } from '../../theme';
 import { useLanguage } from '../../i18n';
+import { useTabBarClearance } from '../../hooks/useTabBarClearance';
 
 // Supabase client instance integration
 import { supabase } from '../../lib/supabase';
@@ -88,6 +89,7 @@ const OCCASIONS = OUTFIT_OCCASIONS;
 export default function CreateOutfitScreen() {
   const router = useRouter();
   const { theme } = useTheme();
+  const tabBarClearance = useTabBarClearance();
   const { t } = useLanguage();
   const { mode, outfitId } = useLocalSearchParams<{ mode: string; outfitId: string }>();
   const isEditMode = mode === 'edit' && !!outfitId;
@@ -408,7 +410,7 @@ export default function CreateOutfitScreen() {
 
   return (
     <PremiumScreen>
-      <ScrollView contentContainerStyle={styles.scrollCanvasContainer} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.scrollCanvasContainer, { paddingBottom: 64 + tabBarClearance }]} showsVerticalScrollIndicator={false}>
 
         <Animated.View entering={FadeInUp.duration(600).springify()} style={styles.formHeaderSection}>
           <SectionHeader

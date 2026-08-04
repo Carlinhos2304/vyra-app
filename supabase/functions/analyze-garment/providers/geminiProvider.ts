@@ -24,7 +24,9 @@ import { AIProvider, AIProviderError, GarmentAnalysisResult } from './types.ts';
 import { buildSystemPrompt, normalizeAnalysisResult } from './normalize.ts';
 
 const DEFAULT_MODEL = 'gemini-3.5-flash-lite';
-const REQUEST_TIMEOUT_MS = 25_000;
+// Bumped from 25s — same free-tier latency issue as the other two Gemini
+// providers; this one also downloads the source image before calling Gemini.
+const REQUEST_TIMEOUT_MS = 35_000;
 
 export class GeminiProvider implements AIProvider {
   readonly name = 'gemini';

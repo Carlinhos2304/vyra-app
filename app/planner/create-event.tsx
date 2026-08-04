@@ -1,23 +1,22 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, TextInput, ScrollView, ActivityIndicator, Animated, Platform, TouchableOpacity } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { Animated, StyleSheet, Text, View, ScrollView, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { PremiumTouchable } from '../../components/ui/PremiumTouchable';
 import { SectionHeader } from '../../components/ui/SectionHeader';
-import * as NotificationsService from '../../services/notificationService';
+import { BackButton } from '../../components/ui/BackButton';
+import { EventForm, EventFormValues, isEventFormValid } from '../../components/planner/EventForm';
+import { getNotificationPreferences } from '../../lib/services/notificationPreferences';
+import { scheduleEventReminders } from '../../lib/services/notificationPlanner';
+import { createRecurringEvent, type RecurrenceRule } from '../../lib/services/recurringEventService';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../theme';
 import { useLanguage } from '../../i18n';
 
-const CATEGORIES = ['Work', 'Formal', 'Casual', 'Party', 'Travel', 'Sport', 'Other'];
-const GOOGLE_PLACES_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY || '';
-
 export default function CreateEventScreen() {
   const { theme } = useTheme();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const router = useRouter();
   const params = useLocalSearchParams<{ date?: string }>();
 
@@ -26,126 +25,137 @@ export default function CreateEventScreen() {
   const dangerBannerBg = theme.dark ? 'rgba(239, 68, 68, 0.15)' : '#FEF2F2';
   const dangerBannerBorder = theme.dark ? 'rgba(239, 68, 68, 0.35)' : '#FEE2E2';
 
-  const [name, setName] = useState('');
-  const [date, setDate] = useState(params.date || new Date().toISOString().split('T')[0]);
-  const [location, setLocation] = useState('');
-  const [description, setDescription] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('Casual');
+  const initialDate = params.date ? new Date(params.date) : new Date();
+  const [values, setValues] = useState<EventFormValues>({
+    name: '',
+    date: params.date || `${initialDate.getFullYear()}-${String(initialDate.getMonth() + 1).padStart(2, '0')}-${String(initialDate.getDate()).padStart(2, '0')}`,
+    rawDate: initialDate,
+    startTime: null,
+    endTime: null,
+    location: '',
+    description: '',
+    category: 'Casual',
+  });
+  const [recurrence, setRecurrence] = useState<RecurrenceRule | null>(null);
 
   const [isSaving, setIsSaving] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  const placesRef = useRef<any>(null);
+  const isFormValid = isEventFormValid(values);
 
-  // Form Validation State
-  const isFormValid =
-    name.trim().length > 0 &&
-    date.trim().length > 0 &&
-    selectedCategory.length > 0 &&
-    location.trim().length > 0 &&
-    description.trim().length > 0;
-
-  useEffect(() => {
-    if (placesRef.current && location === '') {
-      placesRef.current.setAddressText('');
-    }
-  }, [location]);
-
-  // 1. Validation Animation Opacity Tracker & Edit Listener
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  useEffect(() => {
-    if (validationError) {
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      fadeAnim.setValue(0);
-    }
-  }, [validationError]);
-
-  useEffect(() => {
-    if (validationError) setValidationError(null);
-  }, [name, date, location, description, selectedCategory]);
-
-  // 2. Date Picker State and Handlers
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [rawDate, setRawDate] = useState<Date>(params.date ? new Date(params.date) : new Date());
-
-  const handleDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
-    if (Platform.OS === 'android') {
-      setShowDatePicker(false);
-    }
-    if (selectedDate) {
-      setRawDate(selectedDate);
-      const year = selectedDate.getFullYear();
-      const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
-      const day = String(selectedDate.getDate()).padStart(2, '0');
-      setDate(`${year}-${month}-${day}`);
-    }
+  const showValidationError = (message: string) => {
+    setValidationError(message);
+    Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start();
   };
 
   const handleSaveEvent = async () => {
-    if (!name.trim()) {
-      setValidationError(t('planner.createEvent.validation.nameRequired'));
-      return;
-    }
-    if (!date.trim()) {
-      setValidationError(t('planner.createEvent.validation.dateRequired'));
-      return;
-    }
-    if (!selectedCategory) {
-      setValidationError(t('planner.createEvent.validation.categoryRequired'));
-      return;
-    }
-    if (!location.trim()) {
-      setValidationError(t('planner.createEvent.validation.locationRequired'));
-      return;
-    }
-    if (!description.trim()) {
-      setValidationError(t('planner.createEvent.validation.descriptionRequired'));
-      return;
-    }
+    if (!values.name.trim()) return showValidationError(t('planner.eventForm.validation.nameRequired'));
+    if (!values.date.trim()) return showValidationError(t('planner.eventForm.validation.dateRequired'));
+    if (!values.category) return showValidationError(t('planner.eventForm.validation.categoryRequired'));
 
     setValidationError(null);
+    fadeAnim.setValue(0);
     setIsSaving(true);
 
+    // --- Critical path: persist the event. This is the ONLY thing that can
+    // surface as a save error to the user. ---
+    let savedEventId: string | null = null;
+    let savedUserId: string | null = null;
     try {
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
       if (authError || !user) throw new Error(t('planner.createEvent.sessionInvalid'));
+      savedUserId = user.id;
 
+      if (recurrence) {
+        const result = await createRecurringEvent(
+          {
+            name: values.name.trim(),
+            category: values.category,
+            location: values.location.trim(),
+            description: values.description.trim(),
+            startTime: values.startTime,
+            endTime: values.endTime,
+          },
+          values.date,
+          recurrence
+        );
+        savedEventId = result.parentEventId;
+      } else {
+        const { data: event, error: insertError } = await supabase
+          .from('events')
+          .insert({
+            user_id: user.id,
+            name: values.name.trim(),
+            event_date: values.date,
+            location: values.location.trim(),
+            description: values.description.trim(),
+            category: values.category,
+            start_time: values.startTime,
+            end_time: values.endTime,
+          })
+          .select()
+          .single();
+        if (insertError) throw insertError;
+        savedEventId = event?.id ?? null;
+      }
+    } catch (err: any) {
+      setIsSaving(false);
+      showValidationError(err.message || t('planner.createEvent.genericSaveError'));
+      return;
+    }
+
+    // --- Non-critical path: schedule a local reminder. Deliberately its own
+    // try/catch, separate from the insert above — this is the exact fix for
+    // "the event saves but sometimes shows an error": scheduling a
+    // reminder used to share the insert's try/catch, so any failure here
+    // (missing OS notification permission, Android restrictions, etc.)
+    // incorrectly surfaced as a save error even though the event had
+    // already been persisted successfully. notificationService itself is
+    // now defensive too (never throws), but this is kept isolated on
+    // purpose so a future change to that service can't reintroduce the bug. ---
+    try {
       const { data: profile } = await supabase
         .from('profiles')
         .select('notifications_enabled')
-        .eq('id', user.id)
+        .eq('id', savedUserId)
         .single();
 
-      const { data: event, error: insertError } = await supabase
-        .from('events')
-        .insert({
-          user_id: user.id,
-        name: name.trim(),
-        event_date: date,
-        location: location.trim(),
-        description: description.trim(),
-        category: selectedCategory,
-        })
-        .select()
-        .single();
-      if (insertError) throw insertError;
-
-      if (profile?.notifications_enabled && event) {
-        await NotificationsService.schedulePlannedOutfitReminder(event.id, new Date(event.event_date));
+      // Schedules the full Planner Notifications default set (day-before,
+      // 1-hour, 30-minute reminders — see notificationPlanner.ts) for the
+      // saved event. For a recurring series this only covers the parent
+      // occurrence immediately; the rest of the series gets its reminders
+      // topped up by the next daily notification sweep (see
+      // notificationService.runNotificationSweep -> resyncPlannerReminders),
+      // which re-scans upcoming events rather than needing this screen to
+      // know every generated occurrence id.
+      if (profile?.notifications_enabled && savedEventId) {
+        const prefs = await getNotificationPreferences();
+        await scheduleEventReminders(
+          {
+            id: savedEventId,
+            name: values.name.trim(),
+            event_date: values.date,
+            start_time: values.startTime ?? null,
+            end_time: values.endTime ?? null,
+            category: values.category,
+            location: values.location.trim(),
+            outfit_id: null,
+          },
+          prefs,
+          language
+        );
       }
-
-      router.back();
-    } catch (err: any) {
-      setValidationError(err.message || t('planner.createEvent.genericSaveError'));
-    } finally {
-      setIsSaving(false);
+    } catch (notifyErr) {
+      console.warn('[create-event] Reminder scheduling failed — event was already saved successfully:', notifyErr);
     }
+
+    setIsSaving(false);
+    router.back();
   };
 
   return (
@@ -156,7 +166,10 @@ export default function CreateEventScreen() {
         keyboardShouldPersistTaps="handled"
         nestedScrollEnabled={true}
       >
-        <SectionHeader title={t('planner.createEvent.title')} subtitle={t('planner.createEvent.subtitle')} />
+        <View style={styles.headerRow}>
+          <BackButton />
+          <SectionHeader title={t('planner.createEvent.title')} subtitle={t('planner.createEvent.subtitle')} style={styles.headerFlexOverride} />
+        </View>
 
         {validationError && (
           <Animated.View style={[styles.errorInlineBanner, { backgroundColor: dangerBannerBg, borderColor: dangerBannerBorder }, { opacity: fadeAnim }]}>
@@ -165,97 +178,7 @@ export default function CreateEventScreen() {
           </Animated.View>
         )}
 
-        <View style={styles.formGroup}>
-          <Text style={[styles.fieldLabel, { color: theme.colors.textSecondary }]}>{t('planner.createEvent.fields.eventName')}</Text>
-          <TextInput style={[styles.inputField, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, color: theme.colors.textPrimary }]} placeholder={t('planner.createEvent.placeholders.eventName')} placeholderTextColor={theme.colors.textTertiary} value={name} onChangeText={setName} />
-        </View>
-
-        <View style={styles.formGroup}>
-          <Text style={[styles.fieldLabel, { color: theme.colors.textSecondary }]}>{t('planner.createEvent.fields.date')}</Text>
-          <TouchableOpacity activeOpacity={0.9} onPress={() => !isSaving && setShowDatePicker(true)}>
-            <View pointerEvents="none">
-              <TextInput style={[styles.inputField, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, color: theme.colors.textPrimary }]} placeholder={t('planner.createEvent.placeholders.date')} placeholderTextColor={theme.colors.textTertiary} value={date} editable={false} />
-            </View>
-            <MaterialCommunityIcons name="calendar-month-outline" size={18} color={theme.colors.textSecondary} style={styles.calendarInlineIcon} />
-          </TouchableOpacity>
-
-          {showDatePicker && (
-            Platform.OS === 'ios' ? (
-              <View style={[styles.iosPickerWrapper, { backgroundColor: theme.colors.surfaceSecondary, borderColor: theme.colors.border }]}>
-                <View style={[styles.iosPickerHeaderRow, { backgroundColor: theme.colors.border }]}>
-                  <TouchableOpacity onPress={() => setShowDatePicker(false)}>
-                    <Text style={[styles.iosPickerDoneText, { color: theme.colors.textPrimary }]}>{t('common.done')}</Text>
-                  </TouchableOpacity>
-                </View>
-                <DateTimePicker value={rawDate} mode="date" display="spinner" onChange={handleDateChange} />
-              </View>
-            ) : (
-              <DateTimePicker value={rawDate} mode="date" display="default" onChange={handleDateChange} />
-            )
-          )}
-        </View>
-
-        <View style={styles.formGroup}>
-          <Text style={[styles.fieldLabel, { color: theme.colors.textSecondary }]}>{t('planner.createEvent.fields.category')}</Text>
-          <View style={styles.chipsRowLayout}>
-            {CATEGORIES.map((cat) => {
-              const isSelected = selectedCategory === cat;
-              return (
-                <PremiumTouchable
-                  key={cat}
-                  style={[
-                    styles.chip,
-                    { backgroundColor: theme.colors.surfaceSecondary, borderColor: theme.colors.border },
-                    isSelected && { backgroundColor: theme.colors.accent, borderColor: theme.colors.accent }
-                  ]}
-                  onPress={() => setSelectedCategory(cat)}
-                >
-                  <Text style={[styles.chipText, { color: theme.colors.textSecondary }, isSelected && { color: theme.colors.accentForeground }]}>{t(`planner.createEvent.categories.${cat.toLowerCase()}`)}</Text>
-                </PremiumTouchable>
-              );
-            })}
-          </View>
-        </View>
-
-        {/* Location Dropdown - Configured to run inside a ScrollView container */}
-        <View style={[styles.formGroup, { zIndex: 1000, position: 'relative' }]}>
-          <Text style={[styles.fieldLabel, { color: theme.colors.textSecondary }]}>{t('planner.createEvent.fields.location')}</Text>
-          <GooglePlacesAutocomplete
-            ref={placesRef}
-            placeholder={t('planner.createEvent.placeholders.location')}
-            minLength={2}
-            fetchDetails={false}
-            debounce={400}
-            disableScroll={true} // Bypasses internal sub-scrolling properties entirely
-            onPress={(data) => {
-              setLocation(data.description);
-            }}
-            textInputProps={{
-              placeholderTextColor: theme.colors.textTertiary,
-              style: [styles.inputField, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, color: theme.colors.textPrimary }],
-              onChangeText: (text) => setLocation(text),
-              defaultValue: location
-            }}
-            query={{
-              key: GOOGLE_PLACES_API_KEY,
-              language: 'en',
-              type: 'geocode',
-            }}
-            styles={{
-              container: { flex: 0 },
-              listView: [styles.googleAutocompleteListView, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }],
-              row: [styles.googleAutocompleteRow, { backgroundColor: theme.colors.surface }],
-              description: [styles.googleAutocompleteDescription, { color: theme.colors.textPrimary }],
-              separator: [styles.googleAutocompleteSeparator, { backgroundColor: theme.colors.divider }],
-            }}
-            enablePoweredByContainer={false}
-          />
-        </View>
-
-        <View style={styles.formGroup}>
-          <Text style={[styles.fieldLabel, { color: theme.colors.textSecondary }]}>{t('planner.createEvent.fields.description')}</Text>
-          <TextInput style={[styles.inputField, styles.textAreaField, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, color: theme.colors.textPrimary }]} placeholder={t('planner.createEvent.placeholders.description')} placeholderTextColor={theme.colors.textTertiary} value={description} onChangeText={setDescription} multiline numberOfLines={3} />
-        </View>
+        <EventForm values={values} onChange={setValues} showRecurrence recurrence={recurrence} onRecurrenceChange={setRecurrence} />
 
         <PremiumTouchable
           style={[styles.actionSaveButton, { backgroundColor: theme.colors.accent }, (!isFormValid || isSaving) && { opacity: 0.5 }]}
@@ -271,27 +194,10 @@ export default function CreateEventScreen() {
 
 const styles = StyleSheet.create({
   scrollContainer: { paddingHorizontal: 16, paddingBottom: 40 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  headerFlexOverride: { flex: 1, paddingVertical: 0, paddingHorizontal: 0 },
   errorBannerText: { fontSize: 13, fontWeight: '500', letterSpacing: -0.2, flex: 1 },
   errorInlineBanner: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 16, gap: 8 },
-  formGroup: { marginBottom: 20 },
-  fieldLabel: { fontSize: 11, fontWeight: '600', marginBottom: 8, letterSpacing: 0.5 },
-  inputField: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14 },
-  textAreaField: { height: 80, textAlignVertical: 'top', paddingTop: 12 },
-  chipsRowLayout: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1 },
-  chipText: { fontSize: 12, fontWeight: '500' },
   actionSaveButton: { borderRadius: 12, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', marginTop: 12 },
   saveBtnText: { fontSize: 14, fontWeight: '600' },
-
-  // Date Picker Overrides
-  calendarInlineIcon: { position: 'absolute', right: 16, bottom: 14 },
-  iosPickerWrapper: { borderRadius: 14, marginTop: 8, overflow: 'hidden', borderWidth: 1 },
-  iosPickerHeaderRow: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 16, paddingVertical: 10 },
-  iosPickerDoneText: { fontWeight: '600', fontSize: 14 },
-
-  // Google Places Sub-list Overrides with explicit layout locking
-  googleAutocompleteListView: { borderRadius: 12, borderWidth: 1, marginTop: 6, elevation: 4, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12, position: 'absolute', top: 45, left: 0, right: 0, zIndex: 5000 },
-  googleAutocompleteRow: { padding: 14 },
-  googleAutocompleteDescription: { fontSize: 13 },
-  googleAutocompleteSeparator: { height: 0.5 }
 });

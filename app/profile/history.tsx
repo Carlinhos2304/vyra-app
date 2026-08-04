@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { PremiumLoader } from '../../components/ui/PremiumLoader';
+import { AnimatedListItem } from '../../components/ui/AnimatedListItem';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../theme';
 import { useLanguage } from '../../i18n';
@@ -130,31 +131,33 @@ export default function HistoryLogScreen() {
     }
   };
 
-  const renderLogCardItem = ({ item }: { item: ActivityLogItem }) => {
+  const renderLogCardItem = ({ item, index }: { item: ActivityLogItem; index: number }) => {
     const config = resolveActionVisualMap(item.action_type);
 
     return (
-      <View style={[styles.logCardContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }]}>
-        <View style={[styles.iconCellFrame, { backgroundColor: theme.colors.surfaceSecondary, borderColor: theme.colors.border }]}>
-          <MaterialCommunityIcons name={config.icon as any} size={20} color={config.color} />
-        </View>
+      <AnimatedListItem index={index}>
+        <View style={[styles.logCardContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }]}>
+          <View style={[styles.iconCellFrame, { backgroundColor: theme.colors.surfaceSecondary, borderColor: theme.colors.border }]}>
+            <MaterialCommunityIcons name={config.icon as any} size={20} color={config.color} />
+          </View>
 
-        <View style={styles.textDetailsColumn}>
-          <Text style={[styles.actionTitleTypography, { color: theme.colors.textPrimary }]}>{config.title}</Text>
-          <Text style={[styles.targetItemTypography, { color: theme.colors.textSecondary }]} numberOfLines={1}>
-            {item.target_name}
-            {item.meta_category && (
-              <Text style={[styles.metaCategoryTypography, { color: theme.colors.textTertiary }]}>  •  {item.meta_category}</Text>
-            )}
-          </Text>
-        </View>
+          <View style={styles.textDetailsColumn}>
+            <Text style={[styles.actionTitleTypography, { color: theme.colors.textPrimary }]}>{config.title}</Text>
+            <Text style={[styles.targetItemTypography, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+              {item.target_name}
+              {item.meta_category && (
+                <Text style={[styles.metaCategoryTypography, { color: theme.colors.textTertiary }]}>  •  {item.meta_category}</Text>
+              )}
+            </Text>
+          </View>
 
-        <View style={styles.timestampColumn}>
-          <Text style={[styles.relativeTimeText, { color: theme.colors.textTertiary }]}>
-            {formatRelativeTimestamp(item.created_at)}
-          </Text>
+          <View style={styles.timestampColumn}>
+            <Text style={[styles.relativeTimeText, { color: theme.colors.textTertiary }]}>
+              {formatRelativeTimestamp(item.created_at)}
+            </Text>
+          </View>
         </View>
-      </View>
+      </AnimatedListItem>
     );
   };
 

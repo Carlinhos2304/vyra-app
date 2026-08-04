@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { PremiumLoader } from '../../components/ui/PremiumLoader';
+import { AnimatedListItem } from '../../components/ui/AnimatedListItem';
 
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../theme';
@@ -84,51 +85,53 @@ export default function FavoritesScreen() {
     fetchFavorites(true);
   };
 
-  const renderFavoriteItem = ({ item }: { item: ClothingItem }) => {
+  const renderFavoriteItem = ({ item, index }: { item: ClothingItem; index: number }) => {
     const fallbackImage = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&background=F5F5F4&color=1C1917&size=200`;
 
     return (
-      <TouchableOpacity
-        activeOpacity={0.8}
-        onPress={() => router.push(`/clothing/${item.id}` as any)}
-        style={[styles.garmentCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }]}
-      >
-        <View style={[styles.imageContainer, { backgroundColor: theme.colors.surfaceSecondary }]}>
-          <Image
-            source={{ uri: item.image_url || fallbackImage }}
-            style={styles.garmentImage}
-          />
-        </View>
-
-        <View style={styles.metadataContainer}>
-          {item.brand && (
-            <Text style={[styles.brandText, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-              {item.brand.toUpperCase()}
-            </Text>
-          )}
-          <Text style={[styles.nameText, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-            {item.name}
-          </Text>
-
-          <View style={styles.attributesRow}>
-            {item.category && (
-              <View style={[styles.attributeChip, { backgroundColor: theme.colors.surfaceSecondary, borderColor: theme.colors.border }]}>
-                <Text style={[styles.attributeChipText, { color: theme.colors.textSecondary }]}>{item.category}</Text>
-              </View>
-            )}
-            {item.color && (
-              <View style={[styles.attributeChip, { backgroundColor: theme.colors.surfaceSecondary, borderColor: theme.colors.border }]}>
-                <Text style={[styles.attributeChipText, { color: theme.colors.textSecondary }]}>{item.color}</Text>
-              </View>
-            )}
+      <AnimatedListItem index={index}>
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => router.push(`/clothing/${item.id}` as any)}
+          style={[styles.garmentCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }]}
+        >
+          <View style={[styles.imageContainer, { backgroundColor: theme.colors.surfaceSecondary }]}>
+            <Image
+              source={{ uri: item.image_url || fallbackImage }}
+              style={styles.garmentImage}
+            />
           </View>
-        </View>
 
-        <View style={styles.actionColumn}>
-          <Ionicons name="heart" size={20} color={theme.colors.textPrimary} style={styles.heartIcon} />
-          <Ionicons name="chevron-forward" size={16} color={theme.colors.textTertiary} />
-        </View>
-      </TouchableOpacity>
+          <View style={styles.metadataContainer}>
+            {item.brand && (
+              <Text style={[styles.brandText, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                {item.brand.toUpperCase()}
+              </Text>
+            )}
+            <Text style={[styles.nameText, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+              {item.name}
+            </Text>
+
+            <View style={styles.attributesRow}>
+              {item.category && (
+                <View style={[styles.attributeChip, { backgroundColor: theme.colors.surfaceSecondary, borderColor: theme.colors.border }]}>
+                  <Text style={[styles.attributeChipText, { color: theme.colors.textSecondary }]}>{item.category}</Text>
+                </View>
+              )}
+              {item.color && (
+                <View style={[styles.attributeChip, { backgroundColor: theme.colors.surfaceSecondary, borderColor: theme.colors.border }]}>
+                  <Text style={[styles.attributeChipText, { color: theme.colors.textSecondary }]}>{item.color}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+
+          <View style={styles.actionColumn}>
+            <Ionicons name="heart" size={20} color={theme.colors.textPrimary} style={styles.heartIcon} />
+            <Ionicons name="chevron-forward" size={16} color={theme.colors.textTertiary} />
+          </View>
+        </TouchableOpacity>
+      </AnimatedListItem>
     );
   };
 
