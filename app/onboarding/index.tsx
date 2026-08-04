@@ -4,9 +4,13 @@ import { useRouter } from 'expo-router';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { PremiumLoader } from '../../components/ui/PremiumLoader';
 import { supabase } from '../../lib/supabase';
+import { useTheme } from '../../theme';
+import { useLanguage } from '../../i18n';
 
 export default function OnboardingIndexRoot() {
+  const { theme } = useTheme();
   const router = useRouter();
+  const { t } = useLanguage();
 
   useEffect(() => {
     const handleImmediateTelemetricRoutingEvaluation = async () => {
@@ -37,8 +41,8 @@ export default function OnboardingIndexRoot() {
   }, []);
 
   return (
-    <PremiumScreen style={styles.centerLayoutBox}>
-      <PremiumLoader label="Evaluating profile parameters..." />
+    <PremiumScreen style={[styles.centerLayoutBox, { backgroundColor: theme.colors.background }]}>
+      <PremiumLoader label={t('onboarding.index.loadingLabel')} />
     </PremiumScreen>
   );
 }
@@ -48,6 +52,5 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FAFAF9',
   },
 });

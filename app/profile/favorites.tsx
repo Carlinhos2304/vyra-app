@@ -18,6 +18,8 @@ import { SectionHeader } from '../../components/ui/SectionHeader';
 import { PremiumLoader } from '../../components/ui/PremiumLoader';
 
 import { supabase } from '../../lib/supabase';
+import { useTheme } from '../../theme';
+import { useLanguage } from '../../i18n';
 
 const { width } = Dimensions.get('window');
 
@@ -32,6 +34,8 @@ interface ClothingItem {
 }
 
 export default function FavoritesScreen() {
+  const { theme } = useTheme();
+  const { t } = useLanguage();
   const router = useRouter();
   const [favorites, setFavorites] = useState<ClothingItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -50,7 +54,7 @@ export default function FavoritesScreen() {
       const { data: { user }, error: authError } = await supabase.auth.getUser();
 
       if (authError || !user) {
-        throw new Error('User context validation failed.');
+        throw new Error(t('profile.favorites.errors.userContextFailed'));
       }
 
       const { data, error: dbError } = await supabase
@@ -65,7 +69,7 @@ export default function FavoritesScreen() {
       setFavorites(data || []);
     } catch (err: any) {
       console.error('[Favorites Engine Error]:', err);
-      setError(err.message || 'Failed to sync favorite garments.');
+      setError(err.message || t('profile.favorites.errors.fetchFailed'));
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -87,9 +91,9 @@ export default function FavoritesScreen() {
       <TouchableOpacity
         activeOpacity={0.8}
         onPress={() => router.push(`/clothing/${item.id}` as any)}
-        style={styles.garmentCard}
+        style={[styles.garmentCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }]}
       >
-        <View style={styles.imageContainer}>
+        <View style={[styles.imageContainer, { backgroundColor: theme.colors.surfaceSecondary }]}>
           <Image
             source={{ uri: item.image_url || fallbackImage }}
             style={styles.garmentImage}
@@ -98,31 +102,31 @@ export default function FavoritesScreen() {
 
         <View style={styles.metadataContainer}>
           {item.brand && (
-            <Text style={styles.brandText} numberOfLines={1}>
+            <Text style={[styles.brandText, { color: theme.colors.textPrimary }]} numberOfLines={1}>
               {item.brand.toUpperCase()}
             </Text>
           )}
-          <Text style={styles.nameText} numberOfLines={1}>
+          <Text style={[styles.nameText, { color: theme.colors.textPrimary }]} numberOfLines={1}>
             {item.name}
           </Text>
-          
+
           <View style={styles.attributesRow}>
             {item.category && (
-              <View style={styles.attributeChip}>
-                <Text style={styles.attributeChipText}>{item.category}</Text>
+              <View style={[styles.attributeChip, { backgroundColor: theme.colors.surfaceSecondary, borderColor: theme.colors.border }]}>
+                <Text style={[styles.attributeChipText, { color: theme.colors.textSecondary }]}>{item.category}</Text>
               </View>
             )}
             {item.color && (
-              <View style={styles.attributeChip}>
-                <Text style={styles.attributeChipText}>{item.color}</Text>
+              <View style={[styles.attributeChip, { backgroundColor: theme.colors.surfaceSecondary, borderColor: theme.colors.border }]}>
+                <Text style={[styles.attributeChipText, { color: theme.colors.textSecondary }]}>{item.color}</Text>
               </View>
             )}
           </View>
         </View>
 
         <View style={styles.actionColumn}>
-          <Ionicons name="heart" size={20} color="#1C1917" style={styles.heartIcon} />
-          <Ionicons name="chevron-forward" size={16} color="#A8A29E" />
+          <Ionicons name="heart" size={20} color={theme.colors.textPrimary} style={styles.heartIcon} />
+          <Ionicons name="chevron-forward" size={16} color={theme.colors.textTertiary} />
         </View>
       </TouchableOpacity>
     );
@@ -130,55 +134,55 @@ export default function FavoritesScreen() {
 
   const renderEmptyState = () => (
     <View style={styles.emptyCenterContainer}>
-      <Text style={styles.emptyHeartIcon}>♡</Text>
-      <Text style={styles.emptyTitleText}>No favorite garments yet</Text>
-      <Text style={styles.emptySubtitleText}>
-        Start adding favorites from your wardrobe.
+      <Text style={[styles.emptyHeartIcon, { color: theme.colors.textPrimary }]}>♡</Text>
+      <Text style={[styles.emptyTitleText, { color: theme.colors.textPrimary }]}>{t('profile.favorites.empty.title')}</Text>
+      <Text style={[styles.emptySubtitleText, { color: theme.colors.textSecondary }]}>
+        {t('profile.favorites.empty.subtitle')}
       </Text>
       <TouchableOpacity
         activeOpacity={0.85}
         onPress={() => router.push('/(tabs)/closet' as any)}
-        style={styles.goToClosetButton}
+        style={[styles.goToClosetButton, { backgroundColor: theme.colors.accent }]}
       >
-        <Text style={styles.goToClosetButtonText}>Go to Closet</Text>
+        <Text style={[styles.goToClosetButtonText, { color: theme.colors.accentForeground }]}>{t('profile.favorites.empty.goToCloset')}</Text>
       </TouchableOpacity>
     </View>
   );
 
   const renderErrorState = () => (
     <View style={styles.emptyCenterContainer}>
-      <MaterialCommunityIcons name="cloud-off-outline" size={32} color="#1C1917" style={{ opacity: 0.6 }} />
-      <Text style={styles.errorTitleText}>Sync Connection Fault</Text>
-      <Text style={styles.errorSubtitleText}>{error}</Text>
+      <MaterialCommunityIcons name="cloud-off-outline" size={32} color={theme.colors.textPrimary} style={{ opacity: 0.6 }} />
+      <Text style={[styles.errorTitleText, { color: theme.colors.textPrimary }]}>{t('profile.favorites.errors.connectionFaultTitle')}</Text>
+      <Text style={[styles.errorSubtitleText, { color: theme.colors.textSecondary }]}>{error}</Text>
       <TouchableOpacity
         activeOpacity={0.85}
         onPress={() => fetchFavorites(false)}
-        style={styles.goToClosetButton}
+        style={[styles.goToClosetButton, { backgroundColor: theme.colors.accent }]}
       >
-        <Text style={styles.goToClosetButtonText}>Retry Connection</Text>
+        <Text style={[styles.goToClosetButtonText, { color: theme.colors.accentForeground }]}>{t('profile.favorites.errors.retryConnection')}</Text>
       </TouchableOpacity>
     </View>
   );
 
   return (
     <PremiumScreen>
-      <SafeAreaView style={styles.safeAreaContainer} edges={['top']}>
+      <SafeAreaView style={[styles.safeAreaContainer, { backgroundColor: theme.colors.background }]} edges={['top']}>
         {/* Top Minimal Navigation Header Stack */}
         <View style={styles.headerRow}>
-          <TouchableOpacity 
-            onPress={() => router.back()} 
-            style={styles.backButton} 
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backButton}
             activeOpacity={0.7}
           >
-            <Ionicons name="arrow-back" size={22} color="#1C1917" />
+            <Ionicons name="arrow-back" size={22} color={theme.colors.textPrimary} />
           </TouchableOpacity>
-          <SectionHeader title="Favorites" style={styles.headerFlexOverride} />
+          <SectionHeader title={t('profile.favorites.title')} style={styles.headerFlexOverride} />
         </View>
 
         {/* Content Arena Split Route Conditional Evaluation */}
         {isLoading ? (
           <View style={styles.loadingCenterContainer}>
-            <PremiumLoader label="Syncing favorites pool..." />
+            <PremiumLoader label={t('profile.favorites.loadingFavorites')} />
           </View>
         ) : error ? (
           renderErrorState()
@@ -202,7 +206,6 @@ export default function FavoritesScreen() {
 const styles = StyleSheet.create({
   safeAreaContainer: {
     flex: 1,
-    backgroundColor: '#FAFAF9',
   },
   headerRow: {
     flexDirection: 'row',
@@ -233,14 +236,11 @@ const styles = StyleSheet.create({
   },
   garmentCard: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E7E5E4',
     padding: 12,
     marginBottom: 12,
     alignItems: 'center',
-    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.01,
     shadowRadius: 3,
@@ -250,7 +250,6 @@ const styles = StyleSheet.create({
     width: 64,
     height: 76,
     borderRadius: 8,
-    backgroundColor: '#F5F5F4',
     overflow: 'hidden',
   },
   garmentImage: {
@@ -266,14 +265,12 @@ const styles = StyleSheet.create({
   brandText: {
     fontSize: 9,
     fontWeight: '700',
-    color: '#1C1917',
     letterSpacing: 0.5,
     marginBottom: 3,
   },
   nameText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#1C1917',
     marginBottom: 6,
   },
   attributesRow: {
@@ -282,16 +279,13 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   attributeChip: {
-    backgroundColor: '#F5F5F4',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
     borderWidth: 0.5,
-    borderColor: '#E7E5E4',
   },
   attributeChipText: {
     fontSize: 11,
-    color: '#78716C',
     fontWeight: '400',
     textTransform: 'capitalize',
   },
@@ -313,7 +307,6 @@ const styles = StyleSheet.create({
   },
   emptyHeartIcon: {
     fontSize: 32,
-    color: '#1C1917',
     fontWeight: '300',
     opacity: 0.4,
     marginBottom: 16,
@@ -321,13 +314,11 @@ const styles = StyleSheet.create({
   emptyTitleText: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#1C1917',
     marginBottom: 6,
     letterSpacing: -0.2,
   },
   emptySubtitleText: {
     fontSize: 13,
-    color: '#78716C',
     textAlign: 'center',
     lineHeight: 18,
     marginBottom: 24,
@@ -335,27 +326,23 @@ const styles = StyleSheet.create({
   errorTitleText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1C1917',
     marginTop: 14,
     marginBottom: 6,
   },
   errorSubtitleText: {
     fontSize: 13,
-    color: '#78716C',
     textAlign: 'center',
     lineHeight: 18,
     marginBottom: 24,
   },
   goToClosetButton: {
     height: 48,
-    backgroundColor: '#1C1917',
     borderRadius: 12,
     paddingHorizontal: 24,
     justifyContent: 'center',
     alignItems: 'center',
   },
   goToClosetButtonText: {
-    color: '#FAFAF9',
     fontSize: 14,
     fontWeight: '600',
     letterSpacing: -0.1,

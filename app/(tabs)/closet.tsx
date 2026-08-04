@@ -20,9 +20,11 @@ import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { PremiumCard } from '../../components/ui/PremiumCard';
 import { PremiumTouchable } from '../../components/ui/PremiumTouchable';
 import { StaggeredListWrapper } from '../../constants/motion/StaggeredListWrapper';
-import { SectionHeader } from '../../components/ui/SectionHeader'; 
+import { SectionHeader } from '../../components/ui/SectionHeader';
 import { SectionTitle } from '../../components/ui/SectionTitle';
 import { PremiumLoader } from '../../components/ui/PremiumLoader';
+import { useTheme } from '../../theme';
+import { useLanguage } from '../../i18n';
 
 // Supabase client instance integration
 import { supabase } from '../../lib/supabase';
@@ -40,7 +42,7 @@ interface ClothingItem {
   category: string;
   brand: string;
   color: string;
-  image_url: string; 
+  image_url: string;
   created_at?: string;
   is_favorite?: boolean; // Added support for favorites flag mapping
 }
@@ -89,6 +91,8 @@ const INITIAL_FILTERS: FilterState = {
 };
 
 export default function ClosetScreen() {
+  const { theme } = useTheme();
+  const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<ClosetTab>('Garments');
   const [activeCategory, setActiveCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
@@ -102,7 +106,7 @@ export default function ClosetScreen() {
   // Advanced Filtering System Infrastructure States
   const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
   const [persistedFilters, setPersistedFilters] = useState<FilterState>(INITIAL_FILTERS);
-  
+
   // Staging filters for the open drawer before the user hits "Apply Filters"
   const [stagedCategory, setStagedCategory] = useState('All');
   const [stagedColor, setStagedColor] = useState('All Colors');
@@ -115,7 +119,7 @@ export default function ClosetScreen() {
   // Entry Transition Animation Nodes
   const entryHeaderOpacity = useRef(new Animated.Value(0)).current;
   const entryHeaderTranslateY = useRef(new Animated.Value(-8)).current;
-  
+
   const searchBarOpacity = useRef(new Animated.Value(0)).current;
   const searchBarTranslateY = useRef(new Animated.Value(8)).current;
 
@@ -153,7 +157,7 @@ export default function ClosetScreen() {
       const { data: { user }, error: authError } = await supabase.auth.getUser();
 
       if (authError || !user) {
-        setError('Your active session token expired. Please authenticate through login window again.');
+        setError(t('tabs.closet.sessionExpired'));
         setIsLoading(false);
         return;
       }
@@ -168,8 +172,6 @@ export default function ClosetScreen() {
         if (garmentQueryErr) throw garmentQueryErr;
         setGarments((data as ClothingItem[]) || []);
       } else {
-        console.log('[Closet Core Pipeline] Syncing Outfits Lookbooks using embedded joins...');
-        
         const { data: rawOutfitsData, error: outfitQueryErr } = await supabase
           .from('outfits')
           .select(`
@@ -187,13 +189,11 @@ export default function ClosetScreen() {
           .order('created_at', { ascending: false });
 
         if (outfitQueryErr) throw outfitQueryErr;
-        
-        console.log(`[Closet Core Pipeline Debug] Raw outfits fetched: ${rawOutfitsData?.length || 0}`);
 
         const transformedOutfits: OutfitCard[] = (rawOutfitsData || []).map((outfit: any) => {
           const itemsArray = outfit.outfit_items || [];
           const garmentCount = itemsArray.length;
-          
+
           let coverImage: string | null = null;
           if (garmentCount > 0 && itemsArray[0].clothing_items) {
             coverImage = itemsArray[0].clothing_items.image_url || null;
@@ -213,7 +213,7 @@ export default function ClosetScreen() {
       }
     } catch (err: any) {
       console.error('[Closet Refactored Pipeline Crash]:', err);
-      setError(err.message || 'An error occurred while synchronizing database entities.');
+      setError(err.message || t('tabs.closet.syncError'));
     } finally {
       setIsLoading(false);
     }
@@ -274,7 +274,7 @@ export default function ClosetScreen() {
     // 1. Text Search Query Parameter Matches
     if (searchQuery.trim().length > 0) {
       const targetQuery = searchQuery.toLowerCase().trim();
-      result = result.filter(g => 
+      result = result.filter(g =>
         (g.name?.toLowerCase().includes(targetQuery)) ||
         (g.brand?.toLowerCase().includes(targetQuery))
       );
@@ -309,7 +309,7 @@ export default function ClosetScreen() {
         return (a.name || '').localeCompare(b.name || '');
       }
       if (persistedFilters.sortBy === 'Z-A') {
-        return (b.name || '').localeCompare(b.name || '');
+        return (b.name || '').localeCompare(a.name || '');
       }
       // Default fallback matrix: Newest First
       return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
@@ -324,7 +324,7 @@ export default function ClosetScreen() {
     // Outfits evaluation handles Search Queries safely isolated from Garment-specific structural tags
     if (searchQuery.trim().length > 0) {
       const targetQuery = searchQuery.toLowerCase().trim();
-      result = result.filter(o => 
+      result = result.filter(o =>
         (o.name?.toLowerCase().includes(targetQuery)) ||
         (o.occasion?.toLowerCase().includes(targetQuery))
       );
@@ -335,7 +335,7 @@ export default function ClosetScreen() {
         return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
       }
       if (persistedFilters.sortBy === 'A-Z') {
-        return (a.name || '').localeCompare(a.name || '');
+        return (a.name || '').localeCompare(b.name || '');
       }
       if (persistedFilters.sortBy === 'Z-A') {
         return (b.name || '').localeCompare(a.name || '');
@@ -390,8 +390,8 @@ export default function ClosetScreen() {
       const garmentItem = item as ClothingItem;
       return (
         <StaggeredListWrapper index={index}>
-          <PremiumCard 
-            style={styles.card}
+          <PremiumCard
+            style={[styles.card, { borderColor: theme.colors.surfaceSecondary, shadowColor: theme.colors.shadow }]}
             onPress={() =>
               router.push({
                 pathname: 'clothing/[id]',
@@ -400,25 +400,27 @@ export default function ClosetScreen() {
                   name: garmentItem.name,
                   brand: garmentItem.brand,
                   category: garmentItem.category,
-                  image: garmentItem.image_url, 
+                  image: garmentItem.image_url,
                   color: garmentItem.color,
                 },
               })
             }
           >
-            <View style={styles.imageWrapper}>
+            <View style={[styles.imageWrapper, { backgroundColor: theme.colors.surfaceSecondary }]}>
               <Image source={{ uri: garmentItem.image_url }} style={styles.imageGarmentImage} />
-              <View style={[styles.colorIndicator, { backgroundColor: garmentItem.color || '#CCCCCC' }]} />
+              {/* Ring color intentionally fixed (theme.colors.surface): frames the
+                  garment's own data-driven color swatch, not app chrome. */}
+              <View style={[styles.colorIndicator, { backgroundColor: garmentItem.color || '#CCCCCC', borderColor: theme.colors.surface, shadowColor: theme.colors.shadow }]} />
             </View>
 
             <View style={styles.cardInfo}>
               <SectionTitle withBottomMargin>{garmentItem.brand || 'Unbranded'}</SectionTitle>
-              <Text style={styles.garmentName} numberOfLines={1}>
+              <Text style={[styles.garmentName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
                 {garmentItem.name}
               </Text>
               <View style={styles.rowMetadata}>
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{garmentItem.category}</Text>
+                <View style={[styles.badge, { borderColor: theme.colors.border }]}>
+                  <Text style={[styles.badgeText, { color: theme.colors.textSecondary }]}>{garmentItem.category}</Text>
                 </View>
               </View>
             </View>
@@ -429,8 +431,8 @@ export default function ClosetScreen() {
       const outfitItem = item as OutfitCard;
       return (
         <StaggeredListWrapper index={index}>
-          <PremiumCard 
-            style={styles.card} 
+          <PremiumCard
+            style={[styles.card, { borderColor: theme.colors.surfaceSecondary, shadowColor: theme.colors.shadow }]}
             onPress={() => router.push({
               pathname: '/outfit/[id]',
               params: { id: outfitItem.id }
@@ -439,6 +441,7 @@ export default function ClosetScreen() {
             {outfitItem.coverImage ? (
               <View style={styles.imageWrapper}>
                 <Image source={{ uri: outfitItem.coverImage }} style={styles.imageGarmentImage} />
+                {/* Fixed: floats over the outfit photo, not the app canvas. */}
                 {outfitItem.occasion && (
                   <View style={styles.occasionPillFloatingFloating}>
                     <Text style={styles.occasionPillFloatingText} numberOfLines={1}>
@@ -448,12 +451,12 @@ export default function ClosetScreen() {
                 )}
               </View>
             ) : (
-              <View style={styles.outfitPlaceholderContainer}>
-                <View style={styles.outfitIconBadgeCircle}>
-                  <MaterialCommunityIcons name="hanger" size={22} color="#78716C" />
+              <View style={[styles.outfitPlaceholderContainer, { backgroundColor: theme.colors.surfaceSecondary }]}>
+                <View style={[styles.outfitIconBadgeCircle, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+                  <MaterialCommunityIcons name="hanger" size={22} color={theme.colors.textSecondary} />
                 </View>
-                <View style={styles.outfitSparkleCorner}>
-                  <MaterialCommunityIcons name="sparkles" size={12} color="#1C1917" />
+                <View style={[styles.outfitSparkleCorner, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+                  <MaterialCommunityIcons name="sparkles" size={12} color={theme.colors.accent} />
                 </View>
               </View>
             )}
@@ -462,14 +465,14 @@ export default function ClosetScreen() {
               <SectionTitle numberOfLines={1} style={styles.outfitTitleBoldStyle}>
                 {outfitItem.name}
               </SectionTitle>
-              
+
               <View style={styles.rowMetadata}>
-                <Text style={styles.outfitGarmentsCountSubtitleStyle}>
-                  {outfitItem.garmentCount} {outfitItem.garmentCount === 1 ? 'garment' : 'garments'}
+                <Text style={[styles.outfitGarmentsCountSubtitleStyle, { color: theme.colors.textSecondary }]}>
+                  {outfitItem.garmentCount} {outfitItem.garmentCount === 1 ? t('tabs.closet.garmentSingular') : t('tabs.closet.garmentPlural')}
                 </Text>
                 {!outfitItem.coverImage && outfitItem.occasion && (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>{outfitItem.occasion}</Text>
+                  <View style={[styles.badge, { borderColor: theme.colors.border }]}>
+                    <Text style={[styles.badgeText, { color: theme.colors.textSecondary }]}>{outfitItem.occasion}</Text>
                   </View>
                 )}
               </View>
@@ -480,10 +483,17 @@ export default function ClosetScreen() {
     }
   };
 
-  const isAnyFilterActive = persistedFilters.color !== 'All Colors' || 
-                            persistedFilters.brand !== 'All Brands' || 
-                            persistedFilters.favoritesOnly || 
+  const isAnyFilterActive = persistedFilters.color !== 'All Colors' ||
+                            persistedFilters.brand !== 'All Brands' ||
+                            persistedFilters.favoritesOnly ||
                             persistedFilters.sortBy !== 'Newest First';
+
+  // Computed chip color pairs — the "selected" affordance inverts the accent
+  // color, so it can't live as a static StyleSheet entry.
+  const chipSelected = { backgroundColor: theme.colors.accent, borderColor: theme.colors.accent };
+  const chipUnselected = { backgroundColor: theme.colors.surface, borderColor: theme.colors.border };
+  const chipTextSelected = { color: theme.colors.accentForeground };
+  const chipTextUnselected = { color: theme.colors.textPrimary };
 
   return (
     <PremiumScreen>
@@ -495,31 +505,31 @@ export default function ClosetScreen() {
         columnWrapperStyle={styles.gridRow}
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
-        extraData={[activeCategory, activeTab, garments, outfits, persistedFilters]} 
+        extraData={[activeCategory, activeTab, garments, outfits, persistedFilters, theme.dark]}
         ListHeaderComponent={
           <View style={styles.headerStack}>
-            
+
             {/* Minimal Premium Top Header Section with Embedded Action Button */}
             <Animated.View style={[
               styles.titleRow,
               { opacity: entryHeaderOpacity, transform: [{ translateY: entryHeaderTranslateY }] }
             ]}>
-              <SectionHeader 
-                title="My Closet" 
-                subtitle={isLoading ? "Updating vault..." : `${activeRenderDataset.length} curated listings`}
+              <SectionHeader
+                title={t('tabs.closet.title')}
+                subtitle={isLoading ? t('tabs.closet.updatingVault') : t('tabs.closet.curatedListings', { count: activeRenderDataset.length })}
                 style={styles.headerFlexOverride}
               />
-              <PremiumTouchable 
-                style={styles.actionAddButton} 
+              <PremiumTouchable
+                style={[styles.actionAddButton, { backgroundColor: theme.colors.surfaceSecondary, borderColor: theme.colors.border }]}
                 onPress={handleAddNewClosetAsset}
                 hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               >
-                <Feather name="plus" size={20} color="#1C1917" />
+                <Feather name="plus" size={20} color={theme.colors.textPrimary} />
               </PremiumTouchable>
             </Animated.View>
 
             {/* iOS-Style Underline Minimalist Tab Controller */}
-            <View style={styles.iosTabControlContainer}>
+            <View style={[styles.iosTabControlContainer, { borderColor: theme.colors.border }]}>
               {(['Garments', 'Outfits'] as ClosetTab[]).map((tab) => {
                 const isSelected = activeTab === tab;
                 return (
@@ -528,47 +538,53 @@ export default function ClosetScreen() {
                     onPress={() => setActiveTab(tab)}
                     style={styles.iosTabItemButton}
                   >
-                    <Text style={[styles.iosTabLabel, isSelected && styles.iosTabLabelActive]}>
-                      {tab}
+                    <Text style={[
+                      styles.iosTabLabel,
+                      { color: theme.colors.textSecondary },
+                      isSelected && [styles.iosTabLabelActive, { color: theme.colors.accent }],
+                    ]}>
+                      {tab === 'Garments' ? t('tabs.closet.tabs.garments') : t('tabs.closet.tabs.outfits')}
                     </Text>
                   </PremiumTouchable>
                 );
               })}
-              <Animated.View 
+              <Animated.View
                 style={[
-                  styles.iosAnimatedUnderline, 
-                  { 
+                  styles.iosAnimatedUnderline,
+                  { backgroundColor: theme.colors.accent },
+                  {
                     width: TAB_WIDTH,
-                    transform: [{ translateX: tabUnderlineX }] 
+                    transform: [{ translateX: tabUnderlineX }]
                   }
-                ]} 
+                ]}
               />
             </View>
 
             {/* Global Search Interface Control */}
             <Animated.View style={[
               styles.searchContainer,
+              { backgroundColor: theme.colors.surfaceSecondary },
               { opacity: searchBarOpacity, transform: [{ translateY: searchBarTranslateY }] }
             ]}>
-              <Feather name="search" size={16} color="#78716C" style={styles.searchIcon} />
+              <Feather name="search" size={16} color={theme.colors.textSecondary} style={styles.searchIcon} />
               <TextInput
-                placeholder={activeTab === 'Garments' ? "Search garments..." : "Search compiled outfits..."}
-                placeholderTextColor="#78716C"
-                style={styles.textInput}
+                placeholder={activeTab === 'Garments' ? t('tabs.closet.searchPlaceholderGarments') : t('tabs.closet.searchPlaceholderOutfits')}
+                placeholderTextColor={theme.colors.textSecondary}
+                style={[styles.textInput, { color: theme.colors.textPrimary }]}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
               />
-              <PremiumTouchable 
+              <PremiumTouchable
                 style={[
-                  styles.filterButton, 
-                  (isAnyFilterActive && activeTab === 'Garments') && styles.filterButtonActiveAccent
-                ]} 
+                  styles.filterButton,
+                  (isAnyFilterActive && activeTab === 'Garments') && { backgroundColor: theme.colors.accent },
+                ]}
                 onPress={activeTab === 'Outfits' ? undefined : handleOpenFilterPanel}
               >
-                <MaterialCommunityIcons 
-                  name="filter-variant" 
-                  size={18} 
-                  color={(isAnyFilterActive && activeTab === 'Garments') ? '#FAFAF9' : '#1C1917'} 
+                <MaterialCommunityIcons
+                  name="filter-variant"
+                  size={18}
+                  color={(isAnyFilterActive && activeTab === 'Garments') ? theme.colors.accentForeground : theme.colors.textPrimary}
                 />
               </PremiumTouchable>
             </Animated.View>
@@ -592,22 +608,22 @@ export default function ClosetScreen() {
                         onPress={() => setActiveCategory(item.id)}
                         style={[
                           styles.categoryTab,
-                          isActive ? styles.categoryTabActive : styles.categoryTabInactive,
+                          isActive ? chipSelected : { backgroundColor: 'transparent', borderColor: theme.colors.border },
                         ]}
                       >
                         <MaterialCommunityIcons
                           name={item.icon as any}
                           size={14}
-                          color={isActive ? '#FAFAF9' : '#1C1917'}
+                          color={isActive ? theme.colors.accentForeground : theme.colors.textPrimary}
                           style={styles.categoryIcon}
                         />
                         <Text
                           style={[
                             styles.categoryLabel,
-                            isActive ? styles.categoryLabelActive : styles.categoryLabelInactive,
+                            { color: isActive ? theme.colors.accentForeground : theme.colors.textPrimary },
                           ]}
                         >
-                          {item.label}
+                          {item.id === 'All' ? t('tabs.closet.categoryAll') : item.label}
                         </Text>
                       </PremiumTouchable>
                     );
@@ -620,36 +636,36 @@ export default function ClosetScreen() {
         ListEmptyComponent={
           isLoading ? (
             <View style={styles.centeredStateFrame}>
-              <PremiumLoader label="Synchronizing storage structures..." />
+              <PremiumLoader label={t('tabs.closet.synchronizing')} />
             </View>
           ) : error ? (
             <View style={styles.centeredStateFrame}>
-              <MaterialCommunityIcons name="alert-circle-outline" size={28} color="#EF4444" style={styles.errorIcon} />
-              <Text style={styles.errorTextHeading}>Failed to load items</Text>
-              <Text style={styles.errorTextSubtitle}>{error}</Text>
-              <PremiumTouchable style={styles.retryButton} onPress={synchronizeClosetDataStore}>
-                <Text style={styles.retryButtonText}>Retry Connection</Text>
+              <MaterialCommunityIcons name="alert-circle-outline" size={28} color={theme.colors.danger} style={styles.errorIcon} />
+              <Text style={[styles.errorTextHeading, { color: theme.colors.textPrimary }]}>{t('tabs.closet.failedToLoad')}</Text>
+              <Text style={[styles.errorTextSubtitle, { color: theme.colors.textSecondary }]}>{error}</Text>
+              <PremiumTouchable style={[styles.retryButton, { backgroundColor: theme.colors.accent }]} onPress={synchronizeClosetDataStore}>
+                <Text style={[styles.retryButtonText, { color: theme.colors.accentForeground }]}>{t('tabs.closet.retryConnection')}</Text>
               </PremiumTouchable>
             </View>
           ) : (
             <Animated.View style={[
-              styles.emptyStateContainer, 
+              styles.emptyStateContainer,
               { opacity: emptyOpacityAnim, transform: [{ scale: emptyScaleAnim }] }
             ]}>
-              <View style={styles.emptyIconCircle}>
-                <MaterialCommunityIcons 
-                  name={activeTab === 'Garments' ? "hanger" : "sparkles"} 
-                  size={24} 
-                  color="#78716C" 
+              <View style={[styles.emptyIconCircle, { backgroundColor: theme.colors.surfaceSecondary }]}>
+                <MaterialCommunityIcons
+                  name={activeTab === 'Garments' ? "hanger" : "sparkles"}
+                  size={24}
+                  color={theme.colors.textSecondary}
                 />
               </View>
-              <Text style={styles.emptyStateTitle}>
-                {activeTab === 'Garments' ? "No pieces match" : "No Outfits Yet"}
+              <Text style={[styles.emptyStateTitle, { color: theme.colors.textPrimary }]}>
+                {activeTab === 'Garments' ? t('tabs.closet.emptyGarmentsTitle') : t('tabs.closet.emptyOutfitsTitle')}
               </Text>
-              <Text style={styles.emptyStateSubtitle}>
-                {activeTab === 'Garments' 
-                  ? "Try re-adjusting your active text queries or structural tags."
-                  : "Create your first outfit from the Create tab."}
+              <Text style={[styles.emptyStateSubtitle, { color: theme.colors.textSecondary }]}>
+                {activeTab === 'Garments'
+                  ? t('tabs.closet.emptyGarmentsSubtitle')
+                  : t('tabs.closet.emptyOutfitsSubtitle')}
               </Text>
             </Animated.View>
           )
@@ -664,21 +680,22 @@ export default function ClosetScreen() {
         statusBarTranslucent
         onRequestClose={() => setIsFilterModalVisible(false)}
       >
+        {/* Backdrop intentionally stays a fixed dark scrim across themes. */}
         <View style={styles.modalBackdropOverlay}>
           <SafeAreaView style={styles.modalSafeBoundary} edges={['bottom']}>
-            <View style={styles.bottomSheetFrame}>
-              <View style={styles.bottomSheetDraggerBar} />
+            <View style={[styles.bottomSheetFrame, { backgroundColor: theme.colors.surfaceElevated, shadowColor: theme.colors.shadow }]}>
+              <View style={[styles.bottomSheetDraggerBar, { backgroundColor: theme.colors.border }]} />
 
-              <View style={styles.modalHeaderRow}>
-                <Text style={styles.modalHeadingTitle}>Filter Closet Storage</Text>
+              <View style={[styles.modalHeaderRow, { borderColor: theme.colors.border }]}>
+                <Text style={[styles.modalHeadingTitle, { color: theme.colors.textPrimary }]}>{t('tabs.closet.filterModalTitle')}</Text>
                 <PremiumTouchable onPress={() => setIsFilterModalVisible(false)} style={styles.modalCloseTouchTarget}>
-                  <Feather name="x" size={20} color="#78716C" />
+                  <Feather name="x" size={20} color={theme.colors.textSecondary} />
                 </PremiumTouchable>
               </View>
 
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalScrollBody}>
                 {/* 1. Category Chip Matrix Selector Layout */}
-                <Text style={styles.filterSectionLabel}>Category Block</Text>
+                <Text style={[styles.filterSectionLabel, { color: theme.colors.textSecondary }]}>{t('tabs.closet.categoryLabel')}</Text>
                 <View style={styles.modalChipsContainerRow}>
                   {CATEGORIES.map((item) => {
                     const isSelected = stagedCategory === item.id;
@@ -686,10 +703,10 @@ export default function ClosetScreen() {
                       <PremiumTouchable
                         key={item.id}
                         onPress={() => setStagedCategory(item.id)}
-                        style={[styles.modalChipItem, isSelected ? styles.modalChipItemSelected : styles.modalChipItemUnselected]}
+                        style={[styles.modalChipItem, isSelected ? chipSelected : chipUnselected]}
                       >
-                        <Text style={[styles.modalChipText, isSelected ? styles.modalChipTextSelected : styles.modalChipTextUnselected]}>
-                          {item.label}
+                        <Text style={[styles.modalChipText, isSelected ? chipTextSelected : chipTextUnselected]}>
+                          {item.id === 'All' ? t('tabs.closet.categoryAll') : item.label}
                         </Text>
                       </PremiumTouchable>
                     );
@@ -697,7 +714,7 @@ export default function ClosetScreen() {
                 </View>
 
                 {/* 2. Color Profile Dynamic Multi-Swatch Selector Track */}
-                <Text style={styles.filterSectionLabel}>Dominant Color Variant</Text>
+                <Text style={[styles.filterSectionLabel, { color: theme.colors.textSecondary }]}>{t('tabs.closet.colorLabel')}</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScrollGap}>
                   {uniqueColors.map((colorItem) => {
                     const isSelected = stagedColor === colorItem;
@@ -706,16 +723,13 @@ export default function ClosetScreen() {
                       <PremiumTouchable
                         key={colorItem}
                         onPress={() => setStagedColor(colorItem)}
-                        style={[
-                          styles.colorTextChip, 
-                          isSelected ? styles.modalChipItemSelected : styles.modalChipItemUnselected
-                        ]}
+                        style={[styles.colorTextChip, isSelected ? chipSelected : chipUnselected]}
                       >
                         {isHex && (
-                          <View style={[styles.inlineColorIndicatorCircle, { backgroundColor: colorItem }]} />
+                          <View style={[styles.inlineColorIndicatorCircle, { backgroundColor: colorItem, borderColor: theme.colors.textSecondary }]} />
                         )}
-                        <Text style={[styles.modalChipText, isSelected ? styles.modalChipTextSelected : styles.modalChipTextUnselected]}>
-                          {isHex ? colorItem.toUpperCase() : colorItem}
+                        <Text style={[styles.modalChipText, isSelected ? chipTextSelected : chipTextUnselected]}>
+                          {colorItem === 'All Colors' ? t('tabs.closet.allColors') : (isHex ? colorItem.toUpperCase() : colorItem)}
                         </Text>
                       </PremiumTouchable>
                     );
@@ -723,7 +737,7 @@ export default function ClosetScreen() {
                 </ScrollView>
 
                 {/* 3. Brand Entity Dynamic List Scroller Track */}
-                <Text style={styles.filterSectionLabel}>Brand Reference Line</Text>
+                <Text style={[styles.filterSectionLabel, { color: theme.colors.textSecondary }]}>{t('tabs.closet.brandLabel')}</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScrollGap}>
                   {uniqueBrands.map((brandItem) => {
                     const isSelected = stagedBrand === brandItem;
@@ -731,10 +745,10 @@ export default function ClosetScreen() {
                       <PremiumTouchable
                         key={brandItem}
                         onPress={() => setStagedBrand(brandItem)}
-                        style={[styles.modalChipItem, isSelected ? styles.modalChipItemSelected : styles.modalChipItemUnselected]}
+                        style={[styles.modalChipItem, isSelected ? chipSelected : chipUnselected]}
                       >
-                        <Text style={[styles.modalChipText, isSelected ? styles.modalChipTextSelected : styles.modalChipTextUnselected]}>
-                          {brandItem}
+                        <Text style={[styles.modalChipText, isSelected ? chipTextSelected : chipTextUnselected]}>
+                          {brandItem === 'All Brands' ? t('tabs.closet.allBrands') : brandItem}
                         </Text>
                       </PremiumTouchable>
                     );
@@ -742,18 +756,19 @@ export default function ClosetScreen() {
                 </ScrollView>
 
                 {/* 4. Sequential Chronological Sorting Modes */}
-                <Text style={styles.filterSectionLabel}>Sort Sequence Hierarchy</Text>
+                <Text style={[styles.filterSectionLabel, { color: theme.colors.textSecondary }]}>{t('tabs.closet.sortLabel')}</Text>
                 <View style={styles.modalChipsContainerRow}>
                   {(['Newest First', 'Oldest First', 'A-Z', 'Z-A'] as SortOption[]).map((option) => {
                     const isSelected = stagedSortBy === option;
+                    const sortLabelKey = option === 'Newest First' ? 'sortNewest' : option === 'Oldest First' ? 'sortOldest' : option === 'A-Z' ? 'sortAZ' : 'sortZA';
                     return (
                       <PremiumTouchable
                         key={option}
                         onPress={() => setStagedSortBy(option)}
-                        style={[styles.modalChipItem, isSelected ? styles.modalChipItemSelected : styles.modalChipItemUnselected]}
+                        style={[styles.modalChipItem, isSelected ? chipSelected : chipUnselected]}
                       >
-                        <Text style={[styles.modalChipText, isSelected ? styles.modalChipTextSelected : styles.modalChipTextUnselected]}>
-                          {option}
+                        <Text style={[styles.modalChipText, isSelected ? chipTextSelected : chipTextUnselected]}>
+                          {t(`tabs.closet.${sortLabelKey}`)}
                         </Text>
                       </PremiumTouchable>
                     );
@@ -761,29 +776,29 @@ export default function ClosetScreen() {
                 </View>
 
                 {/* 5. Favorites Toggle Parameter Block Switch */}
-                <View style={styles.toggleRowBlockContainer}>
+                <View style={[styles.toggleRowBlockContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
                   <View>
-                    <Text style={styles.toggleLabelText}>Favorites Selection Boundary</Text>
-                    <Text style={styles.toggleSublabelText}>Isolate only items tagged as favorites</Text>
+                    <Text style={[styles.toggleLabelText, { color: theme.colors.textPrimary }]}>{t('tabs.closet.favoritesLabel')}</Text>
+                    <Text style={[styles.toggleSublabelText, { color: theme.colors.textSecondary }]}>{t('tabs.closet.favoritesSubtitle')}</Text>
                   </View>
                   <Switch
                     value={stagedFavorites}
                     onValueChange={setStagedFavorites}
-                    trackColor={{ false: '#E7E5E4', true: '#1C1917' }}
-                    thumbColor={stagedFavorites ? '#FAFAF9' : '#F5F5F4'}
-                    ios_backgroundColor="#E7E5E4"
+                    trackColor={{ false: theme.colors.border, true: theme.colors.accent }}
+                    thumbColor={stagedFavorites ? theme.colors.accentForeground : theme.colors.surfaceSecondary}
+                    ios_backgroundColor={theme.colors.border}
                   />
                 </View>
               </ScrollView>
 
               {/* Layout Submission Control Rows */}
-              <View style={styles.modalActionButtonsRow}>
-                <Pressable onPress={handleClearAllFilters} style={styles.modalSecondaryButton}>
-                  <Text style={styles.modalSecondaryButtonText}>Clear All</Text>
+              <View style={[styles.modalActionButtonsRow, { borderColor: theme.colors.border }]}>
+                <Pressable onPress={handleClearAllFilters} style={[styles.modalSecondaryButton, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+                  <Text style={[styles.modalSecondaryButtonText, { color: theme.colors.textSecondary }]}>{t('tabs.closet.clearAll')}</Text>
                 </Pressable>
-                
-                <Pressable onPress={handleApplyFilters} style={styles.modalPrimaryButton}>
-                  <Text style={styles.modalPrimaryButtonText}>Apply Filters</Text>
+
+                <Pressable onPress={handleApplyFilters} style={[styles.modalPrimaryButton, { backgroundColor: theme.colors.accent }]}>
+                  <Text style={[styles.modalPrimaryButtonText, { color: theme.colors.accentForeground }]}>{t('tabs.closet.applyFilters')}</Text>
                 </Pressable>
               </View>
             </View>
@@ -797,88 +812,80 @@ export default function ClosetScreen() {
 const styles = StyleSheet.create({
   listContainer: { paddingHorizontal: 16, paddingBottom: 24 },
   headerStack: { marginBottom: 4 },
-  
+
   titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 },
   headerFlexOverride: { flex: 1, paddingVertical: 0 },
-  actionAddButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F5F5F4', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#E7E5E4' },
-  
-  iosTabControlContainer: { flexDirection: 'row', position: 'relative', marginTop: 4, marginBottom: 8, borderBottomWidth: 1, borderColor: '#E7E5E4' },
+  actionAddButton: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
+
+  iosTabControlContainer: { flexDirection: 'row', position: 'relative', marginTop: 4, marginBottom: 8, borderBottomWidth: 1 },
   iosTabItemButton: { width: TAB_WIDTH, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' },
-  iosTabLabel: { fontSize: 14, fontWeight: '400', color: '#78716C', letterSpacing: 0.3 },
-  iosTabLabelActive: { color: '#1C1917', fontWeight: '600' },
-  iosAnimatedUnderline: { position: 'absolute', bottom: -1, height: 2, backgroundColor: '#1C1917', left: 0 },
-  
-  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F4', borderRadius: 12, height: 42, paddingHorizontal: 12, marginVertical: 8 },
+  iosTabLabel: { fontSize: 14, fontWeight: '400', letterSpacing: 0.3 },
+  iosTabLabelActive: { fontWeight: '600' },
+  iosAnimatedUnderline: { position: 'absolute', bottom: -1, height: 2, left: 0 },
+
+  searchContainer: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, height: 42, paddingHorizontal: 12, marginVertical: 8 },
   searchIcon: { marginRight: 8 },
-  textInput: { flex: 1, fontSize: 14, color: '#1C1917' },
+  textInput: { flex: 1, fontSize: 14 },
   filterButton: { padding: 6, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-  filterButtonActiveAccent: { backgroundColor: '#1C1917' },
   categoryScroller: { marginHorizontal: -16, marginBottom: 8, marginTop: 4 },
   categoriesContent: { paddingHorizontal: 16, gap: 6, paddingVertical: 2 },
   categoryTab: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
-  categoryTabActive: { backgroundColor: '#1C1917', borderColor: '#1C1917' },
-  categoryTabInactive: { backgroundColor: 'transparent', borderColor: '#E7E5E4' },
   categoryIcon: { marginRight: 4 },
   categoryLabel: { fontSize: 12, fontWeight: '500' },
-  categoryLabelActive: { color: '#FAFAF9' },
-  categoryLabelInactive: { color: '#1C1917' },
   gridRow: { justifyContent: 'space-between', marginBottom: 12 },
-  card: { width: CARD_WIDTH, backgroundColor: '#FFFFFF', borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: '#F5F5F4', padding: 0, shadowColor: '#000000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.02, shadowRadius: 2, elevation: 1 },
-  imageWrapper: { width: '100%', height: CARD_WIDTH * 1.3, backgroundColor: '#F5F5F4', position: 'relative' },
+  card: { width: CARD_WIDTH, borderRadius: 12, overflow: 'hidden', borderWidth: 1, padding: 0, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.02, shadowRadius: 2, elevation: 1 },
+  imageWrapper: { width: '100%', height: CARD_WIDTH * 1.3, position: 'relative' },
   imageGarmentImage: { width: '100%', height: '100%', resizeMode: 'cover' },
-  colorIndicator: { position: 'absolute', top: 8, right: 8, width: 18, height: 18, borderRadius: 9, borderWidth: 1.5, borderColor: '#FFFFFF', shadowColor: '#000000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 1, elevation: 1 },
-  
-  outfitTitleBoldStyle: { color: '#1C1917', fontSize: 14, fontWeight: '600', letterSpacing: 0.1, marginBottom: 2 },
-  outfitGarmentsCountSubtitleStyle: { fontSize: 12, fontWeight: '400', color: '#78716C' },
+  colorIndicator: { position: 'absolute', top: 8, right: 8, width: 18, height: 18, borderRadius: 9, borderWidth: 1.5, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 1, elevation: 1 },
+
+  outfitTitleBoldStyle: { fontSize: 14, fontWeight: '600', letterSpacing: 0.1, marginBottom: 2 },
+  outfitGarmentsCountSubtitleStyle: { fontSize: 12, fontWeight: '400' },
+  // --- Photo-context styles: render over the outfit cover photo, fixed across themes. ---
   occasionPillFloatingFloating: { position: 'absolute', bottom: 8, left: 8, backgroundColor: 'rgba(255, 255, 255, 0.90)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 0.5, borderColor: '#E7E5E4' },
   occasionPillFloatingText: { fontSize: 10, fontWeight: '500', color: '#1C1917', letterSpacing: 0.2 },
-  
-  outfitPlaceholderContainer: { width: '100%', height: CARD_WIDTH * 1.3, backgroundColor: '#F5F5F4', alignItems: 'center', justifyContent: 'center', position: 'relative' },
-  outfitIconBadgeCircle: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#E7E5E4' },
-  outfitSparkleCorner: { position: 'absolute', top: 10, right: 10, width: 20, height: 20, borderRadius: 10, backgroundColor: '#FAFAF9', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#E7E5E4' },
-  
+  // --- End photo-context styles ---
+  outfitPlaceholderContainer: { width: '100%', height: CARD_WIDTH * 1.3, alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  outfitIconBadgeCircle: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+  outfitSparkleCorner: { position: 'absolute', top: 10, right: 10, width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+
   cardInfo: { padding: 10 },
-  garmentName: { fontSize: 13, fontWeight: '400', color: '#1C1917', marginBottom: 6 },
+  garmentName: { fontSize: 13, fontWeight: '400', marginBottom: 6 },
   rowMetadata: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  badge: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#E7E5E4', paddingHorizontal: 6, paddingVertical: 1.5, borderRadius: 6 },
-  badgeText: { fontSize: 9, fontWeight: '500', color: '#78716C' },
+  badge: { backgroundColor: 'transparent', borderWidth: 1, paddingHorizontal: 6, paddingVertical: 1.5, borderRadius: 6 },
+  badgeText: { fontSize: 9, fontWeight: '500' },
   emptyStateContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 56, paddingHorizontal: 32 },
-  emptyIconCircle: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#F5F5F4', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-  emptyStateTitle: { fontSize: 14, fontWeight: '500', color: '#1C1917', marginBottom: 4 },
-  emptyStateSubtitle: { fontSize: 12, color: '#78716C', textAlign: 'center', lineHeight: 16 },
+  emptyIconCircle: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+  emptyStateTitle: { fontSize: 14, fontWeight: '500', marginBottom: 4 },
+  emptyStateSubtitle: { fontSize: 12, textAlign: 'center', lineHeight: 16 },
   centeredStateFrame: { alignItems: 'center', justifyContent: 'center', paddingVertical: 64, paddingHorizontal: 32 },
   errorIcon: { marginBottom: 10 },
-  errorTextHeading: { fontSize: 15, fontWeight: '600', color: '#1C1917', marginBottom: 4 },
-  errorTextSubtitle: { fontSize: 12, color: '#78716C', textAlign: 'center', marginBottom: 16, lineHeight: 16 },
-  retryButton: { backgroundColor: '#1C1917', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10 },
-  retryButtonText: { color: '#FAFAF9', fontSize: 12, fontWeight: '600' },
+  errorTextHeading: { fontSize: 15, fontWeight: '600', marginBottom: 4 },
+  errorTextSubtitle: { fontSize: 12, textAlign: 'center', marginBottom: 16, lineHeight: 16 },
+  retryButton: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10 },
+  retryButtonText: { fontSize: 12, fontWeight: '600' },
 
   // Filter Backdrop Modal Styling System Mapping Blocks
   modalBackdropOverlay: { flex: 1, backgroundColor: 'rgba(28, 25, 23, 0.4)', justifyContent: 'flex-end' },
   modalSafeBoundary: { width: '100%' },
-  bottomSheetFrame: { backgroundColor: '#FAFAF9', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 16, maxHeight: SCREEN_HEIGHT * 0.85, shadowColor: '#1C1917', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 8 },
-  bottomSheetDraggerBar: { width: 36, height: 4, backgroundColor: '#E7E5E4', borderRadius: 2, alignSelf: 'center', marginBottom: 14 },
-  modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 12, borderBottomWidth: 1, borderColor: '#E7E5E4' },
-  modalHeadingTitle: { fontSize: 16, fontWeight: '600', color: '#1C1917', letterSpacing: -0.2 },
+  bottomSheetFrame: { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 16, maxHeight: SCREEN_HEIGHT * 0.85, shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 8 },
+  bottomSheetDraggerBar: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 14 },
+  modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 12, borderBottomWidth: 1 },
+  modalHeadingTitle: { fontSize: 16, fontWeight: '600', letterSpacing: -0.2 },
   modalCloseTouchTarget: { padding: 4 },
   modalScrollBody: { paddingVertical: 12 },
-  filterSectionLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', color: '#78716C', letterSpacing: 0.8, marginTop: 14, marginBottom: 10 },
+  filterSectionLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8, marginTop: 14, marginBottom: 10 },
   modalChipsContainerRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
   horizontalScrollGap: { gap: 8, paddingVertical: 2 },
   modalChipItem: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18, borderWidth: 1 },
   colorTextChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18, borderWidth: 1 },
-  inlineColorIndicatorCircle: { width: 12, height: 12, borderRadius: 6, marginRight: 6, borderWidth: 0.5, borderColor: '#78716C' },
-  modalChipItemUnselected: { backgroundColor: '#FFFFFF', borderColor: '#E7E5E4' },
-  modalChipItemSelected: { backgroundColor: '#1C1917', borderColor: '#1C1917' },
+  inlineColorIndicatorCircle: { width: 12, height: 12, borderRadius: 6, marginRight: 6, borderWidth: 0.5 },
   modalChipText: { fontSize: 12, fontWeight: '500' },
-  modalChipTextUnselected: { color: '#1C1917' },
-  modalChipTextSelected: { color: '#FAFAF9' },
-  toggleRowBlockContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E7E5E4', borderRadius: 12, padding: 14, marginTop: 20, marginBottom: 12 },
-  toggleLabelText: { fontSize: 13, fontWeight: '600', color: '#1C1917' },
-  toggleSublabelText: { fontSize: 11, color: '#78716C', marginTop: 1 },
-  modalActionButtonsRow: { flexDirection: 'row', gap: 12, paddingTop: 14, borderTopWidth: 1, borderColor: '#E7E5E4', marginTop: 8 },
-  modalSecondaryButton: { flex: 1, height: 48, borderRadius: 12, borderWidth: 1, borderColor: '#E7E5E4', justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' },
-  modalSecondaryButtonText: { color: '#78716C', fontSize: 14, fontWeight: '600' },
-  modalPrimaryButton: { flex: 1, height: 48, borderRadius: 12, backgroundColor: '#1C1917', justifyContent: 'center', alignItems: 'center' },
-  modalPrimaryButtonText: { color: '#FAFAF9', fontSize: 14, fontWeight: '600' },
+  toggleRowBlockContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderRadius: 12, padding: 14, marginTop: 20, marginBottom: 12 },
+  toggleLabelText: { fontSize: 13, fontWeight: '600' },
+  toggleSublabelText: { fontSize: 11, marginTop: 1 },
+  modalActionButtonsRow: { flexDirection: 'row', gap: 12, paddingTop: 14, borderTopWidth: 1, marginTop: 8 },
+  modalSecondaryButton: { flex: 1, height: 48, borderRadius: 12, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
+  modalSecondaryButtonText: { fontSize: 14, fontWeight: '600' },
+  modalPrimaryButton: { flex: 1, height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  modalPrimaryButtonText: { fontSize: 14, fontWeight: '600' },
 });

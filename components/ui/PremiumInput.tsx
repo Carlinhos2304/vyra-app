@@ -18,14 +18,14 @@ export const PremiumInput: React.FC<PremiumInputProps> = ({
   const { theme } = useTheme();
   return (
     <View style={styles.inputFieldContainer}>
-      <Text style={[styles.label, { color: theme.colors.text }]}>{label}</Text>
+      <Text style={[styles.label, { color: theme.colors.textPrimary }]}>{label}</Text>
       <TextInput
         style={[
           styles.input,
-          { backgroundColor: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border, borderWidth: 1 },
+          { backgroundColor: theme.colors.surface, color: theme.colors.textPrimary, borderColor: theme.colors.border, borderWidth: 1 },
           style
         ]}
-        placeholderTextColor={theme.colors.disabled}
+        placeholderTextColor={theme.colors.textTertiary}
         autoCapitalize="none"
         autoCorrect={false}
         {...props}

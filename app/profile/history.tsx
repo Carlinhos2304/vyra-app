@@ -15,11 +15,13 @@ import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { PremiumLoader } from '../../components/ui/PremiumLoader';
 import { supabase } from '../../lib/supabase';
+import { useTheme } from '../../theme';
+import { useLanguage } from '../../i18n';
 
 const { width } = Dimensions.get('window');
 
 // Data interfaces defining structural types matching Supabase migration parameters
-type ActivityAction = 
+type ActivityAction =
   | 'garment_added'
   | 'garment_deleted'
   | 'favorite_added'
@@ -36,6 +38,8 @@ interface ActivityLogItem {
 }
 
 export default function HistoryLogScreen() {
+  const { theme } = useTheme();
+  const { t } = useLanguage();
   const router = useRouter();
   const [logs, setLogs] = useState<ActivityLogItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -54,7 +58,7 @@ export default function HistoryLogScreen() {
       const { data: { user }, error: authError } = await supabase.auth.getUser();
 
       if (authError || !user) {
-        throw new Error('Authentication coordinates verification trace failed.');
+        throw new Error(t('profile.history.errors.authFailed'));
       }
 
       const { data, error: dbError } = await supabase
@@ -68,7 +72,7 @@ export default function HistoryLogScreen() {
       setLogs(data || []);
     } catch (err: any) {
       console.error('[History Processing Failure]:', err);
-      setError(err.message || 'Failed to establish continuous sync with log data.');
+      setError(err.message || t('profile.history.errors.fetchFailed'));
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -84,25 +88,25 @@ export default function HistoryLogScreen() {
     try {
       const recordDate = new Date(isoString);
       const currentDate = new Date();
-      
+
       // Reset precision timing constraints to compare absolute calendar transitions
       const recordMidnight = new Date(recordDate.getFullYear(), recordDate.getMonth(), recordDate.getDate());
       const currentMidnight = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
-      
+
       const timeDifferenceDelta = currentMidnight.getTime() - recordMidnight.getTime();
       const localizedDayDifference = Math.floor(timeDifferenceDelta / (1000 * 60 * 60 * 24));
 
-      if (localizedDayDifference === 0) return 'Today';
-      if (localizedDayDifference === 1) return 'Yesterday';
-      if (localizedDayDifference < 7) return `${localizedDayDifference} days ago`;
-      
+      if (localizedDayDifference === 0) return t('common.today');
+      if (localizedDayDifference === 1) return t('profile.history.relativeTime.yesterday');
+      if (localizedDayDifference < 7) return t('profile.history.relativeTime.daysAgo', { count: localizedDayDifference });
+
       return recordDate.toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric',
         year: 'numeric',
       });
     } catch {
-      return 'Some time ago';
+      return t('profile.history.relativeTime.someTimeAgo');
     }
   };
 
@@ -110,19 +114,19 @@ export default function HistoryLogScreen() {
   const resolveActionVisualMap = (action: ActivityAction) => {
     switch (action) {
       case 'garment_added':
-        return { title: 'Garment added', icon: 'hanger', color: '#1C1917' };
+        return { title: t('profile.history.actions.garmentAdded'), icon: 'hanger', color: theme.colors.textPrimary };
       case 'garment_deleted':
-        return { title: 'Garment deleted', icon: 'archive-outline', color: '#78716C' };
+        return { title: t('profile.history.actions.garmentDeleted'), icon: 'archive-outline', color: theme.colors.textSecondary };
       case 'favorite_added':
-        return { title: 'Added to favorites', icon: 'heart', color: '#1C1917' };
+        return { title: t('profile.history.actions.favoriteAdded'), icon: 'heart', color: theme.colors.textPrimary };
       case 'favorite_removed':
-        return { title: 'Removed from favorites', icon: 'heart-broken-outline', color: '#78716C' };
+        return { title: t('profile.history.actions.favoriteRemoved'), icon: 'heart-broken-outline', color: theme.colors.textSecondary };
       case 'outfit_created':
-        return { title: 'Outfit created', icon: 'sparkles', color: '#1C1917' };
+        return { title: t('profile.history.actions.outfitCreated'), icon: 'sparkles', color: theme.colors.textPrimary };
       case 'outfit_deleted':
-        return { title: 'Outfit deleted', icon: 'delete-outline', color: '#78716C' };
+        return { title: t('profile.history.actions.outfitDeleted'), icon: 'delete-outline', color: theme.colors.textSecondary };
       default:
-        return { title: 'Activity logged', icon: 'history', color: '#1C1917' };
+        return { title: t('profile.history.actions.activityLogged'), icon: 'history', color: theme.colors.textPrimary };
     }
   };
 
@@ -130,23 +134,23 @@ export default function HistoryLogScreen() {
     const config = resolveActionVisualMap(item.action_type);
 
     return (
-      <View style={styles.logCardContainer}>
-        <View style={styles.iconCellFrame}>
+      <View style={[styles.logCardContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }]}>
+        <View style={[styles.iconCellFrame, { backgroundColor: theme.colors.surfaceSecondary, borderColor: theme.colors.border }]}>
           <MaterialCommunityIcons name={config.icon as any} size={20} color={config.color} />
         </View>
 
         <View style={styles.textDetailsColumn}>
-          <Text style={styles.actionTitleTypography}>{config.title}</Text>
-          <Text style={styles.targetItemTypography} numberOfLines={1}>
+          <Text style={[styles.actionTitleTypography, { color: theme.colors.textPrimary }]}>{config.title}</Text>
+          <Text style={[styles.targetItemTypography, { color: theme.colors.textSecondary }]} numberOfLines={1}>
             {item.target_name}
             {item.meta_category && (
-              <Text style={styles.metaCategoryTypography}>  •  {item.meta_category}</Text>
+              <Text style={[styles.metaCategoryTypography, { color: theme.colors.textTertiary }]}>  •  {item.meta_category}</Text>
             )}
           </Text>
         </View>
 
         <View style={styles.timestampColumn}>
-          <Text style={styles.relativeTimeText}>
+          <Text style={[styles.relativeTimeText, { color: theme.colors.textTertiary }]}>
             {formatRelativeTimestamp(item.created_at)}
           </Text>
         </View>
@@ -156,49 +160,49 @@ export default function HistoryLogScreen() {
 
   const renderEmptyState = () => (
     <View style={styles.centerFeedbackContainer}>
-      <MaterialCommunityIcons name="history" size={32} color="#1C1917" style={styles.feedbackIconOffset} />
-      <Text style={styles.feedbackHeaderTypography}>No activity logged yet</Text>
-      <Text style={styles.feedbackSubTypography}>
-        Your style operations, additions, and updates will materialize here automatically.
+      <MaterialCommunityIcons name="history" size={32} color={theme.colors.textPrimary} style={styles.feedbackIconOffset} />
+      <Text style={[styles.feedbackHeaderTypography, { color: theme.colors.textPrimary }]}>{t('profile.history.empty.title')}</Text>
+      <Text style={[styles.feedbackSubTypography, { color: theme.colors.textSecondary }]}>
+        {t('profile.history.empty.subtitle')}
       </Text>
     </View>
   );
 
   const renderErrorState = () => (
     <View style={styles.centerFeedbackContainer}>
-      <MaterialCommunityIcons name="alert-circle-outline" size={32} color="#DC2626" style={styles.feedbackIconOffset} />
-      <Text style={styles.feedbackHeaderTypography}>Log Synchronization Fault</Text>
-      <Text style={styles.feedbackSubTypography}>{error}</Text>
+      <MaterialCommunityIcons name="alert-circle-outline" size={32} color={theme.colors.danger} style={styles.feedbackIconOffset} />
+      <Text style={[styles.feedbackHeaderTypography, { color: theme.colors.textPrimary }]}>{t('profile.history.errors.syncFaultTitle')}</Text>
+      <Text style={[styles.feedbackSubTypography, { color: theme.colors.textSecondary }]}>{error}</Text>
       <TouchableOpacity
         activeOpacity={0.85}
         onPress={() => fetchActivityHistory(false)}
-        style={styles.retryActionButton}
+        style={[styles.retryActionButton, { backgroundColor: theme.colors.accent }]}
       >
-        <Text style={styles.retryButtonLabelText}>Retry Synchronization</Text>
+        <Text style={[styles.retryButtonLabelText, { color: theme.colors.accentForeground }]}>{t('profile.history.errors.retrySync')}</Text>
       </TouchableOpacity>
     </View>
   );
 
   return (
     <PremiumScreen>
-      <SafeAreaView style={styles.mainLayoutContainer} edges={['top']}>
-        
+      <SafeAreaView style={[styles.mainLayoutContainer, { backgroundColor: theme.colors.background }]} edges={['top']}>
+
         {/* Navigation Action Header Alignment Row */}
         <View style={styles.navigationHeaderBar}>
-          <TouchableOpacity 
-            onPress={() => router.back()} 
-            style={styles.backButtonHitboxArea} 
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backButtonHitboxArea}
             activeOpacity={0.7}
           >
-            <Ionicons name="arrow-back" size={22} color="#1C1917" />
+            <Ionicons name="arrow-back" size={22} color={theme.colors.textPrimary} />
           </TouchableOpacity>
-          <SectionHeader title="History Log" style={styles.headerFlexAlignmentOverride} />
+          <SectionHeader title={t('profile.history.title')} style={styles.headerFlexAlignmentOverride} />
         </View>
 
         {/* Layout Output Conditional Branches */}
         {isLoading ? (
           <View style={styles.centerLoadingStateBox}>
-            <PremiumLoader label="Parsing historical logs..." />
+            <PremiumLoader label={t('profile.history.loadingHistory')} />
           </View>
         ) : error ? (
           renderErrorState()
@@ -222,7 +226,6 @@ export default function HistoryLogScreen() {
 const styles = StyleSheet.create({
   mainLayoutContainer: {
     flex: 1,
-    backgroundColor: '#FAFAF9',
   },
   navigationHeaderBar: {
     flexDirection: 'row',
@@ -253,14 +256,11 @@ const styles = StyleSheet.create({
   },
   logCardContainer: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E7E5E4',
     padding: 14,
     marginBottom: 10,
     alignItems: 'center',
-    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.01,
     shadowRadius: 2,
@@ -270,11 +270,9 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 10,
-    backgroundColor: '#F5F5F4',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#E7E5E4',
   },
   textDetailsColumn: {
     flex: 1,
@@ -283,16 +281,13 @@ const styles = StyleSheet.create({
   actionTitleTypography: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#1C1917',
     marginBottom: 3,
   },
   targetItemTypography: {
     fontSize: 12,
-    color: '#78716C',
     fontWeight: '400',
   },
   metaCategoryTypography: {
-    color: '#A8A29E',
     fontSize: 11,
   },
   timestampColumn: {
@@ -302,7 +297,6 @@ const styles = StyleSheet.create({
   relativeTimeText: {
     fontSize: 11,
     fontWeight: '500',
-    color: '#A8A29E',
   },
   centerFeedbackContainer: {
     flex: 1,
@@ -318,27 +312,23 @@ const styles = StyleSheet.create({
   feedbackHeaderTypography: {
     fontSize: 15,
     fontWeight: '500',
-    color: '#1C1917',
     marginBottom: 6,
     letterSpacing: -0.1,
   },
   feedbackSubTypography: {
     fontSize: 13,
-    color: '#78716C',
     textAlign: 'center',
     lineHeight: 18,
     marginBottom: 24,
   },
   retryActionButton: {
     height: 44,
-    backgroundColor: '#1C1917',
     borderRadius: 12,
     paddingHorizontal: 20,
     justifyContent: 'center',
     alignItems: 'center',
   },
   retryButtonLabelText: {
-    color: '#FAFAF9',
     fontSize: 13,
     fontWeight: '600',
   },

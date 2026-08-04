@@ -27,7 +27,7 @@ export const SectionTitle: React.FC<SectionTitleProps> = ({
       ]} 
       {...props}
     >
-      <Text style={[styles.text, { color: theme.colors.primary }]}>
+      <Text style={[styles.text, { color: theme.colors.accent }]}>
         {children.toUpperCase()}
       </Text>
     </View>

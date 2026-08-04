@@ -23,22 +23,23 @@ export const PremiumButton: React.FC<PremiumButtonProps> = ({
   const isInteractive = !disabled && !isLoading;
 
   return (
-    <Pressable 
-      onPress={onPress} 
+    <Pressable
+      onPress={onPress}
+      onPressIn={isInteractive ? pressProps.onPressIn : undefined}
+      onPressOut={isInteractive ? pressProps.onPressOut : undefined}
       disabled={!isInteractive}
       style={styles.pressableReset}
     >
       <Animated.View
         style={[
           styles.buttonBody,
-          { backgroundColor: theme.colors.primary },
+          { backgroundColor: theme.colors.accent },
           style,
           isInteractive && animatedStyle,
           (disabled || isLoading) && { opacity: 0.5 },
         ]}
-        {...(isInteractive ? pressProps : {})}
       >
-        <Text style={[styles.buttonLabel, { color: theme.colors.background }]}>{label}</Text>
+        <Text style={[styles.buttonLabel, { color: theme.colors.accentForeground }]}>{label}</Text>
       </Animated.View>
     </Pressable>
   );

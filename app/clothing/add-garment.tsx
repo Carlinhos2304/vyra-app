@@ -24,53 +24,24 @@ import { PremiumTouchable } from '../../components/ui/PremiumTouchable';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 
 import { supabase } from '../../lib/supabase';
+import { useTheme } from '../../theme';
+import { useLanguage } from '../../i18n';
+import {
+  CREATION_CATEGORIES,
+  PALETTE_COLORS,
+  STYLE_OPTIONS,
+  OCCASION_OPTIONS,
+  SEASON_OPTIONS,
+  matchCategory,
+  matchPaletteColor,
+  matchFromList,
+} from '../../constants/garmentTaxonomy';
+import { analyzeGarmentPhoto, AIAnalysisError, GarmentAnalysisResult } from '../../lib/services/aiService';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-const CREATION_CATEGORIES = [
-  'Tops',
-  'Bottoms',
-  'Dresses',
-  'Outerwear',
-  'Shoes',
-  'Bags',
-  'Accessories',
-  'Jewelry',
-  'Hats',
-  'Swimwear',
-  'Activewear',
-];
-
-const PALETTE_COLORS = [
-  { label: 'Black', hex: '#000000' },
-  { label: 'Charcoal', hex: '#374151' },
-  { label: 'Gray', hex: '#4B5563' },
-  { label: 'Light Gray', hex: '#D1D5DB' },
-  { label: 'White', hex: '#FFFFFF' },
-  { label: 'Cream', hex: '#FFFDD0' },
-  { label: 'Beige', hex: '#F5F5DC' },
-  { label: 'Camel', hex: '#C19A6B' },
-  { label: 'Brown', hex: '#78350F' },
-  { label: 'Navy', hex: '#1E3A8A' },
-  { label: 'Blue', hex: '#3B82F6' },
-  { label: 'Sky Blue', hex: '#93C5FD' },
-  { label: 'Teal', hex: '#0D9488' },
-  { label: 'Turquoise', hex: '#2DD4BF' },
-  { label: 'Olive', hex: '#556B2F' },
-  { label: 'Green', hex: '#16A34A' },
-  { label: 'Mint', hex: '#A7F3D0' },
-  { label: 'Lime', hex: '#84CC16' },
-  { label: 'Burgundy', hex: '#800020' },
-  { label: 'Red', hex: '#DC2626' },
-  { label: 'Coral', hex: '#FF7F50' },
-  { label: 'Orange', hex: '#F97316' },
-  { label: 'Mustard', hex: '#CA8A04' },
-  { label: 'Yellow', hex: '#FACC15' },
-  { label: 'Violet', hex: '#4C1D95' },
-  { label: 'Purple', hex: '#8B5CF6' },
-  { label: 'Lavender', hex: '#E9D5FF' },
-  { label: 'Rose', hex: '#FDA4AF' },
-  { label: 'Pink', hex: '#F43F5E' },
-];
+// CREATION_CATEGORIES / PALETTE_COLORS now come from constants/garmentTaxonomy.ts
+// (single source of truth, also consumed by the analyze-garment Edge Function
+// so AI output and manual entry always speak the same vocabulary).
 
 // Pure Mathematical Core Conversion Helpers (HSV to HEX Engine)
 function hsvToHex(h: number, s: number, v: number): string {
@@ -94,6 +65,8 @@ function hsvToHex(h: number, s: number, v: number): string {
 }
 
 export default function AddGarmentScreen() {
+  const { theme } = useTheme();
+  const { t } = useLanguage();
   const [name, setName] = useState('');
   const [brand, setBrand] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
@@ -101,18 +74,49 @@ export default function AddGarmentScreen() {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  // --- AI Garment Analysis (Phase 1) state ---
+  // The photo is uploaded to Storage on first "Analyze with AI" press (or on
+  // final save, whichever happens first) and cached here so we never upload
+  // the same local file twice.
+  const [uploadedImagePath, setUploadedImagePath] = useState<string | null>(null);
+  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<GarmentAnalysisResult | null>(null);
+
+  // Fields the AI can suggest but the user always reviews/edits before saving.
+  const [selectedStyle, setSelectedStyle] = useState('');
+  const [selectedOccasion, setSelectedOccasion] = useState('');
+  const [selectedSeason, setSelectedSeason] = useState('');
+  const [materialsText, setMaterialsText] = useState('');
+  const [description, setDescription] = useState('');
+  const [tagsText, setTagsText] = useState('');
+
+  // Clears every cached upload/AI-derived value — called whenever the user
+  // picks a different photo, so a stale analysis never gets attached to a new image.
+  const resetImageDerivedState = () => {
+    setUploadedImagePath(null);
+    setUploadedImageUrl(null);
+    setAiAnalysis(null);
+  };
+
   // Picker Overlay Geometry and Metrics
   const [isPickerVisible, setIsPickerVisible] = useState(false);
   const [customColor, setCustomColor] = useState('#7C3AED');
-  
+
   // Track continuous updates locally using discrete structural states
-  const [hue, setHue] = useState(265); 
+  const [hue, setHue] = useState(265);
   const [saturation, setSaturation] = useState(1);
   const [brightness, setBrightness] = useState(1);
 
-  const containerWidthRef = useRef(280); 
+  const containerWidthRef = useRef(280);
   const computedTempColor = hsvToHex(hue, saturation, brightness);
   const isCustomColorActive = !PALETTE_COLORS.some(item => item.hex.toUpperCase() === selectedColor.toUpperCase());
+
+  // Locally-computed theme-dependent chip pairs (colors can't be static once theme-dependent)
+  const chipSelected = { backgroundColor: theme.colors.accent, borderColor: theme.colors.accent };
+  const chipUnselected = { backgroundColor: 'transparent', borderColor: theme.colors.border };
+  const chipTextSelected = { color: theme.colors.accentForeground };
+  const chipTextUnselected = { color: theme.colors.textPrimary };
 
   // Responder handling logic for the 2D Saturation/Brightness canvas
   const saturationSaturationPanelResponder = useRef(
@@ -136,7 +140,7 @@ export default function AddGarmentScreen() {
 
   const handleCanvasTouch = (x: number, y: number) => {
     const width = containerWidthRef.current;
-    const height = 160; 
+    const height = 160;
     const clampedX = Math.max(0, Math.min(x, width));
     const clampedY = Math.max(0, Math.min(y, height));
 
@@ -153,7 +157,7 @@ export default function AddGarmentScreen() {
   const pickImageFromGallery = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Denied', 'Vyra needs access to your camera roll to fetch photos.');
+      Alert.alert(t('clothing.addGarment.permissions.deniedTitle'), t('clothing.addGarment.permissions.galleryMessage'));
       return;
     }
 
@@ -165,6 +169,7 @@ export default function AddGarmentScreen() {
     });
 
     if (!result.canceled && result.assets?.[0]?.uri) {
+      resetImageDerivedState();
       setImageUri(result.assets[0].uri);
     }
   };
@@ -172,7 +177,7 @@ export default function AddGarmentScreen() {
   const capturePhotoFromCamera = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Denied', 'Vyra needs hardware camera activation permissions to snap wardrobe frames.');
+      Alert.alert(t('clothing.addGarment.permissions.deniedTitle'), t('clothing.addGarment.permissions.cameraMessage'));
       return;
     }
 
@@ -184,6 +189,7 @@ export default function AddGarmentScreen() {
     });
 
     if (!result.canceled && result.assets?.[0]?.uri) {
+      resetImageDerivedState();
       setImageUri(result.assets[0].uri);
     }
   };
@@ -194,17 +200,108 @@ export default function AddGarmentScreen() {
     setIsPickerVisible(false);
   };
 
+  // Uploads the currently selected local photo to Storage exactly once,
+  // caching the result. Both "Analyze with AI" and the final save call this,
+  // so re-pressing Analyze or saving after analyzing never re-uploads.
+  const ensureImageUploaded = async (): Promise<{ path: string; url: string }> => {
+    if (uploadedImagePath && uploadedImageUrl) {
+      return { path: uploadedImagePath, url: uploadedImageUrl };
+    }
+    if (!imageUri) {
+      throw new Error(t('clothing.addGarment.errors.missingImageMessage'));
+    }
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      throw new Error(t('clothing.addGarment.errors.authExpiredShortMessage'));
+    }
+
+    const fileExtension = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
+    const cleanExtension = ['jpg', 'jpeg', 'png', 'heic'].includes(fileExtension) ? fileExtension : 'jpg';
+    const mimeType = cleanExtension === 'png' ? 'image/png' : 'image/jpeg';
+
+    const storageFileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${cleanExtension}`;
+    const parameterizedStoragePath = `${user.id}/${storageFileName}`;
+
+    const formData = new FormData();
+    formData.append('file', {
+      uri: imageUri,
+      name: storageFileName,
+      type: mimeType,
+    } as any);
+
+    const { error: uploadError } = await supabase.storage
+      .from('garments')
+      .upload(parameterizedStoragePath, formData, {
+        contentType: mimeType,
+        upsert: false,
+      });
+
+    if (uploadError) throw uploadError;
+
+    const { data: publicUrlData } = supabase.storage
+      .from('garments')
+      .getPublicUrl(parameterizedStoragePath);
+
+    setUploadedImagePath(parameterizedStoragePath);
+    setUploadedImageUrl(publicUrlData.publicUrl);
+    return { path: parameterizedStoragePath, url: publicUrlData.publicUrl };
+  };
+
+  // Sends the (already or newly uploaded) photo to the analyze-garment Edge
+  // Function and pre-fills the form with its structured suggestions. The
+  // user can still change every field before saving — nothing is persisted
+  // to clothing_items by this step.
+  const handleAnalyzeWithAI = async () => {
+    if (!imageUri || isAnalyzing) return;
+
+    try {
+      setIsAnalyzing(true);
+      const { path } = await ensureImageUploaded();
+      const result = await analyzeGarmentPhoto(path);
+      setAiAnalysis(result);
+
+      // "name" is always populated by the AI (Color + Main Characteristic +
+      // Garment Type, e.g. "White Oversized Cotton T-Shirt") — still fully
+      // editable afterward. "brand" only comes back non-null when a logo/tag
+      // was clearly legible, so we only overwrite the field when it's set —
+      // never clear a brand the user already typed with a null guess.
+      if (result.name) setName(result.name);
+      if (result.brand) setBrand(result.brand);
+
+      const matchedCategory = matchCategory(result.category);
+      if (matchedCategory) setSelectedCategory(matchedCategory);
+
+      const matchedColor = matchPaletteColor(result.colors.primary);
+      if (matchedColor) setSelectedColor(matchedColor.hex);
+
+      setSelectedStyle(matchFromList(STYLE_OPTIONS, result.style) || '');
+      setSelectedOccasion(matchFromList(OCCASION_OPTIONS, result.occasion) || '');
+      setSelectedSeason(matchFromList(SEASON_OPTIONS, result.season) || '');
+      setMaterialsText(result.materials.join(', '));
+      setDescription(result.description);
+      setTagsText(result.tags.join(', '));
+    } catch (error: any) {
+      const message = error instanceof AIAnalysisError
+        ? error.message
+        : error?.message || t('clothing.addGarment.errors.aiUnavailableMessage');
+      Alert.alert(t('clothing.addGarment.errors.aiUnavailableTitle'), message);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
   const handleFormSubmission = async () => {
     if (!name.trim()) {
-      Alert.alert('Missing Field', 'Please provide a unique title naming definition for this piece.');
+      Alert.alert(t('clothing.addGarment.errors.missingFieldTitle'), t('clothing.addGarment.errors.missingNameMessage'));
       return;
     }
     if (!selectedCategory) {
-      Alert.alert('Missing Field', 'Please select an architectural garment class categorization.');
+      Alert.alert(t('clothing.addGarment.errors.missingFieldTitle'), t('clothing.addGarment.errors.missingCategoryMessage'));
       return;
     }
     if (!imageUri) {
-      Alert.alert('Missing Image', 'Please capture or attach a visual digital profile render of the garment.');
+      Alert.alert(t('clothing.addGarment.errors.missingImageTitle'), t('clothing.addGarment.errors.missingImageMessage'));
       return;
     }
 
@@ -214,40 +311,16 @@ export default function AddGarmentScreen() {
 
       if (authError || !user) {
         Alert.alert(
-          'Authentication Required',
-          'Your active security token has expired. Please log out and authenticate again to update your closet storage.'
+          t('clothing.addGarment.errors.authRequiredTitle'),
+          t('clothing.addGarment.errors.authExpiredMessage')
         );
         return;
       }
-      
-      const fileExtension = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
-      const cleanExtension = ['jpg', 'jpeg', 'png', 'heic'].includes(fileExtension) ? fileExtension : 'jpg';
-      const mimeType = cleanExtension === 'png' ? 'image/png' : 'image/jpeg';
-      
-      const storageFileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${cleanExtension}`;
-      const parameterizedStoragePath = `${user.id}/${storageFileName}`;
 
-      const formData = new FormData();
-      formData.append('file', {
-        uri: imageUri,
-        name: storageFileName,
-        type: mimeType,
-      } as any);
+      const { url: finalStoragePublicUrl } = await ensureImageUploaded();
 
-      const { error: uploadError } = await supabase.storage
-        .from('garments')
-        .upload(parameterizedStoragePath, formData, {
-          contentType: mimeType,
-          upsert: false,
-        });
-
-      if (uploadError) throw uploadError;
-
-      const { data: publicUrlData } = supabase.storage
-        .from('garments')
-        .getPublicUrl(parameterizedStoragePath);
-
-      const finalStoragePublicUrl = publicUrlData.publicUrl;
+      const materialsArray = materialsText.split(',').map(s => s.trim()).filter(Boolean);
+      const tagsArray = tagsText.split(',').map(s => s.trim()).filter(Boolean);
 
       const { error: databaseInsertError } = await supabase
         .from('clothing_items')
@@ -260,6 +333,17 @@ export default function AddGarmentScreen() {
             color: selectedColor,
             image_url: finalStoragePublicUrl,
             is_favorite: false,
+            // --- AI-analyzable fields (all additive columns, all optional) ---
+            style: selectedStyle || null,
+            occasion: selectedOccasion || null,
+            season: selectedSeason || null,
+            material: materialsArray.length > 0 ? materialsArray : null,
+            ai_description: description.trim() || null,
+            tags: tagsArray.length > 0 ? tagsArray : null,
+            ai_analyzed: !!aiAnalysis,
+            ai_analyzed_at: aiAnalysis ? new Date().toISOString() : null,
+            ai_confidence_score: aiAnalysis?.confidence_score ?? null,
+            ai_analysis_raw: aiAnalysis ?? null,
           },
         ]);
 
@@ -272,7 +356,7 @@ export default function AddGarmentScreen() {
 
     } catch (error: any) {
       console.error('[Add Garment Flow Exception]:', error);
-      Alert.alert('Transaction Failure', error.message || 'An unexpected database error occurred while registering garment profiles.');
+      Alert.alert(t('clothing.addGarment.errors.transactionFailureTitle'), error.message || t('clothing.addGarment.errors.transactionFailureMessage'));
     } finally {
       setIsSaving(false);
     }
@@ -284,65 +368,94 @@ export default function AddGarmentScreen() {
         {/* Navigation Block Header */}
         <View style={styles.navigationRow}>
           <PremiumTouchable style={styles.backTouchTarget} onPress={() => router.back()}>
-            <Feather name="arrow-left" size={22} color="#1C1917" />
+            <Feather name="arrow-left" size={22} color={theme.colors.textPrimary} />
           </PremiumTouchable>
-          <SectionHeader 
-            title="Add Garment" 
-            subtitle="Catalog new wardrobe assets" 
+          <SectionHeader
+            title={t('clothing.addGarment.header.title')}
+            subtitle={t('clothing.addGarment.header.subtitle')}
             style={styles.headerTitleSpacing}
           />
         </View>
 
-        <ScrollView 
+        <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollBodyContainer}
         >
           {/* Media Interactive Capture Box */}
-          <Text style={styles.fieldSectionLabel}>Garment Visual Profile</Text>
-          <View style={styles.mediaContainerBox}>
+          <Text style={[styles.fieldSectionLabel, { color: theme.colors.textSecondary }]}>{t('clothing.addGarment.fields.visualProfile')}</Text>
+          <View style={[styles.mediaContainerBox, { backgroundColor: theme.colors.surfaceSecondary, borderColor: theme.colors.border }]}>
             {imageUri ? (
               <View style={styles.previewContainer}>
                 <Image source={{ uri: imageUri }} style={styles.previewImageRender} />
-                <PremiumTouchable style={styles.clearMediaIndicator} onPress={() => setImageUri(null)}>
+                {/* Delete control sits on top of the garment photo — kept fixed dark/light regardless of theme (photo-context) */}
+                <PremiumTouchable style={styles.clearMediaIndicator} onPress={() => { resetImageDerivedState(); setImageUri(null); }}>
                   <Feather name="trash-2" size={16} color="#FAFAF9" />
                 </PremiumTouchable>
               </View>
             ) : (
               <View style={styles.emptyMediaTriggerFrame}>
                 <PremiumTouchable style={styles.mediaContextButton} onPress={pickImageFromGallery}>
-                  <Feather name="image" size={20} color="#1C1917" />
-                  <Text style={styles.mediaContextText}>Gallery</Text>
+                  <Feather name="image" size={20} color={theme.colors.textPrimary} />
+                  <Text style={[styles.mediaContextText, { color: theme.colors.textPrimary }]}>{t('clothing.addGarment.fields.gallery')}</Text>
                 </PremiumTouchable>
-                
-                <View style={styles.mediaSplitDivider} />
+
+                <View style={[styles.mediaSplitDivider, { backgroundColor: theme.colors.border }]} />
 
                 <PremiumTouchable style={styles.mediaContextButton} onPress={capturePhotoFromCamera}>
-                  <Feather name="camera" size={20} color="#1C1917" />
-                  <Text style={styles.mediaContextText}>Camera</Text>
+                  <Feather name="camera" size={20} color={theme.colors.textPrimary} />
+                  <Text style={[styles.mediaContextText, { color: theme.colors.textPrimary }]}>{t('clothing.addGarment.fields.camera')}</Text>
                 </PremiumTouchable>
               </View>
             )}
           </View>
 
+          {/* AI Analysis Trigger — only shown once a photo exists. Purely
+              additive: the user can always skip this and fill everything
+              manually, exactly as before this feature existed. */}
+          {imageUri && (
+            <PremiumTouchable
+              onPress={handleAnalyzeWithAI}
+              disabled={isAnalyzing || isSaving}
+              style={[
+                styles.aiAnalyzeButton,
+                { backgroundColor: theme.colors.surfaceSecondary, borderColor: theme.colors.border },
+                isAnalyzing && styles.saveExecutionDisabled,
+              ]}
+            >
+              {isAnalyzing ? (
+                <ActivityIndicator size="small" color={theme.colors.textPrimary} />
+              ) : (
+                <Feather name="zap" size={16} color={theme.colors.textPrimary} />
+              )}
+              <Text style={[styles.aiAnalyzeButtonText, { color: theme.colors.textPrimary }]}>
+                {isAnalyzing
+                  ? t('clothing.addGarment.aiAnalyze.analyzing')
+                  : aiAnalysis
+                  ? t('clothing.addGarment.aiAnalyze.reanalyze')
+                  : t('clothing.addGarment.aiAnalyze.analyze')}
+              </Text>
+            </PremiumTouchable>
+          )}
+
           {/* Form Context Fields */}
-          <Text style={styles.fieldSectionLabel}>Garment Title</Text>
-          <View style={styles.textInputWrapperBox}>
-            <TextInput 
-              placeholder="e.g., Silk Linen Drape Blouse"
-              placeholderTextColor="#78716C"
-              style={styles.formInputCore}
+          <Text style={[styles.fieldSectionLabel, { color: theme.colors.textSecondary }]}>{t('clothing.addGarment.fields.title')}</Text>
+          <View style={[styles.textInputWrapperBox, { backgroundColor: theme.colors.surfaceSecondary }]}>
+            <TextInput
+              placeholder={t('clothing.addGarment.fields.titlePlaceholder')}
+              placeholderTextColor={theme.colors.textSecondary}
+              style={[styles.formInputCore, { color: theme.colors.textPrimary }]}
               value={name}
               onChangeText={setName}
               editable={!isSaving}
             />
           </View>
 
-          <Text style={styles.fieldSectionLabel}>Brand Reference</Text>
-          <View style={styles.textInputWrapperBox}>
-            <TextInput 
-              placeholder="e.g., Maison Margiela"
-              placeholderTextColor="#78716C"
-              style={styles.formInputCore}
+          <Text style={[styles.fieldSectionLabel, { color: theme.colors.textSecondary }]}>{t('clothing.addGarment.fields.brand')}</Text>
+          <View style={[styles.textInputWrapperBox, { backgroundColor: theme.colors.surfaceSecondary }]}>
+            <TextInput
+              placeholder={t('clothing.addGarment.fields.brandPlaceholder')}
+              placeholderTextColor={theme.colors.textSecondary}
+              style={[styles.formInputCore, { color: theme.colors.textPrimary }]}
               value={brand}
               onChangeText={setBrand}
               editable={!isSaving}
@@ -350,7 +463,7 @@ export default function AddGarmentScreen() {
           </View>
 
           {/* Category Selection Array */}
-          <Text style={styles.fieldSectionLabel}>Category Classification</Text>
+          <Text style={[styles.fieldSectionLabel, { color: theme.colors.textSecondary }]}>{t('clothing.addGarment.fields.category')}</Text>
           <View style={styles.chipsContainerRow}>
             {CREATION_CATEGORIES.map((category) => {
               const isSelected = selectedCategory === category;
@@ -360,13 +473,13 @@ export default function AddGarmentScreen() {
                   onPress={() => setSelectedCategory(category)}
                   style={[
                     styles.categoricalChip,
-                    isSelected ? styles.chipSelected : styles.chipUnselected
+                    isSelected ? chipSelected : chipUnselected
                   ]}
                   disabled={isSaving}
                 >
                   <Text style={[
                     styles.chipTextLabel,
-                    isSelected ? styles.chipTextSelected : styles.chipTextUnselected
+                    isSelected ? chipTextSelected : chipTextUnselected
                   ]}>
                     {category}
                   </Text>
@@ -376,7 +489,7 @@ export default function AddGarmentScreen() {
           </View>
 
           {/* Hybrid Swatch Palette Row */}
-          <Text style={styles.fieldSectionLabel}>Dominant Tone Profile</Text>
+          <Text style={[styles.fieldSectionLabel, { color: theme.colors.textSecondary }]}>{t('clothing.addGarment.fields.color')}</Text>
           <View style={styles.swatchPaletteRow}>
             {PALETTE_COLORS.map((colorItem) => {
               const isSelected = selectedColor.toUpperCase() === colorItem.hex.toUpperCase();
@@ -387,17 +500,18 @@ export default function AddGarmentScreen() {
                   onPress={() => setSelectedColor(colorItem.hex)}
                   style={[
                     styles.swatchCircleCircle,
-                    { backgroundColor: colorItem.hex },
-                    isLightVariant && styles.whiteSwatchBorderOverride,
-                    isSelected && styles.swatchCircleActiveOutline
+                    { backgroundColor: colorItem.hex, shadowColor: theme.colors.shadow },
+                    isLightVariant && { borderWidth: 1, borderColor: theme.colors.border },
+                    isSelected && { borderWidth: 2, borderColor: theme.colors.accent }
                   ]}
                   disabled={isSaving}
                 >
                   {isSelected && (
-                    <Feather 
-                      name="check" 
-                      size={14} 
-                      color={isLightVariant ? '#1C1917' : '#FAFAF9'} 
+                    // Checkmark contrast is chosen against the swatch's own color, not the app theme
+                    <Feather
+                      name="check"
+                      size={14}
+                      color={isLightVariant ? '#1C1917' : '#FAFAF9'}
                     />
                   )}
                 </PremiumTouchable>
@@ -409,9 +523,9 @@ export default function AddGarmentScreen() {
               onPress={() => setIsPickerVisible(true)}
               style={[
                 styles.swatchCircleCircle,
-                { backgroundColor: customColor },
-                customColor.toUpperCase() === '#FFFFFF' && styles.whiteSwatchBorderOverride,
-                isCustomColorActive && styles.swatchCircleActiveOutline
+                { backgroundColor: customColor, shadowColor: theme.colors.shadow },
+                customColor.toUpperCase() === '#FFFFFF' && { borderWidth: 1, borderColor: theme.colors.border },
+                isCustomColorActive && { borderWidth: 2, borderColor: theme.colors.accent }
               ]}
               disabled={isSaving}
             >
@@ -423,16 +537,115 @@ export default function AddGarmentScreen() {
             </PremiumTouchable>
           </View>
 
+          {/* AI Suggestions Review Section — appears once analysis has run at
+              least once. Every value here is fully editable; nothing is saved
+              until "Save to Wardrobe" is pressed. */}
+          {aiAnalysis && (
+            <>
+              <Text style={[styles.fieldSectionLabel, { color: theme.colors.textSecondary }]}>{t('clothing.addGarment.fields.style')}</Text>
+              <View style={styles.chipsContainerRow}>
+                {STYLE_OPTIONS.map((style) => {
+                  const isSelected = selectedStyle === style;
+                  return (
+                    <PremiumTouchable
+                      key={style}
+                      onPress={() => setSelectedStyle(style)}
+                      style={[styles.categoricalChip, isSelected ? chipSelected : chipUnselected]}
+                      disabled={isSaving}
+                    >
+                      <Text style={[styles.chipTextLabel, isSelected ? chipTextSelected : chipTextUnselected]}>{style}</Text>
+                    </PremiumTouchable>
+                  );
+                })}
+              </View>
+
+              <Text style={[styles.fieldSectionLabel, { color: theme.colors.textSecondary }]}>{t('clothing.addGarment.fields.occasion')}</Text>
+              <View style={styles.chipsContainerRow}>
+                {OCCASION_OPTIONS.map((occasion) => {
+                  const isSelected = selectedOccasion === occasion;
+                  return (
+                    <PremiumTouchable
+                      key={occasion}
+                      onPress={() => setSelectedOccasion(occasion)}
+                      style={[styles.categoricalChip, isSelected ? chipSelected : chipUnselected]}
+                      disabled={isSaving}
+                    >
+                      <Text style={[styles.chipTextLabel, isSelected ? chipTextSelected : chipTextUnselected]}>{occasion}</Text>
+                    </PremiumTouchable>
+                  );
+                })}
+              </View>
+
+              <Text style={[styles.fieldSectionLabel, { color: theme.colors.textSecondary }]}>{t('clothing.addGarment.fields.season')}</Text>
+              <View style={styles.chipsContainerRow}>
+                {SEASON_OPTIONS.map((season) => {
+                  const isSelected = selectedSeason === season;
+                  return (
+                    <PremiumTouchable
+                      key={season}
+                      onPress={() => setSelectedSeason(season)}
+                      style={[styles.categoricalChip, isSelected ? chipSelected : chipUnselected]}
+                      disabled={isSaving}
+                    >
+                      <Text style={[styles.chipTextLabel, isSelected ? chipTextSelected : chipTextUnselected]}>{season}</Text>
+                    </PremiumTouchable>
+                  );
+                })}
+              </View>
+
+              <Text style={[styles.fieldSectionLabel, { color: theme.colors.textSecondary }]}>{t('clothing.addGarment.fields.materials')}</Text>
+              <View style={[styles.textInputWrapperBox, { backgroundColor: theme.colors.surfaceSecondary }]}>
+                <TextInput
+                  placeholder={t('clothing.addGarment.fields.materialsPlaceholder')}
+                  placeholderTextColor={theme.colors.textSecondary}
+                  style={[styles.formInputCore, { color: theme.colors.textPrimary }]}
+                  value={materialsText}
+                  onChangeText={setMaterialsText}
+                  editable={!isSaving}
+                />
+              </View>
+
+              <Text style={[styles.fieldSectionLabel, { color: theme.colors.textSecondary }]}>{t('clothing.addGarment.fields.description')}</Text>
+              <View style={[styles.textInputWrapperBox, styles.descriptionInputWrapperBox, { backgroundColor: theme.colors.surfaceSecondary }]}>
+                <TextInput
+                  placeholder={t('clothing.addGarment.fields.descriptionPlaceholder')}
+                  placeholderTextColor={theme.colors.textSecondary}
+                  style={[styles.formInputCore, { color: theme.colors.textPrimary }]}
+                  value={description}
+                  onChangeText={setDescription}
+                  editable={!isSaving}
+                  multiline
+                />
+              </View>
+
+              <Text style={[styles.fieldSectionLabel, { color: theme.colors.textSecondary }]}>{t('clothing.addGarment.fields.tags')}</Text>
+              <View style={[styles.textInputWrapperBox, { backgroundColor: theme.colors.surfaceSecondary }]}>
+                <TextInput
+                  placeholder={t('clothing.addGarment.fields.tagsPlaceholder')}
+                  placeholderTextColor={theme.colors.textSecondary}
+                  style={[styles.formInputCore, { color: theme.colors.textPrimary }]}
+                  value={tagsText}
+                  onChangeText={setTagsText}
+                  editable={!isSaving}
+                />
+              </View>
+            </>
+          )}
+
           {/* Action Callout */}
           <PremiumTouchable
             onPress={handleFormSubmission}
-            style={[styles.saveExecutionButton, isSaving && styles.saveExecutionDisabled]}
+            style={[
+              styles.saveExecutionButton,
+              { backgroundColor: theme.colors.accent, shadowColor: theme.colors.shadow },
+              isSaving && styles.saveExecutionDisabled
+            ]}
             disabled={isSaving}
           >
             {isSaving ? (
-              <ActivityIndicator size="small" color="#FAFAF9" />
+              <ActivityIndicator size="small" color={theme.colors.accentForeground} />
             ) : (
-              <Text style={styles.saveExecutionText}>Save to Wardrobe</Text>
+              <Text style={[styles.saveExecutionText, { color: theme.colors.accentForeground }]}>{t('clothing.addGarment.saveButton')}</Text>
             )}
           </PremiumTouchable>
         </ScrollView>
@@ -446,16 +659,17 @@ export default function AddGarmentScreen() {
         statusBarTranslucent
         onRequestClose={() => setIsPickerVisible(false)}
       >
+        {/* Backdrop scrim stays fixed regardless of theme, matching PremiumModal's convention */}
         <View style={styles.modalBackdropOverlay}>
           <SafeAreaView style={styles.modalSafeBoundary} edges={['bottom']}>
-            <View style={styles.bottomSheetFrame}>
-              <View style={styles.bottomSheetDraggerBar} />
-              
+            <View style={[styles.bottomSheetFrame, { backgroundColor: theme.colors.surfaceElevated, shadowColor: theme.colors.shadow }]}>
+              <View style={[styles.bottomSheetDraggerBar, { backgroundColor: theme.colors.border }]} />
+
               {/* HEADER VIEW: Fixed Top */}
               <View style={styles.modalHeaderRow}>
-                <Text style={styles.modalHeadingTitle}>Custom Palette Curator</Text>
+                <Text style={[styles.modalHeadingTitle, { color: theme.colors.textPrimary }]}>{t('clothing.addGarment.colorPicker.title')}</Text>
                 <PremiumTouchable onPress={() => setIsPickerVisible(false)} style={styles.modalCloseTouchTarget}>
-                  <Feather name="x" size={20} color="#78716C" />
+                  <Feather name="x" size={20} color={theme.colors.textSecondary} />
                 </PremiumTouchable>
               </View>
 
@@ -466,18 +680,18 @@ export default function AddGarmentScreen() {
                 bounces={false}
               >
                 {/* Real-time Tonal Preview */}
-                <View style={styles.livePreviewContainer}>
-                  <View style={[styles.livePreviewColorBlock, { backgroundColor: computedTempColor }]} />
+                <View style={[styles.livePreviewContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+                  <View style={[styles.livePreviewColorBlock, { backgroundColor: computedTempColor, borderColor: theme.colors.border }]} />
                   <View style={styles.livePreviewMetaBlock}>
-                    <Text style={styles.livePreviewLabel}>HEX Parameter Code</Text>
-                    <Text style={styles.livePreviewHexValue}>{computedTempColor}</Text>
+                    <Text style={[styles.livePreviewLabel, { color: theme.colors.textSecondary }]}>{t('clothing.addGarment.colorPicker.hexLabel')}</Text>
+                    <Text style={[styles.livePreviewHexValue, { color: theme.colors.textPrimary }]}>{computedTempColor}</Text>
                   </View>
                 </View>
 
-                {/* 2D Brightness and Saturation Gradient Canvas Grid */}
-                <Text style={styles.pickerSectionLabel}>Saturation & Brightness</Text>
-                <View 
-                  style={styles.canvasContainerFrame}
+                {/* 2D Brightness and Saturation Gradient Canvas Grid — picker chrome, colors are HSV-driven not theme-driven */}
+                <Text style={[styles.pickerSectionLabel, { color: theme.colors.textSecondary }]}>{t('clothing.addGarment.colorPicker.saturationBrightness')}</Text>
+                <View
+                  style={[styles.canvasContainerFrame, { backgroundColor: theme.colors.border }]}
                   onLayout={(e) => { containerWidthRef.current = e.nativeEvent.layout.width; }}
                   {...saturationSaturationPanelResponder.panHandlers}
                 >
@@ -496,21 +710,21 @@ export default function AddGarmentScreen() {
                   </LinearGradient>
 
                   {/* Canvas Selection Thumb Cursor */}
-                  <View 
+                  <View
                     style={[
-                      styles.canvasThumbCursor, 
+                      styles.canvasThumbCursor,
                       {
                         left: saturation * containerWidthRef.current - 9,
                         top: (1 - brightness) * 160 - 9,
                         backgroundColor: computedTempColor
                       }
-                    ]} 
+                    ]}
                   />
                 </View>
 
                 {/* Pure Linear Hue Gradient Slider Track */}
-                <Text style={styles.pickerSectionLabel}>Hue Spectrum</Text>
-                <View 
+                <Text style={[styles.pickerSectionLabel, { color: theme.colors.textSecondary }]}>{t('clothing.addGarment.colorPicker.hueSpectrum')}</Text>
+                <View
                   style={styles.sliderTrackFrame}
                   {...hueTrackResponder.panHandlers}
                 >
@@ -521,32 +735,32 @@ export default function AddGarmentScreen() {
                     style={styles.sliderGradientFill}
                   />
                   {/* Linear Track Selection Thumb Indicator */}
-                  <View 
+                  <View
                     style={[
-                      styles.sliderThumbCursor, 
+                      styles.sliderThumbCursor,
                       {
                         left: (hue / 360) * containerWidthRef.current - 10,
                         backgroundColor: hsvToHex(hue, 1, 1)
                       }
-                    ]} 
+                    ]}
                   />
                 </View>
               </ScrollView>
 
               {/* FOOTER VIEW: Fixed Bottom */}
-              <View style={styles.modalActionButtonsRow}>
-                <Pressable 
-                  onPress={() => setIsPickerVisible(false)} 
-                  style={styles.modalSecondaryButton}
+              <View style={[styles.modalActionButtonsRow, { borderColor: theme.colors.border }]}>
+                <Pressable
+                  onPress={() => setIsPickerVisible(false)}
+                  style={[styles.modalSecondaryButton, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}
                 >
-                  <Text style={styles.modalSecondaryButtonText}>Cancel</Text>
+                  <Text style={[styles.modalSecondaryButtonText, { color: theme.colors.textSecondary }]}>{t('common.cancel')}</Text>
                 </Pressable>
-                
-                <Pressable 
-                  onPress={handleCustomColorConfirmation} 
-                  style={styles.modalPrimaryButton}
+
+                <Pressable
+                  onPress={handleCustomColorConfirmation}
+                  style={[styles.modalPrimaryButton, { backgroundColor: theme.colors.accent }]}
                 >
-                  <Text style={styles.modalPrimaryButtonText}>Apply Color</Text>
+                  <Text style={[styles.modalPrimaryButtonText, { color: theme.colors.accentForeground }]}>{t('clothing.addGarment.colorPicker.applyColor')}</Text>
                 </Pressable>
               </View>
             </View>
@@ -563,76 +777,81 @@ const styles = StyleSheet.create({
   backTouchTarget: { padding: 8, marginLeft: -8, marginRight: 8 },
   headerTitleSpacing: { flex: 1, paddingVertical: 0 },
   scrollBodyContainer: { paddingHorizontal: 16, paddingBottom: 40 },
-  fieldSectionLabel: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', color: '#78716C', letterSpacing: 1, marginTop: 20, marginBottom: 8 },
-  mediaContainerBox: { width: '100%', height: 200, backgroundColor: '#F5F5F4', borderRadius: 16, borderStyle: 'dashed', borderWidth: 1, borderColor: '#E7E5E4', overflow: 'hidden' },
+  fieldSectionLabel: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1, marginTop: 20, marginBottom: 8 },
+  mediaContainerBox: { width: '100%', height: 200, borderRadius: 16, borderStyle: 'dashed', borderWidth: 1, overflow: 'hidden' },
   emptyMediaTriggerFrame: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around' },
   mediaContextButton: { flex: 1, height: '100%', justifyContent: 'center', alignItems: 'center', gap: 6 },
-  mediaContextText: { fontSize: 13, fontWeight: '500', color: '#1C1917' },
-  mediaSplitDivider: { width: 1, height: '40%', backgroundColor: '#E7E5E4' },
+  mediaContextText: { fontSize: 13, fontWeight: '500' },
+  mediaSplitDivider: { width: 1, height: '40%' },
   previewContainer: { flex: 1, position: 'relative' },
   previewImageRender: { width: '100%', height: '100%', resizeMode: 'cover' },
   clearMediaIndicator: { position: 'absolute', top: 12, right: 12, backgroundColor: 'rgba(28, 25, 23, 0.75)', width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
-  textInputWrapperBox: { backgroundColor: '#F5F5F4', borderRadius: 12, height: 48, paddingHorizontal: 14, justifyContent: 'center' },
-  formInputCore: { fontSize: 14, color: '#1C1917' },
+  textInputWrapperBox: { borderRadius: 12, height: 48, paddingHorizontal: 14, justifyContent: 'center' },
+  descriptionInputWrapperBox: { height: 72, paddingVertical: 12 },
+  formInputCore: { fontSize: 14 },
+  aiAnalyzeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    marginTop: 12,
+  },
+  aiAnalyzeButtonText: { fontSize: 13, fontWeight: '600' },
   chipsContainerRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   categoricalChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
-  chipSelected: { backgroundColor: '#1C1917', borderColor: '#1C1917' },
-  chipUnselected: { backgroundColor: 'transparent', borderColor: '#E7E5E4' },
   chipTextLabel: { fontSize: 13, fontWeight: '500' },
-  chipTextSelected: { color: '#FAFAF9' },
-  chipTextUnselected: { color: '#1C1917' },
   swatchPaletteRow: { flexDirection: 'row', gap: 12, flexWrap: 'wrap', paddingVertical: 4 },
-  swatchCircleCircle: { width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center', shadowColor: '#000000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1, marginBottom: 4 },
-  whiteSwatchBorderOverride: { borderWidth: 1, borderColor: '#E7E5E4' },
-  swatchCircleActiveOutline: { borderWidth: 2, borderColor: '#1C1917', scaleX: 1.05, scaleY: 1.05 },
-  saveExecutionButton: { backgroundColor: '#1C1917', height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginTop: 32, shadowColor: '#1C1917', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 3 },
+  swatchCircleCircle: { width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1, marginBottom: 4 },
+  saveExecutionButton: { height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginTop: 32, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 3 },
   saveExecutionDisabled: { opacity: 0.7 },
-  saveExecutionText: { color: '#FAFAF9', fontSize: 15, fontWeight: '600' },
+  saveExecutionText: { fontSize: 15, fontWeight: '600' },
   blendIconShadow: { textShadowColor: 'rgba(0, 0, 0, 0.2)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 1 },
 
   // Standard-Compliant Modular Bottom Sheet Specifications
   modalBackdropOverlay: { flex: 1, backgroundColor: 'rgba(28, 25, 23, 0.4)', justifyContent: 'flex-end' },
   modalSafeBoundary: { width: '100%' },
-  bottomSheetFrame: { 
-    backgroundColor: '#FAFAF9', 
-    borderTopLeftRadius: 24, 
-    borderTopRightRadius: 24, 
-    paddingHorizontal: 24, 
+  bottomSheetFrame: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 24,
     paddingTop: 12,
     paddingBottom: 16,
-    maxHeight: SCREEN_HEIGHT * 0.82, 
-    shadowColor: '#1C1917', 
-    shadowOffset: { width: 0, height: -4 }, 
-    shadowOpacity: 0.08, 
-    shadowRadius: 12, 
-    elevation: 8 
+    maxHeight: SCREEN_HEIGHT * 0.82,
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 8
   },
-  bottomSheetDraggerBar: { width: 36, height: 4, backgroundColor: '#E7E5E4', borderRadius: 2, alignSelf: 'center', marginBottom: 14 },
+  bottomSheetDraggerBar: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 14 },
   modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 12 },
-  modalHeadingTitle: { fontSize: 16, fontWeight: '600', color: '#1C1917', letterSpacing: -0.2 },
+  modalHeadingTitle: { fontSize: 16, fontWeight: '600', letterSpacing: -0.2 },
   modalCloseTouchTarget: { padding: 4 },
-  
+
   modalScrollBody: { paddingVertical: 2 },
-  pickerSectionLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', color: '#78716C', letterSpacing: 0.5, marginBottom: 8 },
-  
-  livePreviewContainer: { flexDirection: 'row', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E7E5E4', borderRadius: 12, padding: 12, alignItems: 'center', marginBottom: 14 },
-  livePreviewColorBlock: { width: 40, height: 40, borderRadius: 8, borderWidth: 1, borderColor: '#E7E5E4' },
+  pickerSectionLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
+
+  livePreviewContainer: { flexDirection: 'row', borderWidth: 1, borderRadius: 12, padding: 12, alignItems: 'center', marginBottom: 14 },
+  livePreviewColorBlock: { width: 40, height: 40, borderRadius: 8, borderWidth: 1 },
   livePreviewMetaBlock: { marginLeft: 12, flex: 1 },
-  livePreviewLabel: { fontSize: 10, fontWeight: '600', color: '#78716C', textTransform: 'uppercase', letterSpacing: 0.5 },
-  livePreviewHexValue: { fontSize: 14, fontWeight: '700', color: '#1C1917', marginTop: 2, fontFamily: 'monospace' },
-  
+  livePreviewLabel: { fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+  livePreviewHexValue: { fontSize: 14, fontWeight: '700', marginTop: 2, fontFamily: 'monospace' },
+
   // Custom Gradient Canvas Grid Layouts
-  canvasContainerFrame: { width: '100%', height: 160, borderRadius: 12, overflow: 'hidden', marginBottom: 16, backgroundColor: '#E7E5E4' },
+  canvasContainerFrame: { width: '100%', height: 160, borderRadius: 12, overflow: 'hidden', marginBottom: 16 },
   canvasThumbCursor: { position: 'absolute', width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: '#FAFAF9', shadowColor: '#000000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 2, elevation: 3 },
-  
-  // Custom Slider Controls 
+
+  // Custom Slider Controls
   sliderTrackFrame: { width: '100%', height: 14, marginBottom: 20, justifyContent: 'center' },
   sliderGradientFill: { width: '100%', height: '100%', borderRadius: 7 },
   sliderThumbCursor: { position: 'absolute', width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: '#FAFAF9', shadowColor: '#000000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 2, elevation: 3 },
-  
-  modalActionButtonsRow: { flexDirection: 'row', gap: 12, paddingTop: 14, borderTopWidth: 1, borderColor: '#E7E5E4', marginTop: 4 },
-  modalSecondaryButton: { flex: 1, height: 48, borderRadius: 12, borderWidth: 1, borderColor: '#E7E5E4', justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' },
-  modalSecondaryButtonText: { color: '#78716C', fontSize: 14, fontWeight: '600' },
-  modalPrimaryButton: { flex: 1, height: 48, borderRadius: 12, backgroundColor: '#1C1917', justifyContent: 'center', alignItems: 'center' },
-  modalPrimaryButtonText: { color: '#FAFAF9', fontSize: 14, fontWeight: '600' },
+
+  modalActionButtonsRow: { flexDirection: 'row', gap: 12, paddingTop: 14, borderTopWidth: 1, marginTop: 4 },
+  modalSecondaryButton: { flex: 1, height: 48, borderRadius: 12, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
+  modalSecondaryButtonText: { fontSize: 14, fontWeight: '600' },
+  modalPrimaryButton: { flex: 1, height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  modalPrimaryButtonText: { fontSize: 14, fontWeight: '600' },
 });

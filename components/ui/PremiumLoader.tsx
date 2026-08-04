@@ -110,13 +110,13 @@ export const PremiumLoader: React.FC<PremiumLoaderProps> = ({
           style={[
             styles.indicatorTrack,
             {
-              backgroundColor: theme.colors.primary,
+              backgroundColor: theme.colors.accent,
               opacity: trackOpacity,
               transform: [
                 { scaleX: trackScaleX },
                 { scaleY: trackScaleY }
               ],
-              shadowColor: theme.colors.primary,
+              shadowColor: theme.colors.accent,
               shadowOffset: { width: 0, height: 0 },
               shadowOpacity: 0.5,
               shadowRadius: 4,
@@ -139,7 +139,7 @@ export const PremiumLoader: React.FC<PremiumLoaderProps> = ({
           style={[
             styles.editorialLabel,
             {
-              color: theme.colors.text,
+              color: theme.colors.textPrimary,
               marginTop: 16,
               transform: [{ translateY: labelTranslateY }],
             },

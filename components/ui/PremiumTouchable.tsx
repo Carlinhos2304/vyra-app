@@ -1,5 +1,5 @@
 import React from 'react';
-import { Animated, Pressable, StyleSheet, StyleProp, ViewStyle } from 'react-native';
+import { Animated, Pressable, StyleSheet, StyleProp, ViewStyle, Insets } from 'react-native';
 import { usePremiumPress } from '../../hooks/animation/usePremiumPress';
 
 interface PremiumTouchableProps {
@@ -8,6 +8,7 @@ interface PremiumTouchableProps {
   style?: StyleProp<ViewStyle>;
   disabled?: boolean;
   activeOpacity?: number; // Maintained for API compatibility with legacy touches
+  hitSlop?: Insets | number;
 }
 
 export const PremiumTouchable: React.FC<PremiumTouchableProps> = ({
@@ -15,22 +16,25 @@ export const PremiumTouchable: React.FC<PremiumTouchableProps> = ({
   onPress,
   style,
   disabled = false,
+  hitSlop,
 }) => {
   const { pressProps, animatedStyle } = usePremiumPress();
 
   return (
-    <Pressable 
-      onPress={onPress} 
+    <Pressable
+      onPress={onPress}
+      onPressIn={!disabled ? pressProps.onPressIn : undefined}
+      onPressOut={!disabled ? pressProps.onPressOut : undefined}
       disabled={disabled}
+      hitSlop={hitSlop}
       style={styles.pressableReset}
     >
-      <Animated.View 
+      <Animated.View
         style={[
-          style, 
+          style,
           !disabled && animatedStyle,
-          disabled && styles.disabledOpacity
+          disabled && styles.disabledOpacity,
         ]}
-        {...(!disabled ? pressProps : {})}
       >
         {children}
       </Animated.View>

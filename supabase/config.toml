@@ -1,0 +1,18 @@
+# Minimal Supabase CLI config for Vyra.
+# If you already ran `supabase init` / `supabase link` before, merge this
+# `[functions.analyze-garment]` section into your existing config.toml instead
+# of overwriting it — don't lose your existing `project_id`.
+
+project_id = "nscpuxrsdqjclelhhzts"
+
+[functions.analyze-garment]
+# Supabase verifies the caller's JWT before invoking the function. The
+# function ALSO checks auth itself (defense in depth), but this must stay
+# true so unauthenticated requests are rejected at the platform level too.
+verify_jwt = true
+
+[functions.generate-outfit]
+verify_jwt = true
+
+[functions.daily-suggestion]
+verify_jwt = true

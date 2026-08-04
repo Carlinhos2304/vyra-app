@@ -11,10 +11,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import VyraLogo from '../components/branding/VyraLogo';
 import { PremiumLoader } from '../components/ui/PremiumLoader'; // Adjust path based on your exact file architecture
+import { useLanguage } from '../i18n';
 
 const { height } = Dimensions.get('window');
 
 export default function SplashScreen() {
+  const { t } = useLanguage();
   // Shared structural values for perfectly unified timing transitions
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.96)).current;
@@ -76,12 +78,12 @@ export default function SplashScreen() {
         <View style={styles.textContainer}>
           <Text style={styles.brandTitleText}>VYRA</Text>
           <View style={styles.separatorDot} />
-          <Text style={styles.brandSubtitleText}>DIGITAL WARDROBE</Text>
+          <Text style={styles.brandSubtitleText}>{t('auth.splash.tagline')}</Text>
         </View>
 
         {/* Reusable Premium Loader integrated seamlessly into the layout layout block */}
         <View style={styles.loaderWrapper}>
-          <PremiumLoader label="PREPARING EXPERIENCE" />
+          <PremiumLoader label={t('auth.splash.loadingLabel')} />
         </View>
       </Animated.View>
 

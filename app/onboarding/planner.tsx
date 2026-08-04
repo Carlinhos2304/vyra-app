@@ -4,6 +4,8 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
+import { useTheme } from '../../theme';
+import { useLanguage } from '../../i18n';
 
 // React Native Reanimated 3
 import Animated, {
@@ -24,7 +26,9 @@ const PREMIUM_SPRING = {
 };
 
 export default function PlannerScreen() {
+  const { theme } = useTheme();
   const router = useRouter();
+  const { t } = useLanguage();
 
   // Animation Shared Values
   const canvasOpacity = useSharedValue(0);
@@ -101,24 +105,24 @@ export default function PlannerScreen() {
 
   return (
     <PremiumScreen>
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
         {/* Illustration Canvas Grid */}
         <View style={styles.illustrationFrame}>
-          <Animated.View style={[styles.abstractCanvasGraphic, animatedCanvasStyle]}>
-            <MaterialCommunityIcons name="calendar-blank-outline" size={64} color="#1C1917" />
-            <Animated.View style={[styles.accentOrnamentLine, animatedOrnamentStyle]} />
+          <Animated.View style={[styles.abstractCanvasGraphic, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }, animatedCanvasStyle]}>
+            <MaterialCommunityIcons name="calendar-blank-outline" size={64} color={theme.colors.textPrimary} />
+            <Animated.View style={[styles.accentOrnamentLine, { backgroundColor: theme.colors.textPrimary }, animatedOrnamentStyle]} />
           </Animated.View>
         </View>
 
         {/* Messaging Text block */}
         <View style={styles.textContainer}>
           <Animated.View style={animatedTitleStyle}>
-            <Text style={styles.editorialTitleText}>Plan what to wear</Text>
+            <Text style={[styles.editorialTitleText, { color: theme.colors.textPrimary }]}>{t('onboarding.planner.title')}</Text>
           </Animated.View>
-          
+
           <Animated.View style={animatedSubtitleStyle}>
-            <Text style={styles.editorialSubtitleText}>
-              Schedule outfits directly from your calendar.
+            <Text style={[styles.editorialSubtitleText, { color: theme.colors.textSecondary }]}>
+              {t('onboarding.planner.subtitle')}
             </Text>
           </Animated.View>
         </View>
@@ -129,9 +133,9 @@ export default function PlannerScreen() {
             onPressIn={handlePressIn}
             onPressOut={handlePressOut}
             onPress={() => router.push('/onboarding/ai-preview')}
-            style={styles.primaryPremiumButton}
+            style={[styles.primaryPremiumButton, { backgroundColor: theme.colors.accent }]}
           >
-            <Text style={styles.primaryButtonText}>Continue</Text>
+            <Text style={[styles.primaryButtonText, { color: theme.colors.accentForeground }]}>{t('common.continue')}</Text>
           </Pressable>
         </Animated.View>
       </SafeAreaView>
@@ -142,7 +146,6 @@ export default function PlannerScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAFAF9',
     justifyContent: 'space-between',
     paddingHorizontal: 24,
   },
@@ -155,12 +158,9 @@ const styles = StyleSheet.create({
     width: width * 0.5,
     aspectRatio: 1,
     borderRadius: 32,
-    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E7E5E4',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.02,
     shadowRadius: 8,
@@ -172,7 +172,6 @@ const styles = StyleSheet.create({
     bottom: 24,
     width: 32,
     height: 2,
-    backgroundColor: '#1C1917',
   },
   textContainer: {
     paddingHorizontal: 12,
@@ -181,14 +180,12 @@ const styles = StyleSheet.create({
   editorialTitleText: {
     fontSize: 28,
     fontWeight: '300',
-    color: '#1C1917',
     letterSpacing: -0.5,
     textAlign: 'center',
     marginBottom: 12,
   },
   editorialSubtitleText: {
     fontSize: 14,
-    color: '#78716C',
     textAlign: 'center',
     lineHeight: 20,
     paddingHorizontal: 16,
@@ -200,13 +197,11 @@ const styles = StyleSheet.create({
   primaryPremiumButton: {
     width: '100%',
     height: 54,
-    backgroundColor: '#1C1917',
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
   primaryButtonText: {
-    color: '#FAFAF9',
     fontSize: 14,
     fontWeight: '600',
     textTransform: 'uppercase',

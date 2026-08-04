@@ -20,6 +20,8 @@ import { SectionTitle } from '../../components/ui/SectionTitle';
 
 // Supabase client instance integration
 import { supabase } from '../../lib/supabase';
+import { useTheme } from '../../theme';
+import { useLanguage } from '../../i18n';
 
 const { width } = Dimensions.get('window');
 const HERO_IMAGE_HEIGHT = width * 1.35; // Elongated 3:4 portrait crop for editorial weight
@@ -43,8 +45,15 @@ interface OutfitDetail {
 }
 
 export default function OutfitDetailScreen() {
+  const { theme } = useTheme();
+  const { t } = useLanguage();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+
+  // Soft-tinted destructive surface — computed locally since it's a one-off composite
+  // pattern (not a shared semantic token), matching the approach used on create.tsx's banners.
+  const dangerSoftBg = theme.dark ? 'rgba(248, 113, 113, 0.12)' : 'rgba(239, 68, 68, 0.06)';
+  const dangerSoftBorder = theme.dark ? 'rgba(248, 113, 113, 0.3)' : 'rgba(239, 68, 68, 0.15)';
 
   const [outfit, setOutfit] = useState<OutfitDetail | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -98,11 +107,10 @@ export default function OutfitDetailScreen() {
   // Secure Relational Core Single Query Fetch Engine
   const fetchOutfitExtendedDetails = async () => {
     if (!id) return;
-    
+
     try {
       setIsLoading(true);
       setError(null);
-      console.log(`[Outfit Detail Pipeline] Fetching extended graph mapping for Outfit UUID: ${id}`);
 
       // Single-trip execution pulling parent attributes combined with child table inner rows
       const { data, error: queryErr } = await supabase
@@ -126,7 +134,6 @@ export default function OutfitDetailScreen() {
         .single();
 
       if (queryErr) {
-        console.error('[Outfit Detail Error] Supabase execution collapsed:', queryErr);
         throw queryErr;
       }
 
@@ -157,7 +164,7 @@ export default function OutfitDetailScreen() {
       runEntranceAnimation();
     } catch (err: any) {
       console.error('[Outfit Detail Error Exception]:', err);
-      setError(err.message || 'An unhandled exception blocked outfit sync parsing profiles.');
+      setError(err.message || t('outfitAi.detail.fetchErrorMessage'));
     } finally {
       setIsLoading(false);
     }
@@ -177,40 +184,37 @@ export default function OutfitDetailScreen() {
     );
   }, [outfit?.garments]);
 
-  console.log('[Outfit Detail Debug] Pipeline parsed data successfully:', {
-    name: outfit?.name || 'Empty',
-    itemsCount: uniqueGarments.length,
-  });
-
   // Business Logic Interaction Methods
   const handleShareLookbookOutfit = async () => {
     if (!outfit) return;
     try {
-      console.log('[Outfit Action] Spawning device default system share layer sheets...');
-      const summaryText = `Check out my look "${outfit.name}" on Vyra. A curated mix of ${uniqueGarments.length} wardrobe pieces tailored for ${outfit.occasion || 'any setting'}.`;
+      const summaryText = t('outfitAi.detail.shareText', {
+        name: outfit.name,
+        count: uniqueGarments.length,
+        occasion: outfit.occasion || t('outfitAi.detail.anySetting'),
+      });
       await Share.share({ message: summaryText });
     } catch (err) {
-      console.error('[Outfit Share Error Alert]', err);
+      console.error('[Outfit Share Error]', err);
     }
   };
 
   const handleDeleteOutfitConfirmation = () => {
     if (!outfit) return;
-    
+
     Alert.alert(
-      'Deconstruct Outfit',
-      'Are you sure you want to permanently delete this lookbook combination? This won\'t remove your individual garments.',
+      t('outfitAi.detail.deleteConfirmTitle'),
+      t('outfitAi.detail.deleteConfirmMessage'),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
               setIsDeleting(true);
-              console.log(`[Outfit Delete Workflow] Purging records attached to ID: ${outfit.id}`);
-              
-              // Cascade Execution Step A: Erase junction entries linked to the Lookbook identity 
+
+              // Cascade Execution Step A: Erase junction entries linked to the Lookbook identity
               const { error: cascadeError } = await supabase
                 .from('outfit_items')
                 .delete()
@@ -218,25 +222,23 @@ export default function OutfitDetailScreen() {
                 .select(); // Added .select() to ensure execution block commits
 
               if (cascadeError) {
-                console.error('[Outfit Delete Failure] Error generated running Cascade Row Purge:', cascadeError);
                 throw cascadeError;
               }
 
-              // Cascade Execution Step B: Clear parent identity footprint completely 
+              // Cascade Execution Step B: Clear parent identity footprint completely
               const { error: deleteError } = await supabase
                 .from('outfits')
                 .delete()
                 .eq('id', outfit.id);
 
               if (deleteError) {
-                console.error('[Outfit Delete Failure] Error generated wiping Parent Table Node:', deleteError);
                 throw deleteError;
               }
 
-              console.log('[Outfit Delete Workflow] Successfully wiped record elements across nodes.');
               router.replace('/closet');
             } catch (err: any) {
-              Alert.alert('Delete Failed', err.message || 'An operational error dropped execution tasks.');
+              console.error('[Outfit Delete Failure]:', err);
+              Alert.alert(t('outfitAi.detail.deleteFailedTitle'), err.message || t('outfitAi.detail.deleteFailedMessage'));
             } finally {
               setIsDeleting(false);
             }
@@ -249,9 +251,9 @@ export default function OutfitDetailScreen() {
   if (isLoading) {
     return (
       <PremiumScreen>
-        <View style={styles.centeredStateShell}>
-          <ActivityIndicator size="small" color="#1C1917" />
-          <Text style={styles.stateSubtitleTypography}>Retrieving Lookbook...</Text>
+        <View style={[styles.centeredStateShell, { backgroundColor: theme.colors.background }]}>
+          <ActivityIndicator size="small" color={theme.colors.textPrimary} />
+          <Text style={[styles.stateSubtitleTypography, { color: theme.colors.textSecondary }]}>{t('outfitAi.detail.loading')}</Text>
         </View>
       </PremiumScreen>
     );
@@ -260,14 +262,14 @@ export default function OutfitDetailScreen() {
   if (error || !outfit) {
     return (
       <PremiumScreen>
-        <View style={styles.centeredStateShell}>
-          <MaterialCommunityIcons name="comment-question-outline" size={28} color="#D62F2F" />
-          <Text style={styles.stateHeaderTitleTypography}>Lookbook Entry Unresolved</Text>
-          <Text style={styles.stateSubtitleTypography}>
-            {error || 'The requested look combination metadata record profile is missing.'}
+        <View style={[styles.centeredStateShell, { backgroundColor: theme.colors.background }]}>
+          <MaterialCommunityIcons name="comment-question-outline" size={28} color={theme.colors.danger} />
+          <Text style={[styles.stateHeaderTitleTypography, { color: theme.colors.textPrimary }]}>{t('outfitAi.detail.errorTitle')}</Text>
+          <Text style={[styles.stateSubtitleTypography, { color: theme.colors.textSecondary }]}>
+            {error || t('outfitAi.detail.errorFallbackMessage')}
           </Text>
-          <PremiumTouchable style={styles.fallbackNavigationAction} onPress={() => router.back()}>
-            <Text style={styles.fallbackActionText}>Return to Wardrobe</Text>
+          <PremiumTouchable style={[styles.fallbackNavigationAction, { backgroundColor: theme.colors.accent }]} onPress={() => router.back()}>
+            <Text style={[styles.fallbackActionText, { color: theme.colors.accentForeground }]}>{t('outfitAi.detail.returnToWardrobe')}</Text>
           </PremiumTouchable>
         </View>
       </PremiumScreen>
@@ -276,19 +278,19 @@ export default function OutfitDetailScreen() {
 
   const creationTimestampDate = outfit.created_at
     ? new Date(outfit.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
-    : 'Undated';
+    : t('outfitAi.detail.undated');
 
   return (
     <PremiumScreen>
-      {/* Floating Glass Header Buttons */}
+      {/* Floating Glass Header Buttons — sits on top of the hero photo, kept fixed regardless of theme (photo-context) */}
       <View style={styles.floatingHeaderActionBar}>
-        <Pressable 
+        <Pressable
           onPress={() => router.back()}
           style={({ pressed }) => [styles.roundBarIconButton, pressed && styles.opaqueScalePress]}
         >
           <Ionicons name="chevron-back" size={20} color="#1C1917" />
         </Pressable>
-        <Pressable 
+        <Pressable
           onPress={handleShareLookbookOutfit}
           style={({ pressed }) => [styles.roundBarIconButton, pressed && styles.opaqueScalePress]}
         >
@@ -297,19 +299,19 @@ export default function OutfitDetailScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollCanvasTrack} showsVerticalScrollIndicator={false}>
-        
+
         {/* Magazine Cover Hero Banner */}
-        <Animated.View style={[styles.heroMagazineStage, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
+        <Animated.View style={[styles.heroMagazineStage, { backgroundColor: theme.colors.surfaceSecondary }, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
           {outfit.coverImage ? (
             <Image source={{ uri: outfit.coverImage }} style={styles.heroParallaxAssetImage} />
           ) : (
-            <View style={styles.heroPlaceholderGraphicBase}>
-              <MaterialCommunityIcons name="hanger" size={48} color="#A8A29E" />
-              <Text style={styles.heroPlaceholderLabelText}>No Silhouette Image Linked</Text>
+            <View style={[styles.heroPlaceholderGraphicBase, { backgroundColor: theme.colors.surfaceSecondary }]}>
+              <MaterialCommunityIcons name="hanger" size={48} color={theme.colors.textTertiary} />
+              <Text style={[styles.heroPlaceholderLabelText, { color: theme.colors.textSecondary }]}>{t('outfitAi.detail.noImageLinked')}</Text>
             </View>
           )}
-          
-          {/* Subtle multi-layer gradient cover overlay */}
+
+          {/* Subtle multi-layer gradient cover overlay — drawn over the photo, stays fixed (photo-context) */}
           <View style={styles.scrimOverlayShadow} />
           <View style={styles.heroLinearGradientScrimOverlay}>
             <View style={styles.heroMetaCardLabelRow}>
@@ -329,39 +331,39 @@ export default function OutfitDetailScreen() {
 
         {/* Dynamic Content Panel */}
         <Animated.View style={{ transform: [{ translateY: slideAnim }], opacity: fadeAnim }}>
-          
+
           {/* Architectural Summary Card */}
-          <View style={styles.magazineSummaryCard}>
+          <View style={[styles.magazineSummaryCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }]}>
             <View style={styles.summaryMetricItem}>
-              <Text style={styles.summaryMetricLabel}>PIECES</Text>
-              <Text style={styles.summaryMetricValue}>{uniqueGarments.length}</Text>
+              <Text style={[styles.summaryMetricLabel, { color: theme.colors.textTertiary }]}>{t('outfitAi.detail.piecesLabel')}</Text>
+              <Text style={[styles.summaryMetricValue, { color: theme.colors.textPrimary }]}>{uniqueGarments.length}</Text>
             </View>
-            <View style={styles.summaryVerticalDivider} />
+            <View style={[styles.summaryVerticalDivider, { backgroundColor: theme.colors.divider }]} />
             <View style={styles.summaryMetricItem}>
-              <Text style={styles.summaryMetricLabel}>OCCASION</Text>
-              <Text style={styles.summaryMetricValue} numberOfLines={1}>
-                {outfit.occasion ? outfit.occasion : 'Any Setting'}
+              <Text style={[styles.summaryMetricLabel, { color: theme.colors.textTertiary }]}>{t('outfitAi.detail.occasionLabel')}</Text>
+              <Text style={[styles.summaryMetricValue, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                {outfit.occasion ? outfit.occasion : t('outfitAi.detail.anySettingCaps')}
               </Text>
             </View>
-            <View style={styles.summaryVerticalDivider} />
+            <View style={[styles.summaryVerticalDivider, { backgroundColor: theme.colors.divider }]} />
             <View style={styles.summaryMetricItem}>
-              <Text style={styles.summaryMetricLabel}>CURATED</Text>
-              <Text style={styles.summaryMetricValue}>{creationTimestampDate}</Text>
+              <Text style={[styles.summaryMetricLabel, { color: theme.colors.textTertiary }]}>{t('outfitAi.detail.curatedLabel')}</Text>
+              <Text style={[styles.summaryMetricValue, { color: theme.colors.textPrimary }]}>{creationTimestampDate}</Text>
             </View>
           </View>
 
           {/* Pinterest-style horizontal Garments Carousel */}
           <View style={styles.architecturalContentSection}>
             <View style={styles.inlineHeaderTitleSection}>
-              <SectionTitle>Garments Included</SectionTitle>
-              <View style={styles.countBadgeNode}>
-                <Text style={styles.countBadgeText}>{uniqueGarments.length}</Text>
+              <SectionTitle>{t('outfitAi.detail.garmentsIncludedTitle')}</SectionTitle>
+              <View style={[styles.countBadgeNode, { backgroundColor: theme.colors.accent }]}>
+                <Text style={[styles.countBadgeText, { color: theme.colors.accentForeground }]}>{uniqueGarments.length}</Text>
               </View>
             </View>
 
             {uniqueGarments.length === 0 ? (
-              <View style={styles.emptyItemsTrackPlaceholderBox}>
-                <Text style={styles.emptyTrackTypography}>No garments linked to this composition canvas yet.</Text>
+              <View style={[styles.emptyItemsTrackPlaceholderBox, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+                <Text style={[styles.emptyTrackTypography, { color: theme.colors.textSecondary }]}>{t('outfitAi.detail.noGarmentsLinked')}</Text>
               </View>
             ) : (
               <ScrollView
@@ -376,6 +378,7 @@ export default function OutfitDetailScreen() {
                     key={`garment-card-${garment.id}-${index}`}
                     style={({ pressed }) => [
                       styles.garmentMagazineCardElement,
+                      { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, shadowColor: theme.colors.shadow },
                       pressed && styles.cardInteractivePress
                     ]}
                     onPress={() => router.push({
@@ -383,23 +386,23 @@ export default function OutfitDetailScreen() {
                       params: { id: garment.id }
                     })}
                   >
-                    <View style={styles.garmentImageContainerBoundingBox}>
+                    <View style={[styles.garmentImageContainerBoundingBox, { backgroundColor: theme.colors.surfaceSecondary }]}>
                       {garment.image_url ? (
                         <Image source={{ uri: garment.image_url }} style={styles.garmentCardTargetImage} />
                       ) : (
                         <View style={styles.garmentFallbackAssetCenterFrame}>
-                          <MaterialCommunityIcons name="hanger" size={24} color="#D6D3D1" />
+                          <MaterialCommunityIcons name="hanger" size={24} color={theme.colors.textTertiary} />
                         </View>
                       )}
                     </View>
                     <View style={styles.garmentMetaFooterBlockText}>
-                      <Text style={styles.garmentLabelBrandHeader} numberOfLines={1}>
-                        {garment.brand ? garment.brand.toUpperCase() : 'ESSENTIAL'}
+                      <Text style={[styles.garmentLabelBrandHeader, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+                        {garment.brand ? garment.brand.toUpperCase() : t('outfitAi.detail.essentialFallback')}
                       </Text>
-                      <Text style={styles.garmentLabelNameSubscript} numberOfLines={1}>
+                      <Text style={[styles.garmentLabelNameSubscript, { color: theme.colors.textPrimary }]} numberOfLines={1}>
                         {garment.name}
                       </Text>
-                      <Text style={styles.garmentLabelCategoryTag} numberOfLines={1}>
+                      <Text style={[styles.garmentLabelCategoryTag, { color: theme.colors.textTertiary }]} numberOfLines={1}>
                         {garment.category}
                       </Text>
                     </View>
@@ -411,25 +414,25 @@ export default function OutfitDetailScreen() {
 
           {/* Wardrobe Metrics Grid */}
           <View style={styles.architecturalContentSection}>
-            <SectionTitle withBottomMargin>Composition Summary</SectionTitle>
+            <SectionTitle withBottomMargin>{t('outfitAi.detail.compositionSummaryTitle')}</SectionTitle>
             <View style={styles.metricsTwoColumnGrid}>
-              <View style={styles.metricGridCell}>
-                <Text style={styles.metricGridLabel}>PRIMARY OCCASION</Text>
-                <Text style={styles.metricGridValue} numberOfLines={1}>
-                  {outfit.occasion || 'Everyday'}
+              <View style={[styles.metricGridCell, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+                <Text style={[styles.metricGridLabel, { color: theme.colors.textTertiary }]}>{t('outfitAi.detail.primaryOccasionLabel')}</Text>
+                <Text style={[styles.metricGridValue, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                  {outfit.occasion || t('outfitAi.detail.everydayFallback')}
                 </Text>
               </View>
-              <View style={styles.metricGridCell}>
-                <Text style={styles.metricGridLabel}>TOTAL COMPONENTS</Text>
-                <Text style={styles.metricGridValue}>
-                  {uniqueGarments.length} {uniqueGarments.length === 1 ? 'Garment' : 'Garments'}
+              <View style={[styles.metricGridCell, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+                <Text style={[styles.metricGridLabel, { color: theme.colors.textTertiary }]}>{t('outfitAi.detail.totalComponentsLabel')}</Text>
+                <Text style={[styles.metricGridValue, { color: theme.colors.textPrimary }]}>
+                  {uniqueGarments.length} {uniqueGarments.length === 1 ? t('outfitAi.detail.garmentSingular') : t('outfitAi.detail.garmentPlural')}
                 </Text>
               </View>
             </View>
           </View>
 
           {/* Minimalist Separator */}
-          <View style={styles.minimalistSectionDivider} />
+          <View style={[styles.minimalistSectionDivider, { backgroundColor: theme.colors.divider }]} />
 
           {/* Action Operations Controller Container */}
           <View style={[styles.architecturalContentSection, styles.extraBottomOffset]}>
@@ -438,13 +441,13 @@ export default function OutfitDetailScreen() {
                 onPressIn={() => handlePressIn(editScale)}
                 onPressOut={() => handlePressOut(editScale)}
                 onPress={() => router.push({ pathname: '/create', params: { mode: 'edit', outfitId: outfit.id } })}
-                style={styles.actionCardPrimary}
+                style={[styles.actionCardPrimary, { backgroundColor: theme.colors.accent, shadowColor: theme.colors.shadow }]}
               >
                 <View style={styles.actionCardBody}>
-                  <Feather name="edit-3" size={16} color="#FFFFFF" />
-                  <Text style={styles.actionCardPrimaryText}>Edit Outfit Details</Text>
+                  <Feather name="edit-3" size={16} color={theme.colors.accentForeground} />
+                  <Text style={[styles.actionCardPrimaryText, { color: theme.colors.accentForeground }]}>{t('outfitAi.detail.editOutfitDetails')}</Text>
                 </View>
-                <Feather name="arrow-right" size={16} color="#FFFFFF" />
+                <Feather name="arrow-right" size={16} color={theme.colors.accentForeground} />
               </Pressable>
             </Animated.View>
 
@@ -453,13 +456,13 @@ export default function OutfitDetailScreen() {
                 onPressIn={() => handlePressIn(shareScale)}
                 onPressOut={() => handlePressOut(shareScale)}
                 onPress={handleShareLookbookOutfit}
-                style={styles.actionCardSecondary}
+                style={[styles.actionCardSecondary, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
               >
                 <View style={styles.actionCardBody}>
-                  <Feather name="share" size={15} color="#1C1917" />
-                  <Text style={styles.actionCardSecondaryText}>Share Composition</Text>
+                  <Feather name="share" size={15} color={theme.colors.textPrimary} />
+                  <Text style={[styles.actionCardSecondaryText, { color: theme.colors.textPrimary }]}>{t('outfitAi.detail.shareComposition')}</Text>
                 </View>
-                <Feather name="chevron-right" size={14} color="#78716C" />
+                <Feather name="chevron-right" size={14} color={theme.colors.textSecondary} />
               </Pressable>
             </Animated.View>
 
@@ -469,14 +472,14 @@ export default function OutfitDetailScreen() {
                 onPressIn={() => handlePressIn(deleteScale)}
                 onPressOut={() => handlePressOut(deleteScale)}
                 onPress={handleDeleteOutfitConfirmation}
-                style={styles.actionCardDestructive}
+                style={[styles.actionCardDestructive, { backgroundColor: dangerSoftBg, borderColor: dangerSoftBorder }]}
               >
                 {isDeleting ? (
-                  <ActivityIndicator size="small" color="#D62F2F" />
+                  <ActivityIndicator size="small" color={theme.colors.danger} />
                 ) : (
                   <View style={styles.destructiveRowWrapper}>
-                    <Feather name="trash-2" size={14} color="#D62F2F" />
-                    <Text style={styles.actionCardDestructiveText}>Delete Outfit from Closet</Text>
+                    <Feather name="trash-2" size={14} color={theme.colors.danger} />
+                    <Text style={[styles.actionCardDestructiveText, { color: theme.colors.danger }]}>{t('outfitAi.detail.deleteOutfitFromCloset')}</Text>
                   </View>
                 )}
               </Pressable>
@@ -498,19 +501,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 40,
-    backgroundColor: '#FAF9F6',
   },
   stateHeaderTitleTypography: {
     fontSize: 15,
     fontFamily: 'System',
     fontWeight: '600',
-    color: '#1C1917',
     marginTop: 20,
     letterSpacing: -0.2,
   },
   stateSubtitleTypography: {
     fontSize: 12,
-    color: '#78716C',
     textAlign: 'center',
     lineHeight: 18,
     marginTop: 6,
@@ -518,13 +518,11 @@ const styles = StyleSheet.create({
   },
   fallbackNavigationAction: {
     marginTop: 24,
-    backgroundColor: '#1C1917',
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 8,
   },
   fallbackActionText: {
-    color: '#FAFAF9',
     fontSize: 12,
     fontWeight: '600',
     letterSpacing: 0.2,
@@ -561,7 +559,6 @@ const styles = StyleSheet.create({
   heroMagazineStage: {
     width: width,
     height: HERO_IMAGE_HEIGHT,
-    backgroundColor: '#F5F5F4',
     position: 'relative',
     borderBottomLeftRadius: 36,
     borderBottomRightRadius: 36,
@@ -576,11 +573,9 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#EAE6E1',
   },
   heroPlaceholderLabelText: {
     fontSize: 11,
-    color: '#78716C',
     fontWeight: '600',
     marginTop: 12,
     letterSpacing: 0.5,
@@ -599,7 +594,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 36,
     // Emulates a smooth ambient shadow layer over image bottom
-    backgroundColor: 'rgba(0, 0, 0, 0.45)', 
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
   },
   heroMetaCardLabelRow: {
     alignItems: 'flex-start',
@@ -629,19 +624,16 @@ const styles = StyleSheet.create({
   magazineSummaryCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
     marginHorizontal: 16,
     marginTop: -24,
     borderRadius: 20,
     paddingVertical: 18,
     paddingHorizontal: 16,
-    shadowColor: '#1C1917',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.05,
     shadowRadius: 16,
     elevation: 4,
     borderWidth: 1,
-    borderColor: '#E7E5E4',
   },
   summaryMetricItem: {
     flex: 1,
@@ -650,20 +642,17 @@ const styles = StyleSheet.create({
   summaryMetricLabel: {
     fontSize: 8,
     fontWeight: '700',
-    color: '#A8A29E',
     letterSpacing: 1.2,
     marginBottom: 4,
   },
   summaryMetricValue: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#1C1917',
     letterSpacing: -0.2,
   },
   summaryVerticalDivider: {
     width: 1,
     height: '100%',
-    backgroundColor: '#F5F5F4',
   },
   architecturalContentSection: {
     marginTop: 36,
@@ -675,7 +664,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   countBadgeNode: {
-    backgroundColor: '#1C1917',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 10,
@@ -684,19 +672,15 @@ const styles = StyleSheet.create({
   countBadgeText: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#FAFAF9',
   },
   emptyItemsTrackPlaceholderBox: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 32,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#E7E5E4',
   },
   emptyTrackTypography: {
     fontSize: 12,
-    color: '#78716C',
     textAlign: 'center',
   },
   horizontalSwiperViewportSpacing: {
@@ -706,16 +690,13 @@ const styles = StyleSheet.create({
   },
   garmentMagazineCardElement: {
     width: GARMENT_CARD_WIDTH,
-    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     overflow: 'hidden',
-    shadowColor: '#1C1917',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.03,
     shadowRadius: 8,
     elevation: 2,
     borderWidth: 1,
-    borderColor: '#E7E5E4',
   },
   cardInteractivePress: {
     opacity: 0.95,
@@ -724,7 +705,6 @@ const styles = StyleSheet.create({
   garmentImageContainerBoundingBox: {
     width: '100%',
     height: GARMENT_CARD_WIDTH * 1.35, // 3:4 High-fashion asset proportion
-    backgroundColor: '#F5F5F4',
   },
   garmentCardTargetImage: {
     width: '100%',
@@ -743,20 +723,17 @@ const styles = StyleSheet.create({
   garmentLabelBrandHeader: {
     fontSize: 8,
     fontWeight: '700',
-    color: '#78716C',
     letterSpacing: 1,
     marginBottom: 3,
   },
   garmentLabelNameSubscript: {
     fontSize: 13,
-    color: '#1C1917',
     fontWeight: '500',
     letterSpacing: -0.2,
     marginBottom: 4,
   },
   garmentLabelCategoryTag: {
     fontSize: 10,
-    color: '#A8A29E',
     fontWeight: '500',
   },
   metricsTwoColumnGrid: {
@@ -765,27 +742,22 @@ const styles = StyleSheet.create({
   },
   metricGridCell: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E7E5E4',
     borderRadius: 16,
     padding: 16,
   },
   metricGridLabel: {
     fontSize: 8,
     fontWeight: '700',
-    color: '#A8A29E',
     letterSpacing: 1,
     marginBottom: 6,
   },
   metricGridValue: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#1C1917',
   },
   minimalistSectionDivider: {
     height: 1,
-    backgroundColor: '#E7E5E4',
     marginHorizontal: 16,
     marginTop: 36,
   },
@@ -796,17 +768,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#1C1917',
     borderRadius: 16,
     paddingVertical: 16,
     paddingHorizontal: 20,
-    shadowColor: '#1C1917',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 10,
   },
   actionCardPrimaryText: {
-    color: '#FAFAF9',
     fontSize: 13,
     fontWeight: '600',
     letterSpacing: 0.1,
@@ -815,15 +784,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E7E5E4',
     borderRadius: 16,
     paddingVertical: 16,
     paddingHorizontal: 20,
   },
   actionCardSecondaryText: {
-    color: '#1C1917',
     fontSize: 13,
     fontWeight: '500',
   },
@@ -835,11 +801,9 @@ const styles = StyleSheet.create({
   actionCardDestructive: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(239, 68, 68, 0.06)',
     borderRadius: 16,
     paddingVertical: 16,
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.15)',
   },
   destructiveRowWrapper: {
     flexDirection: 'row',
@@ -847,7 +811,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   actionCardDestructiveText: {
-    color: '#D62F2F',
     fontSize: 13,
     fontWeight: '600',
   },

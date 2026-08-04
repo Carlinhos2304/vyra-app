@@ -4,6 +4,8 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
+import { useTheme } from '../../theme';
+import { useLanguage } from '../../i18n';
 
 // React Native Reanimated 3
 import Animated, {
@@ -24,7 +26,9 @@ const PREMIUM_SPRING = {
 };
 
 export default function AiPreviewScreen() {
+  const { theme } = useTheme();
   const router = useRouter();
+  const { t } = useLanguage();
 
   // Animation Shared Values
   const canvasOpacity = useSharedValue(0);
@@ -105,14 +109,14 @@ export default function AiPreviewScreen() {
 
   return (
     <PremiumScreen>
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
         {/* Visual Canvas and Badge Section */}
         <View style={styles.illustrationFrame}>
-          <Animated.View style={[styles.abstractCanvasGraphic, animatedCanvasStyle]}>
-            <MaterialCommunityIcons name={"sparkles" as any} size={54} color="#1C1917" />
-            
+          <Animated.View style={[styles.abstractCanvasGraphic, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }, animatedCanvasStyle]}>
+            <MaterialCommunityIcons name={"sparkles" as any} size={54} color={theme.colors.textPrimary} />
+
             <Animated.View style={[styles.comingSoonBadgeContainer, animatedBadgeStyle]}>
-              <Text style={styles.comingSoonBadge}>COMING SOON</Text>
+              <Text style={[styles.comingSoonBadge, { backgroundColor: theme.colors.accent, color: theme.colors.accentForeground }]}>{t('onboarding.aiPreview.comingSoonBadge')}</Text>
             </Animated.View>
           </Animated.View>
         </View>
@@ -120,12 +124,12 @@ export default function AiPreviewScreen() {
         {/* Messaging Text block */}
         <View style={styles.textContainer}>
           <Animated.View style={animatedTitleStyle}>
-            <Text style={styles.editorialTitleText}>AI Stylist</Text>
+            <Text style={[styles.editorialTitleText, { color: theme.colors.textPrimary }]}>{t('onboarding.aiPreview.title')}</Text>
           </Animated.View>
-          
+
           <Animated.View style={animatedSubtitleStyle}>
-            <Text style={styles.editorialSubtitleText}>
-              Future personalized recommendations will analyze your wardrobe, weather conditions, style aesthetics, favorite colors, and calendar schedules to curate optimal styles.
+            <Text style={[styles.editorialSubtitleText, { color: theme.colors.textSecondary }]}>
+              {t('onboarding.aiPreview.subtitle')}
             </Text>
           </Animated.View>
         </View>
@@ -136,9 +140,9 @@ export default function AiPreviewScreen() {
             onPressIn={handlePressIn}
             onPressOut={handlePressOut}
             onPress={() => router.push('/onboarding/personalization')}
-            style={styles.primaryPremiumButton}
+            style={[styles.primaryPremiumButton, { backgroundColor: theme.colors.accent }]}
           >
-            <Text style={styles.primaryButtonText}>Continue</Text>
+            <Text style={[styles.primaryButtonText, { color: theme.colors.accentForeground }]}>{t('common.continue')}</Text>
           </Pressable>
         </Animated.View>
       </SafeAreaView>
@@ -149,7 +153,6 @@ export default function AiPreviewScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAFAF9',
     justifyContent: 'space-between',
     paddingHorizontal: 24,
   },
@@ -162,9 +165,7 @@ const styles = StyleSheet.create({
     width: width * 0.5,
     aspectRatio: 1,
     borderRadius: 32,
-    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E7E5E4',
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
@@ -175,8 +176,6 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   comingSoonBadge: {
-    backgroundColor: '#1C1917',
-    color: '#FAFAF9',
     fontSize: 9,
     fontWeight: '700',
     paddingHorizontal: 10,
@@ -184,6 +183,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     letterSpacing: 1,
     textAlign: 'center',
+    overflow: 'hidden',
   },
   textContainer: {
     paddingHorizontal: 12,
@@ -192,14 +192,12 @@ const styles = StyleSheet.create({
   editorialTitleText: {
     fontSize: 28,
     fontWeight: '300',
-    color: '#1C1917',
     letterSpacing: -0.5,
     textAlign: 'center',
     marginBottom: 12,
   },
   editorialSubtitleText: {
     fontSize: 13,
-    color: '#78716C',
     textAlign: 'center',
     lineHeight: 19,
     paddingHorizontal: 8,
@@ -211,13 +209,11 @@ const styles = StyleSheet.create({
   primaryPremiumButton: {
     width: '100%',
     height: 54,
-    backgroundColor: '#1C1917',
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
   primaryButtonText: {
-    color: '#FAFAF9',
     fontSize: 14,
     fontWeight: '600',
     textTransform: 'uppercase',

@@ -22,13 +22,15 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import VyraLogo from '../../components/branding/VyraLogo';
-import { PremiumButton } from '../../components/ui/PremiumButton'; 
+import { PremiumButton } from '../../components/ui/PremiumButton';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { PremiumInput } from '../../components/ui/PremiumInput';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { SectionTitle } from '../../components/ui/SectionTitle';
 import { PremiumLoader } from '../../components/ui/PremiumLoader';
 import { supabase } from '../../lib/supabase';
+import { useTheme } from '../../theme';
+import { useLanguage } from '../../i18n';
 
 // Ultra-premium cubic easing curve (Calm, confident, matching iOS/Apple system curves)
 const PREMIUM_EASING = Easing.bezier(0.25, 0.1, 0.25, 1);
@@ -61,10 +63,17 @@ const createPremiumEntrance = (delayMs: number) => {
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { theme } = useTheme();
+  const { t } = useLanguage();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Soft-tinted error banner — computed locally per theme, matching the pattern
+  // established on create.tsx's success/error feedback banners.
+  const dangerBannerBg = theme.dark ? 'rgba(239, 68, 68, 0.15)' : '#FEF2F2';
+  const dangerBannerBorder = theme.dark ? 'rgba(239, 68, 68, 0.35)' : '#FEE2E2';
 
   // Focus-state tracking values for Inputs
   const emailFocusValue = useSharedValue(0);
@@ -81,34 +90,34 @@ export default function LoginScreen() {
   }, [email, password]);
 
   const mapAuthErrorToFriendlyMessage = (error: any): string => {
-    if (!error) return 'Something went wrong. Please try again.';
-    
+    if (!error) return t('common.somethingWentWrong');
+
     const message = error.message?.toLowerCase() || '';
     if (message.includes('invalid login credentials') || message.includes('email not confirmed')) {
-      return 'Incorrect email or password.';
+      return t('auth.login.errors.invalidCredentials');
     }
     if (message.includes('network') || message.includes('fetch')) {
-      return 'Connection problem. Please try again.';
+      return t('auth.login.errors.connectionProblem');
     }
     if (message.includes('rate limit') || error.status === 429 || message.includes('too many requests')) {
-      return 'Too many login attempts. Please wait a moment.';
+      return t('auth.login.errors.tooManyAttempts');
     }
-    
-    return 'Something went wrong. Please try again.';
+
+    return t('common.somethingWentWrong');
   };
 
   const validateForm = (): boolean => {
     if (!email.trim()) {
-      setErrorMessage('Please enter your email address.');
+      setErrorMessage(t('auth.login.errors.emailRequired'));
       return false;
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email.trim())) {
-      setErrorMessage('Invalid email format.');
+      setErrorMessage(t('auth.login.errors.emailInvalid'));
       return false;
     }
     if (!password.trim()) {
-      setErrorMessage('Please enter your password.');
+      setErrorMessage(t('auth.login.errors.passwordRequired'));
       return false;
     }
     return true;
@@ -118,10 +127,9 @@ export default function LoginScreen() {
     if (isLoading) return;
     setErrorMessage(null);
     if (!validateForm()) return;
-    
+
     setIsLoading(true);
-    console.log(`[Auth Login] Attempting credentials pass for identifier: ${email.trim().toLowerCase()}`);
-    
+
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
@@ -134,7 +142,6 @@ export default function LoginScreen() {
       }
 
       if (data?.user) {
-        console.log('[Auth Login] Sign-In successful. Routing user session onto primary dashboard layout.');
         router.replace('/');
       }
     } catch (error: any) {
@@ -147,7 +154,6 @@ export default function LoginScreen() {
 
   const handleGoogleSignIn = async () => {
     if (isLoading) return;
-    console.log('[Auth OAuth] Initializing Google identity token request pipeline.');
     try {
       setIsLoading(true);
       setErrorMessage(null);
@@ -168,14 +174,14 @@ export default function LoginScreen() {
 
   // Border highlight overrides for input focus states (no size resizing or scale pops)
   const emailAnimatedStyle = useAnimatedStyle(() => ({
-    borderColor: withTiming(emailFocusValue.value === 1 ? '#000000' : '#EAEAEA', {
+    borderColor: withTiming(emailFocusValue.value === 1 ? theme.colors.accent : theme.colors.border, {
       duration: 200,
       easing: PREMIUM_EASING,
     }),
   }));
 
   const passwordAnimatedStyle = useAnimatedStyle(() => ({
-    borderColor: withTiming(passwordFocusValue.value === 1 ? '#000000' : '#EAEAEA', {
+    borderColor: withTiming(passwordFocusValue.value === 1 ? theme.colors.accent : theme.colors.border, {
       duration: 200,
       easing: PREMIUM_EASING,
     }),
@@ -197,38 +203,38 @@ export default function LoginScreen() {
         style={styles.keyboardView}
       >
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          
+
           {/* 1. Logo Section (Sequence 1: delay 0ms) */}
-          <Animated.View 
+          <Animated.View
             entering={createPremiumEntrance(0)}
             style={styles.logoContainer}
           >
             <View style={styles.iconWrapper}>
               <View style={styles.starIconContainer}>
-                <VyraLogo size={56} />
+                <VyraLogo size={56} isDark={theme.dark} />
               </View>
             </View>
             {/* 2. Title & Subtitle Section (Sequence 2: delay 50ms) */}
             <Animated.View entering={createPremiumEntrance(50)}>
-              <SectionHeader 
-                title="Vyra" 
-                subtitle="Welcome back" 
-                style={styles.headerCenteredOverride} 
+              <SectionHeader
+                title="Vyra"
+                subtitle={t('auth.login.subtitle')}
+                style={styles.headerCenteredOverride}
               />
             </Animated.View>
           </Animated.View>
 
           {/* 3. Form Section Container (Sequence 3: delay 100ms) */}
-          <Animated.View 
+          <Animated.View
             entering={createPremiumEntrance(100)}
             style={styles.formContainer}
           >
-            <SectionTitle withBottomMargin>Account Access</SectionTitle>
+            <SectionTitle withBottomMargin>{t('auth.login.sectionTitle')}</SectionTitle>
 
             <Animated.View style={[styles.inputWrapperBorder, emailAnimatedStyle]}>
               <PremiumInput
-                label="Email"
-                placeholder="your@email.com"
+                label={t('auth.login.emailLabel')}
+                placeholder={t('auth.login.emailPlaceholder')}
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
@@ -243,8 +249,8 @@ export default function LoginScreen() {
 
             <Animated.View style={[styles.inputWrapperBorder, passwordAnimatedStyle]}>
               <PremiumInput
-                label="Password"
-                placeholder="••••••••"
+                label={t('auth.login.passwordLabel')}
+                placeholder={t('auth.login.passwordPlaceholder')}
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry
@@ -257,26 +263,26 @@ export default function LoginScreen() {
 
             {/* Error Banner transition: Calm, minimal, zero spring overshoot */}
             {errorMessage && (
-              <Animated.View 
+              <Animated.View
                 entering={createPremiumEntrance(0)} // Triggers instantly on state render
                 exiting={FadeOut.duration(150).easing(PREMIUM_EASING)}
                 layout={LinearTransition.duration(200).easing(PREMIUM_EASING)}
-                style={styles.errorInlineBanner}
+                style={[styles.errorInlineBanner, { backgroundColor: dangerBannerBg, borderColor: dangerBannerBorder }]}
               >
-                <MaterialCommunityIcons name="alert-circle-outline" size={16} color="#EF4444" />
-                <Text style={styles.errorBannerText}>{errorMessage}</Text>
+                <MaterialCommunityIcons name="alert-circle-outline" size={16} color={theme.colors.danger} />
+                <Text style={[styles.errorBannerText, { color: theme.colors.danger }]}>{errorMessage}</Text>
               </Animated.View>
             )}
 
             <View style={styles.buttonSpacingAdjustment} />
-            
+
             {/* 4. Primary Button Section (Sequence 4: delay 150ms) */}
-            <Animated.View 
+            <Animated.View
               entering={createPremiumEntrance(150)}
               layout={LinearTransition.duration(200).easing(PREMIUM_EASING)}
             >
               {isLoading ? (
-                <Animated.View 
+                <Animated.View
                   entering={FadeIn.duration(150).easing(PREMIUM_EASING)}
                   exiting={FadeOut.duration(150).easing(PREMIUM_EASING)}
                   style={styles.loaderButtonPlaceholder}
@@ -284,30 +290,30 @@ export default function LoginScreen() {
                   <PremiumLoader />
                 </Animated.View>
               ) : (
-                <Animated.View 
+                <Animated.View
                   entering={FadeIn.duration(150).easing(PREMIUM_EASING)}
                   exiting={FadeOut.duration(150).easing(PREMIUM_EASING)}
                 >
-                  <PremiumButton label="Sign In" onPress={handleSignIn} />
+                  <PremiumButton label={t('auth.login.signInButton')} onPress={handleSignIn} />
                 </Animated.View>
               )}
             </Animated.View>
           </Animated.View>
 
           {/* 5. Divider Section (Sequence 5: delay 190ms) */}
-          <Animated.View 
+          <Animated.View
             entering={createPremiumEntrance(190)}
             style={styles.dividerContainer}
           >
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>OR</Text>
-            <View style={styles.dividerLine} />
+            <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
+            <Text style={[styles.dividerText, { color: theme.colors.textSecondary }]}>{t('auth.login.orDivider')}</Text>
+            <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
           </Animated.View>
 
           {/* 6. Google Section (Sequence 6: delay 230ms) */}
           <Animated.View entering={createPremiumEntrance(230)}>
-            <TouchableOpacity 
-              style={isLoading && styles.disabledElement} 
+            <TouchableOpacity
+              style={isLoading && styles.disabledElement}
               activeOpacity={1}
               onPressIn={() => {
                 googleButtonScale.value = 0.995;
@@ -320,24 +326,24 @@ export default function LoginScreen() {
               onPress={handleGoogleSignIn}
               disabled={isLoading}
             >
-              <Animated.View style={[styles.googleButton, googleButtonAnimatedStyle]}>
+              <Animated.View style={[styles.googleButton, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }, googleButtonAnimatedStyle]}>
                 <View style={styles.googleContent}>
-                  <View style={styles.envelopeIcon}>
-                    <View style={styles.envelopeFlap} />
+                  <View style={[styles.envelopeIcon, { borderColor: theme.colors.textPrimary }]}>
+                    <View style={[styles.envelopeFlap, { borderColor: theme.colors.textPrimary }]} />
                   </View>
-                  <Text style={styles.googleButtonText}>Continue with Google</Text>
+                  <Text style={[styles.googleButtonText, { color: theme.colors.textPrimary }]}>{t('auth.login.continueWithGoogle')}</Text>
                 </View>
               </Animated.View>
             </TouchableOpacity>
           </Animated.View>
 
           {/* 7. Footer Section (Sequence 7: delay 270ms) */}
-          <Animated.View 
+          <Animated.View
             entering={createPremiumEntrance(270)}
             style={[styles.footerContainer, isLoading && styles.disabledElement]}
           >
-            <Text style={styles.footerText}>Don't have an account? </Text>
-            <TouchableOpacity 
+            <Text style={[styles.footerText, { color: theme.colors.textSecondary }]}>{t('auth.login.noAccountPrompt')}</Text>
+            <TouchableOpacity
               activeOpacity={1}
               onPressIn={() => { footerLinkOpacity.value = 0.7; }}
               onPressOut={() => { footerLinkOpacity.value = 1; }}
@@ -345,7 +351,7 @@ export default function LoginScreen() {
               disabled={isLoading}
             >
               <Animated.View style={footerLinkAnimatedStyle}>
-                <Text style={styles.signUpText}>Sign up</Text>
+                <Text style={[styles.signUpText, { color: theme.colors.textPrimary }]}>{t('auth.login.signUpLink')}</Text>
               </Animated.View>
             </TouchableOpacity>
           </Animated.View>
@@ -392,7 +398,6 @@ const styles = StyleSheet.create({
   inputWrapperBorder: {
     borderWidth: 0,
     borderRadius: 12,
-    borderColor: '#EAEAEA',
     overflow: 'hidden',
   },
   inputSpacer: {
@@ -401,9 +406,7 @@ const styles = StyleSheet.create({
   errorInlineBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FEF2F2',
     borderWidth: 1,
-    borderColor: '#FEE2E2',
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -412,7 +415,6 @@ const styles = StyleSheet.create({
   },
   errorBannerText: {
     fontSize: 13,
-    color: '#EF4444',
     fontWeight: '500',
     letterSpacing: -0.2,
     flex: 1,
@@ -435,22 +437,18 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#EAEAEA',
   },
   dividerText: {
     fontSize: 12,
-    color: '#999999',
     marginHorizontal: 12,
     fontWeight: '500',
   },
   googleButton: {
     height: 52,
     borderWidth: 1,
-    borderColor: '#EAEAEA',
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
     width: '100%',
   },
   googleContent: {
@@ -461,7 +459,6 @@ const styles = StyleSheet.create({
     width: 18,
     height: 13,
     borderWidth: 1.5,
-    borderColor: '#000000',
     borderRadius: 1,
     marginRight: 10,
     position: 'relative',
@@ -475,11 +472,9 @@ const styles = StyleSheet.create({
     height: 11,
     borderBottomWidth: 1.5,
     borderRightWidth: 1.5,
-    borderColor: '#000000',
     transform: [{ rotate: '45deg' }],
   },
   googleButtonText: {
-    color: '#000000',
     fontSize: 15,
     fontWeight: '500',
   },
@@ -491,11 +486,9 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 14,
-    color: '#666666',
   },
   signUpText: {
     fontSize: 14,
-    color: '#000000',
     fontWeight: '500',
   },
   disabledElement: {

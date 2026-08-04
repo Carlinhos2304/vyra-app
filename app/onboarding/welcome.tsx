@@ -4,6 +4,8 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import VyraLogo from '../../components/branding/VyraLogo';
+import { useTheme } from '../../theme';
+import { useLanguage } from '../../i18n';
 
 // React Native Reanimated 3 Animations
 import Animated, {
@@ -24,7 +26,9 @@ const PREMIUM_SPRING = {
 };
 
 export default function WelcomeScreen() {
+  const { theme } = useTheme();
   const router = useRouter();
+  const { t } = useLanguage();
 
   // Animation Shared Values
   const logoOpacity = useSharedValue(0);
@@ -94,22 +98,22 @@ export default function WelcomeScreen() {
 
   return (
     <PremiumScreen>
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
         <View style={styles.brandContainer}>
           {/* Logo container */}
           <Animated.View style={[styles.logoScaleWrapper, animatedLogoStyle]}>
-            <VyraLogo />
+            <VyraLogo isDark={theme.dark} />
           </Animated.View>
 
           {/* Title */}
           <Animated.View style={animatedTitleStyle}>
-            <Text style={styles.brandTitleText}>Welcome to Vyra</Text>
+            <Text style={[styles.brandTitleText, { color: theme.colors.textPrimary }]}>{t('onboarding.welcome.title')}</Text>
           </Animated.View>
 
           {/* Subtitle */}
           <Animated.View style={animatedSubtitleStyle}>
-            <Text style={styles.brandSubtitleText}>
-              Organize your wardrobe effortlessly.
+            <Text style={[styles.brandSubtitleText, { color: theme.colors.textSecondary }]}>
+              {t('onboarding.welcome.subtitle')}
             </Text>
           </Animated.View>
         </View>
@@ -120,9 +124,9 @@ export default function WelcomeScreen() {
             onPressIn={handlePressIn}
             onPressOut={handlePressOut}
             onPress={() => router.push('/onboarding/features')}
-            style={styles.primaryPremiumButton}
+            style={[styles.primaryPremiumButton, { backgroundColor: theme.colors.accent }]}
           >
-            <Text style={styles.primaryButtonText}>Get Started</Text>
+            <Text style={[styles.primaryButtonText, { color: theme.colors.accentForeground }]}>{t('onboarding.welcome.getStarted')}</Text>
           </Pressable>
         </Animated.View>
       </SafeAreaView>
@@ -133,7 +137,6 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAFAF9',
     justifyContent: 'space-between',
     paddingHorizontal: 24,
   },
@@ -150,14 +153,12 @@ const styles = StyleSheet.create({
   brandTitleText: {
     fontSize: 32,
     fontWeight: '300',
-    color: '#1C1917',
     letterSpacing: -0.5,
     textAlign: 'center',
     marginBottom: 12,
   },
   brandSubtitleText: {
     fontSize: 15,
-    color: '#78716C',
     textAlign: 'center',
     lineHeight: 22,
     paddingHorizontal: 24,
@@ -169,13 +170,11 @@ const styles = StyleSheet.create({
   primaryPremiumButton: {
     width: '100%',
     height: 54,
-    backgroundColor: '#1C1917',
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
   primaryButtonText: {
-    color: '#FAFAF9',
     fontSize: 14,
     fontWeight: '600',
     textTransform: 'uppercase',

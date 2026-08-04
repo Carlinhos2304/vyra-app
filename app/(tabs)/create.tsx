@@ -35,9 +35,13 @@ import { PremiumTouchable } from '../../components/ui/PremiumTouchable';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { SectionTitle } from '../../components/ui/SectionTitle';
 import { PremiumLoader } from '../../components/ui/PremiumLoader';
+import { useTheme } from '../../theme';
+import type { Theme } from '../../theme';
+import { useLanguage } from '../../i18n';
 
 // Supabase client instance integration
 import { supabase } from '../../lib/supabase';
+import { OUTFIT_OCCASIONS } from '../../constants/garmentTaxonomy';
 
 // Enable layout animations natively for Android target instances
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -75,18 +79,16 @@ const CATEGORY_ORDER = [
   'Activewear',
 ];
 
-const OCCASIONS = [
-  'Casual',
-  'Formal',
-  'Business Casual',
-  'Night Out',
-  'Sporty',
-  'Vacation',
-  'Special Event',
-];
+// OCCASIONS now comes from constants/garmentTaxonomy.ts (OUTFIT_OCCASIONS) —
+// single source of truth also consumed by the generate-outfit Edge Function,
+// so AI-generated outfits and manually-created ones use the same occasion
+// vocabulary that's already stored in real `outfits.occasion` rows.
+const OCCASIONS = OUTFIT_OCCASIONS;
 
 export default function CreateOutfitScreen() {
   const router = useRouter();
+  const { theme } = useTheme();
+  const { t } = useLanguage();
   const { mode, outfitId } = useLocalSearchParams<{ mode: string; outfitId: string }>();
   const isEditMode = mode === 'edit' && !!outfitId;
 
@@ -95,19 +97,17 @@ export default function CreateOutfitScreen() {
 
   const [outfitName, setOutfitName] = useState('');
   const [occasion, setOccasion] = useState<string | null>(null);
-  
+
   const [garments, setGarments] = useState<Garment[]>([]);
   const [selectedItems, setSelectedItems] = useState<Garment[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isOutfitLoading, setIsOutfitLoading] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Inline Premium Feedback Banner States
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  
-  // Removed useRef for fadeAnim and successFadeAnim, as reanimated handles declarative animations
 
   // Animate the Save button on press
   const saveButtonStyle = useAnimatedStyle(() => ({
@@ -122,20 +122,6 @@ export default function CreateOutfitScreen() {
     setErrorMessage(null);
     setError(null);
   }, []);
-
-  // Track error state transitions to fire smooth fade configurations
-  useEffect(() => {
-    // Replaced Animated.timing with reanimated's declarative `entering` and `exiting` props
-    // on the Animated.View components for banners.
-    // The previous imperative animation logic for fadeAnim and successFadeAnim is no longer needed.
-  }, [errorMessage]);
-
-  // Track success state transitions to fire smooth fade configurations
-  useEffect(() => {
-    // Replaced Animated.timing with reanimated's declarative `entering` and `exiting` props
-    // on the Animated.View components for banners.
-    // The previous imperative animation logic for fadeAnim and successFadeAnim is no longer needed.
-  }, [successMessage]);
 
   // Dismiss error and success banners automatically when user modifies parameters
   useEffect(() => {
@@ -158,7 +144,7 @@ export default function CreateOutfitScreen() {
           if (authError || !user) {
             console.error('[Outfit Form Error] User token evaluation failed:', authError);
             if (isActive) {
-              setError('No active credentials verified.');
+              setError(t('tabs.create.noCredentials'));
               setIsLoading(false);
             }
             return;
@@ -177,7 +163,6 @@ export default function CreateOutfitScreen() {
           if (isEditMode && isActive) {
             try {
               setIsOutfitLoading(true);
-              console.log(`[Outfit Edit Engine] Querying deep relations matching public.outfits.id = ${outfitId}`);
 
               const { data: currentOutfit, error: outfitErr } = await supabase
                 .from('outfits')
@@ -215,14 +200,13 @@ export default function CreateOutfitScreen() {
                   .filter(Boolean);
 
                 setSelectedItems(deepParsedGarments);
-                console.log(`[Outfit Edit Engine] Hydrated details successfully for Lookbook ID: ${outfitId}`);
               }
             } catch (editFetchErr: any) {
               console.error('[Outfit Edit Engine Error] Query processing collapsed:', editFetchErr);
-              setErrorMessage('Failed to pre-populate look profile configurations.');
-    } finally {
+              setErrorMessage(t('tabs.create.prepopulateFailed'));
+            } finally {
               setIsOutfitLoading(false);
-    }
+            }
           } else if (!isEditMode && isActive) {
             // Clean slate configuration check if swapping context directly from edit to setup
             resetFormState();
@@ -230,19 +214,19 @@ export default function CreateOutfitScreen() {
         } catch (err: any) {
           console.error('[Outfit Form Matrix Failure]:', err);
           if (isActive) {
-            setError(err.message || 'An unhandled exception blocked layout parsing profiles.');
+            setError(err.message || t('tabs.create.unhandledException'));
           }
         } finally {
           if (isActive) setIsLoading(false);
         }
-  };
+      };
 
       fetchInitialDataFlow();
       return () => {
         isActive = false;
       };
     }, [isEditMode, outfitId, resetFormState])
-    );
+  );
 
   // Grouped and sorted structure initialization preferred layout matrixes
   const groupedGarments = useMemo(() => {
@@ -259,7 +243,7 @@ export default function CreateOutfitScreen() {
       if (groups[catName] && groups[catName].length > 0) {
         orderedSections.push({ title: catName, data: groups[catName] });
         delete groups[catName];
-  }
+      }
     });
 
     Object.keys(groups).forEach((catName) => {
@@ -297,9 +281,9 @@ export default function CreateOutfitScreen() {
     // 1) Outfit name verification block
     const sanitizedName = outfitName.trim();
     if (!sanitizedName) {
-      setErrorMessage('Please enter a name for your outfit.');
+      setErrorMessage(t('tabs.create.nameRequired'));
       return;
-  }
+    }
 
     // 2) Capsule collection requirement assessment logic
     const hasTop = selectedItems.some((item) => item.category === 'Tops');
@@ -307,7 +291,7 @@ export default function CreateOutfitScreen() {
     const hasShoes = selectedItems.some((item) => item.category === 'Shoes');
 
     if (!hasTop || !hasBottom || !hasShoes) {
-      setErrorMessage('Your outfit must include at least 1 top, 1 bottom, and 1 pair of shoes.');
+      setErrorMessage(t('tabs.create.missingPieces'));
       return;
     }
 
@@ -316,15 +300,13 @@ export default function CreateOutfitScreen() {
       setError(null);
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       if (authError || !user) {
-        setErrorMessage('Session trace expired. Re-authenticate client endpoints.');
+        setErrorMessage(t('tabs.create.sessionExpired'));
         return;
       }
 
       let activeOutfitId = outfitId;
 
       if (isEditMode) {
-        console.log(`[Outfit Commit Mode: EDIT] Patching core public.outfits schema where ID = ${activeOutfitId}`);
-
         // Step 1: Patch parent record parameters
         const { error: outfitUpdateErr } = await supabase
           .from('outfits')
@@ -346,8 +328,6 @@ export default function CreateOutfitScreen() {
         if (relationalPurgeErr) throw relationalPurgeErr;
 
       } else {
-        console.log('[Outfit Commit Mode: CREATE] Generating root public.outfits database transaction sequence');
-
         const { data: newOutfit, error: outfitCreateErr } = await supabase
           .from('outfits')
           .insert({
@@ -376,7 +356,7 @@ export default function CreateOutfitScreen() {
         if (junctionInsertErr) throw junctionInsertErr;
       }
 
-      setSuccessMessage(isEditMode ? 'Outfit updated successfully.' : 'Outfit created successfully.');
+      setSuccessMessage(isEditMode ? t('tabs.create.updatedSuccess') : t('tabs.create.createdSuccess'));
 
       setTimeout(() => {
         if (isEditMode) {
@@ -389,29 +369,38 @@ export default function CreateOutfitScreen() {
 
     } catch (err: any) {
       console.error('[Form Execution Pipeline Aborted Exception]:', err);
-      setErrorMessage(err.message || 'Critical pipeline exception blocked persistence engines.');
+      setErrorMessage(err.message || t('tabs.create.criticalException'));
     } finally {
       setIsSaving(false);
     }
   };
 
+  // Soft-tinted banner colors: computed from the status tokens rather than
+  // their own global tokens, since this alert-banner treatment is a
+  // one-off composite (base color + tinted background + tinted border),
+  // not a cross-cutting page-chrome color like text/surface/border.
+  const dangerBannerBg = theme.dark ? 'rgba(239, 68, 68, 0.15)' : '#FEF2F2';
+  const dangerBannerBorder = theme.dark ? 'rgba(239, 68, 68, 0.35)' : '#FEE2E2';
+  const successBannerBg = theme.dark ? 'rgba(74, 222, 128, 0.15)' : '#F0FDF4';
+  const successBannerBorder = theme.dark ? 'rgba(74, 222, 128, 0.35)' : '#DCFCE7';
+
   if (isLoading || isOutfitLoading) {
-                return (
+    return (
       <PremiumScreen>
         <View style={styles.centeredLoadingFrame}>
-          <PremiumLoader label={isOutfitLoading ? "Syncing look configurations..." : "Assembling curated wardrobe matrixes..."} />
+          <PremiumLoader label={isOutfitLoading ? t('tabs.create.syncingLook') : t('tabs.create.assemblingWardrobe')} />
         </View>
-    </PremiumScreen>
-  );
-}
+      </PremiumScreen>
+    );
+  }
 
   if (error) {
     return (
       <PremiumScreen>
         <View style={styles.centeredLoadingFrame}>
-          <MaterialCommunityIcons name="alert-circle-outline" size={32} color="#EF4444" />
-          <Text style={styles.errorHeaderTypography}>Operational Disruption</Text>
-          <Text style={styles.errorSubTypography}>{error}</Text>
+          <MaterialCommunityIcons name="alert-circle-outline" size={32} color={theme.colors.danger} />
+          <Text style={[styles.errorHeaderTypography, { color: theme.colors.textPrimary }]}>{t('tabs.create.errorTitle')}</Text>
+          <Text style={[styles.errorSubTypography, { color: theme.colors.textSecondary }]}>{error}</Text>
         </View>
       </PremiumScreen>
     );
@@ -423,46 +412,46 @@ export default function CreateOutfitScreen() {
 
         <Animated.View entering={FadeInUp.duration(600).springify()} style={styles.formHeaderSection}>
           <SectionHeader
-            title={isEditMode ? "Edit Outfit" : "Curate Outfit"}
+            title={isEditMode ? t('tabs.create.editTitle') : t('tabs.create.createTitle')}
             style={styles.headerFlexLayoutReset}
           />
-          <Text style={styles.formSubtitleTypography}>
+          <Text style={[styles.formSubtitleTypography, { color: theme.colors.textSecondary }]}>
             {isEditMode
-              ? "Refine your look and update its pieces"
-              : "Weave individual collection items into structured stylistic coordinates"
+              ? t('tabs.create.editSubtitle')
+              : t('tabs.create.createSubtitle')
             }
           </Text>
         </Animated.View>
 
         {/* Dynamic Display Layer: Animated Interactive Context Messages */}
         {errorMessage && (
-          <Animated.View entering={SlideInRight.springify()} exiting={SlideOutRight} style={[styles.inlineFeedbackBannerFrameError]}>
-            <MaterialCommunityIcons name="alert-rhombus-outline" size={16} color="#DC2626" />
-            <Text style={styles.inlineFeedbackBannerTypographyError}>{errorMessage}</Text>
+          <Animated.View entering={SlideInRight.springify()} exiting={SlideOutRight} style={[styles.inlineFeedbackBannerFrame, { backgroundColor: dangerBannerBg, borderColor: dangerBannerBorder }]}>
+            <MaterialCommunityIcons name="alert-rhombus-outline" size={16} color={theme.colors.danger} />
+            <Text style={[styles.inlineFeedbackBannerTypography, { color: theme.colors.danger }]}>{errorMessage}</Text>
           </Animated.View>
         )}
 
         {successMessage && (
-          <Animated.View entering={SlideInRight.springify()} exiting={SlideOutRight} style={[styles.inlineFeedbackBannerFrameSuccess]}>
-            <Ionicons name="checkmark-circle-outline" size={16} color="#15803D" />
-            <Text style={styles.inlineFeedbackBannerTypographySuccess}>{successMessage}</Text>
+          <Animated.View entering={SlideInRight.springify()} exiting={SlideOutRight} style={[styles.inlineFeedbackBannerFrame, { backgroundColor: successBannerBg, borderColor: successBannerBorder }]}>
+            <Ionicons name="checkmark-circle-outline" size={16} color={theme.colors.success} />
+            <Text style={[styles.inlineFeedbackBannerTypography, { color: theme.colors.success }]}>{successMessage}</Text>
           </Animated.View>
         )}
 
         {/* Input Block Core Parameters */}
         <Animated.View entering={FadeInUp.delay(100).duration(600).springify()} style={styles.cardInputBlockWrapper}>
           <PremiumCard style={styles.interactiveDataCardElement}>
-            <Text style={styles.inputTitleContextLabel}>Designation Identity Name</Text>
+            <Text style={[styles.inputTitleContextLabel, { color: theme.colors.textSecondary }]}>{t('tabs.create.nameLabel')}</Text>
             <TextInput
-              style={styles.premiumFormInputFieldString}
-              placeholder={isEditMode ? "e.g., Summer Yacht Silhouette (Updated)" : "e.g., Minimalist Monochrome Autumn"}
-              placeholderTextColor="#A8A29E"
+              style={[styles.premiumFormInputFieldString, { borderColor: theme.colors.border, color: theme.colors.textPrimary, backgroundColor: theme.colors.background }]}
+              placeholder={isEditMode ? t('tabs.create.namePlaceholderEdit') : t('tabs.create.namePlaceholderNew')}
+              placeholderTextColor={theme.colors.textTertiary}
               value={outfitName}
               onChangeText={setOutfitName}
               maxLength={50}
             />
 
-            <Text style={styles.inputTitleContextLabelSpacerOverride}>Target Occasion Context Setting</Text>
+            <Text style={[styles.inputTitleContextLabelSpacerOverride, { color: theme.colors.textSecondary }]}>{t('tabs.create.occasionLabel')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalChipsViewportSpacing}>
               {OCCASIONS.map((occ) => {
                 const isSelected = occasion === occ;
@@ -477,18 +466,18 @@ export default function CreateOutfitScreen() {
         {/* Outfit Canvas Assembly Stage View */}
         <Animated.View entering={FadeInUp.delay(200).duration(600).springify()} style={styles.architecturalContentSection}>
           <View style={styles.inlineHeaderTitleSection}>
-            <SectionTitle>Composition Grid Canvas</SectionTitle>
-            <Animated.View style={styles.countBadgeNode} layout={Layout.springify()}>
-              <Text style={styles.countBadgeText}>{selectedItems.length} Layered</Text>
+            <SectionTitle>{t('tabs.create.canvasTitle')}</SectionTitle>
+            <Animated.View style={[styles.countBadgeNode, { backgroundColor: theme.colors.surfaceSecondary, borderColor: theme.colors.border }]} layout={Layout.springify()}>
+              <Text style={[styles.countBadgeText, { color: theme.colors.textSecondary }]}>{t('tabs.create.layeredCount', { count: selectedItems.length })}</Text>
             </Animated.View>
           </View>
 
-          <View style={styles.outfitCanvasPreviewStageFrame}>
+          <View style={[styles.outfitCanvasPreviewStageFrame, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }]}>
             {selectedItems.length === 0 ? (
               <View style={styles.emptyCanvasCenterFrameFallback}>
-                <MaterialCommunityIcons name="layers-triple-outline" size={32} color="#A8A29E" />
-                <Text style={styles.emptyCanvasTypographyFallback}>
-                  Select individual wardrobe cards below to construct combination lines.
+                <MaterialCommunityIcons name="layers-triple-outline" size={32} color={theme.colors.textTertiary} />
+                <Text style={[styles.emptyCanvasTypographyFallback, { color: theme.colors.textTertiary }]}>
+                  {t('tabs.create.canvasEmptyHint')}
                 </Text>
               </View>
             ) : (
@@ -496,18 +485,18 @@ export default function CreateOutfitScreen() {
                 {selectedItems.map((item, index) => (
                   <Animated.View key={`${item.id}-${index}`} entering={ZoomIn.springify()} exiting={ZoomOut} layout={Layout.springify()}>
                     <PremiumTouchable
-                      style={styles.canvasAssetWrapperCircle}
+                      style={[styles.canvasAssetWrapperCircle, { backgroundColor: theme.colors.surfaceSecondary, borderColor: theme.colors.border }]}
                       onPress={() => toggleGarmentSelection(item)}
                     >
                       {item.image_url ? (
                         <Image source={{ uri: item.image_url }} style={styles.canvasTargetAssetImageSquare} />
                       ) : (
                         <View style={styles.canvasFallbackAssetCenterFrame}>
-                          <MaterialCommunityIcons name="hanger" size={18} color="#78716C" />
+                          <MaterialCommunityIcons name="hanger" size={18} color={theme.colors.textSecondary} />
                         </View>
                       )}
-                      <View style={styles.removeAssetIndicatorBadgeMini}>
-                        <Ionicons name="close" size={10} color="#FFFFFF" />
+                      <View style={[styles.removeAssetIndicatorBadgeMini, { backgroundColor: theme.colors.accent, borderColor: theme.colors.surface }]}>
+                        <Ionicons name="close" size={10} color={theme.colors.accentForeground} />
                       </View>
                     </PremiumTouchable>
                   </Animated.View>
@@ -519,18 +508,18 @@ export default function CreateOutfitScreen() {
 
         {/* Grid Selector Core Relational Node Rows Grouped by Category */}
         <Animated.View entering={FadeInUp.delay(300).duration(600).springify()} style={styles.architecturalContentSectionSpacerOverride}>
-          <SectionTitle withBottomMargin>Available Wardrobe Pieces</SectionTitle>
+          <SectionTitle withBottomMargin>{t('tabs.create.availablePiecesTitle')}</SectionTitle>
 
           {groupedGarments.length === 0 ? (
-            <View style={styles.emptyStateContainerBox}>
-              <MaterialCommunityIcons name="hanger" size={36} color="#78716C" />
-              <Text style={styles.emptyStatePrimaryText}>Wardrobe Catalog Empty</Text>
-              <Text style={styles.emptyStateSecondaryText}>Add single clothing entries to generate look configurations.</Text>
+            <View style={[styles.emptyStateContainerBox, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+              <MaterialCommunityIcons name="hanger" size={36} color={theme.colors.textSecondary} />
+              <Text style={[styles.emptyStatePrimaryText, { color: theme.colors.textPrimary }]}>{t('tabs.create.catalogEmptyTitle')}</Text>
+              <Text style={[styles.emptyStateSecondaryText, { color: theme.colors.textSecondary }]}>{t('tabs.create.catalogEmptySubtitle')}</Text>
             </View>
           ) : (
             groupedGarments.map((section) => (
               <View key={section.title} style={styles.categorySubdivisionContainerBlock}>
-                <Text style={styles.categorySubdivisionSectionHeaderTitleText}>{section.title}</Text>
+                <Text style={[styles.categorySubdivisionSectionHeaderTitleText, { color: theme.colors.textPrimary }]}>{section.title}</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryHorizontalSwiperViewportSpacing}>
                   {section.data.map((item) => {
                     const isSelected = selectedItems.some((selected) => selected.id === item.id);
@@ -549,14 +538,14 @@ export default function CreateOutfitScreen() {
           <Animated.View style={saveButtonStyle}>
             <PremiumTouchable
               disabled={isSaving}
-              style={styles.submissionTerminalTriggerButtonPrimary}
+              style={[styles.submissionTerminalTriggerButtonPrimary, { backgroundColor: theme.colors.accent, shadowColor: theme.colors.shadow }]}
               onPress={handleSaveOutfitWorkflow}
             >
               {isSaving ? (
-                <ActivityIndicator size="small" color="#FAFAF9" />
+                <ActivityIndicator size="small" color={theme.colors.accentForeground} />
               ) : (
-                <Text style={styles.submissionTerminalTriggerLabelTextString}>
-                  {isEditMode ? "Save Changes" : "Create Outfit"}
+                <Text style={[styles.submissionTerminalTriggerLabelTextString, { color: theme.colors.accentForeground }]}>
+                  {isEditMode ? t('tabs.create.saveChanges') : t('tabs.create.createOutfitButton')}
                 </Text>
               )}
             </PremiumTouchable>
@@ -571,12 +560,18 @@ export default function CreateOutfitScreen() {
 // Sub-components for better animation control
 
 const OccasionChip = ({ label, isSelected, onPress }: { label: string, isSelected: boolean, onPress: () => void }) => {
+  const { theme } = useTheme();
   return (
     <PremiumTouchable
-      style={isSelected ? styles.chipNodeElementActive : styles.chipNodeElementInactive}
+      style={[
+        styles.chipNodeElement,
+        isSelected
+          ? { backgroundColor: theme.colors.accent, borderColor: theme.colors.accent }
+          : { backgroundColor: theme.colors.background, borderColor: theme.colors.border },
+      ]}
       onPress={onPress}
     >
-      <Text style={isSelected ? styles.chipTypographyActive : styles.chipTypographyInactive}>
+      <Text style={{ fontSize: 12, fontWeight: '500', color: isSelected ? theme.colors.accentForeground : theme.colors.textSecondary }}>
         {label}
       </Text>
     </PremiumTouchable>
@@ -584,6 +579,8 @@ const OccasionChip = ({ label, isSelected, onPress }: { label: string, isSelecte
 };
 
 const GarmentCard = ({ item, isSelected, onPress }: { item: Garment, isSelected: boolean, onPress: () => void }) => {
+  const { theme } = useTheme();
+  const { t } = useLanguage();
   const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -596,30 +593,34 @@ const GarmentCard = ({ item, isSelected, onPress }: { item: Garment, isSelected:
   return (
     <Animated.View style={animatedStyle}>
       <PremiumTouchable
-        style={[styles.garmentSwiperMagazineCard, isSelected && styles.garmentSwiperMagazineCardActive]}
+        style={[
+          styles.garmentSwiperMagazineCard,
+          { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+          isSelected && { borderColor: theme.colors.accent, borderWidth: 1.5 },
+        ]}
         onPress={onPress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
       >
-        <View style={styles.garmentSwiperImageContainerBoundingBox}>
+        <View style={[styles.garmentSwiperImageContainerBoundingBox, { backgroundColor: theme.colors.surfaceSecondary }]}>
           {item.image_url ? (
             <Image source={{ uri: item.image_url }} style={styles.garmentSwiperCardTargetImage} />
           ) : (
             <View style={styles.garmentSwiperFallbackAssetCenterFrame}>
-              <MaterialCommunityIcons name="hanger" size={20} color="#A8A29E" />
+              <MaterialCommunityIcons name="hanger" size={20} color={theme.colors.textTertiary} />
             </View>
           )}
           {isSelected && (
-            <Animated.View entering={ZoomIn.duration(200)} exiting={ZoomOut.duration(200)} style={styles.selectionCheckmarkScrimOverlayMask}>
-              <Ionicons name="checkmark-circle" size={24} color="#1C1917" />
+            <Animated.View entering={ZoomIn.duration(200)} exiting={ZoomOut.duration(200)} style={[styles.selectionCheckmarkScrimOverlayMask, { backgroundColor: theme.dark ? 'rgba(0,0,0,0.4)' : 'rgba(255, 255, 255, 0.4)' }]}>
+              <Ionicons name="checkmark-circle" size={24} color={theme.colors.accent} />
             </Animated.View>
           )}
         </View>
         <View style={styles.garmentSwiperMetaFooterBlockText}>
-          <Text style={styles.garmentSwiperLabelBrandHeader} numberOfLines={1}>
-            {item.brand || 'UNBRANDED'}
+          <Text style={[styles.garmentSwiperLabelBrandHeader, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+            {item.brand || t('tabs.create.unbrandedFallback')}
           </Text>
-          <Text style={styles.garmentSwiperLabelNameSubscript} numberOfLines={1}>
+          <Text style={[styles.garmentSwiperLabelNameSubscript, { color: theme.colors.textSecondary }]} numberOfLines={1}>
             {item.name}
           </Text>
         </View>
@@ -640,14 +641,12 @@ const styles = StyleSheet.create({
   },
   errorHeaderTypography: {
     fontSize: 16,
-    color: '#1C1917',
     fontWeight: '600',
     marginTop: 14,
     marginBottom: 4,
   },
   errorSubTypography: {
     fontSize: 13,
-    color: '#78716C',
     textAlign: 'center',
     lineHeight: 18,
   },
@@ -662,16 +661,13 @@ const styles = StyleSheet.create({
   },
   formSubtitleTypography: {
     fontSize: 13,
-    color: '#78716C',
     lineHeight: 18,
     fontWeight: '400',
   },
-  inlineFeedbackBannerFrameError: {
+  inlineFeedbackBannerFrame: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FEF2F2',
     borderWidth: 1,
-    borderColor: '#FEE2E2',
     borderRadius: 12,
     paddingVertical: 10,
     paddingHorizontal: 14,
@@ -679,28 +675,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     gap: 8,
   },
-  inlineFeedbackBannerTypographyError: {
+  inlineFeedbackBannerTypography: {
     fontSize: 12,
-    color: '#DC2626',
-    fontWeight: '500',
-    flex: 1,
-  },
-  inlineFeedbackBannerFrameSuccess: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F0FDF4',
-    borderWidth: 1,
-    borderColor: '#DCFCE7',
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    marginHorizontal: 16,
-    marginBottom: 16,
-    gap: 8,
-  },
-  inlineFeedbackBannerTypographySuccess: {
-    fontSize: 12,
-    color: '#15803D',
     fontWeight: '500',
     flex: 1,
   },
@@ -710,15 +686,10 @@ const styles = StyleSheet.create({
   },
   interactiveDataCardElement: {
     padding: 16,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E7E5E4',
   },
   inputTitleContextLabel: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#78716C',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 8,
@@ -726,7 +697,6 @@ const styles = StyleSheet.create({
   inputTitleContextLabelSpacerOverride: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#78716C',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginTop: 18,
@@ -735,42 +705,19 @@ const styles = StyleSheet.create({
   premiumFormInputFieldString: {
     height: 44,
     borderWidth: 1,
-    borderColor: '#E7E5E4',
     borderRadius: 10,
     paddingHorizontal: 14,
     fontSize: 14,
-    color: '#1C1917',
-    backgroundColor: '#FAFAF9',
   },
   horizontalChipsViewportSpacing: {
     gap: 8,
     paddingVertical: 2,
   },
-  chipNodeElementInactive: {
+  chipNodeElement: {
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#FAFAF9',
     borderWidth: 1,
-    borderColor: '#E7E5E4',
-  },
-  chipNodeElementActive: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#1C1917',
-    borderWidth: 1,
-    borderColor: '#1C1917',
-  },
-  chipTypographyInactive: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#78716C',
-  },
-  chipTypographyActive: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#FAFAF9',
   },
   architecturalContentSection: {
     paddingHorizontal: 16,
@@ -786,9 +733,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   countBadgeNode: {
-    backgroundColor: '#F5F5F4',
     borderWidth: 1,
-    borderColor: '#E7E5E4',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 8,
@@ -797,17 +742,13 @@ const styles = StyleSheet.create({
   countBadgeText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#78716C',
   },
   outfitCanvasPreviewStageFrame: {
     minHeight: 112,
-    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E7E5E4',
     padding: 16,
     justifyContent: 'center',
-    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.01,
     shadowRadius: 2,
@@ -820,7 +761,6 @@ const styles = StyleSheet.create({
   },
   emptyCanvasTypographyFallback: {
     fontSize: 12,
-    color: '#A8A29E',
     textAlign: 'center',
     lineHeight: 16,
     marginTop: 6,
@@ -833,9 +773,7 @@ const styles = StyleSheet.create({
     width: CANVAS_ITEM_SIZE,
     height: CANVAS_ITEM_SIZE,
     borderRadius: CANVAS_ITEM_SIZE / 2,
-    backgroundColor: '#F5F5F4',
     borderWidth: 1,
-    borderColor: '#E7E5E4',
     position: 'relative',
     overflow: 'visible',
   },
@@ -857,17 +795,13 @@ const styles = StyleSheet.create({
     width: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: '#1C1917',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: '#FFFFFF',
   },
   emptyStateContainerBox: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E7E5E4',
     padding: 32,
     alignItems: 'center',
     marginRight: 16,
@@ -875,13 +809,11 @@ const styles = StyleSheet.create({
   emptyStatePrimaryText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1C1917',
     marginTop: 10,
     marginBottom: 4,
   },
   emptyStateSecondaryText: {
     fontSize: 12,
-    color: '#78716C',
     textAlign: 'center',
     lineHeight: 16,
   },
@@ -891,7 +823,6 @@ const styles = StyleSheet.create({
   categorySubdivisionSectionHeaderTitleText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#44403C',
     marginBottom: 10,
   },
   categoryHorizontalSwiperViewportSpacing: {
@@ -900,20 +831,13 @@ const styles = StyleSheet.create({
   },
   garmentSwiperMagazineCard: {
     width: width * 0.3,
-    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#E7E5E4',
-  },
-  garmentSwiperMagazineCardActive: {
-    borderColor: '#1C1917',
-    borderWidth: 1.5,
   },
   garmentSwiperImageContainerBoundingBox: {
     width: '100%',
     height: width * 0.3 * 1.2,
-    backgroundColor: '#F5F5F4',
     position: 'relative',
   },
   garmentSwiperCardTargetImage: {
@@ -928,7 +852,6 @@ const styles = StyleSheet.create({
   },
   selectionCheckmarkScrimOverlayMask: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255, 255, 255, 0.4)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -938,13 +861,11 @@ const styles = StyleSheet.create({
   garmentSwiperLabelBrandHeader: {
     fontSize: 9,
     fontWeight: '700',
-    color: '#1C1917',
     letterSpacing: 0.3,
     marginBottom: 1,
   },
   garmentSwiperLabelNameSubscript: {
     fontSize: 11,
-    color: '#44403C',
     fontWeight: '400',
   },
   submissionTerminalBlockActionSection: {
@@ -953,11 +874,9 @@ const styles = StyleSheet.create({
   },
   submissionTerminalTriggerButtonPrimary: {
     height: 48,
-    backgroundColor: '#1C1917',
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
@@ -966,6 +885,5 @@ const styles = StyleSheet.create({
   submissionTerminalTriggerLabelTextString: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#FAFAF9',
   },
 });

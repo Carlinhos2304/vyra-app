@@ -4,11 +4,13 @@ import { Tabs } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
-import Animated, { 
-  useAnimatedStyle, 
-  withTiming, 
+import Animated, {
+  useAnimatedStyle,
+  withTiming,
   useSharedValue,
 } from 'react-native-reanimated';
+import { useTheme } from '../../theme';
+import { useLanguage } from '../../i18n';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -21,10 +23,18 @@ interface CustomTabBarProps {
 function PremiumFloatingTabBar({ state, descriptors, navigation }: CustomTabBarProps) {
   const insets = useSafeAreaInsets();
   const dynamicBottomPadding = insets.bottom > 0 ? insets.bottom - 4 : 16;
+  const { theme } = useTheme();
+
+  // Translucent chrome for the floating blur pill — derived from the theme
+  // rather than a global token, since this frosted-glass effect is unique
+  // to this component.
+  const blurTint = theme.dark ? 'dark' : 'light';
+  const blurBackground = theme.dark ? 'rgba(27, 27, 27, 0.78)' : 'rgba(255, 255, 255, 0.88)';
+  const blurBorder = theme.dark ? 'rgba(46, 46, 46, 0.8)' : 'rgba(231, 229, 228, 0.6)';
 
   return (
-    <View style={[styles.absoluteContainer, { bottom: dynamicBottomPadding }]}>
-      <BlurView tint="light" intensity={90} style={styles.blurWrapper}>
+    <View style={[styles.absoluteContainer, { bottom: dynamicBottomPadding, shadowColor: theme.colors.shadow }]}>
+      <BlurView tint={blurTint} intensity={90} style={[styles.blurWrapper, { backgroundColor: blurBackground, borderColor: blurBorder }]}>
         <View style={styles.tabContentRow}>
           {state.routes.map((route: any, index: number) => {
             const { options } = descriptors[route.key];
@@ -59,8 +69,8 @@ function PremiumFloatingTabBar({ state, descriptors, navigation }: CustomTabBarP
             }));
 
             const animatedCreateStyle = useAnimatedStyle(() => ({
-              transform: [{ 
-                scale: withTiming(createPressed.value === 1 ? 0.92 : 1, { duration: 150 }) 
+              transform: [{
+                scale: withTiming(createPressed.value === 1 ? 0.92 : 1, { duration: 150 })
               }]
             }));
 
@@ -73,8 +83,14 @@ function PremiumFloatingTabBar({ state, descriptors, navigation }: CustomTabBarP
                   onPressOut={() => { createPressed.value = 0; }}
                   style={styles.createButtonViewport}
                 >
-                  <Animated.View style={[styles.premiumCreateCircle, animatedCreateStyle]}>
-                    <Ionicons name="add" size={26} color="#FAFAF9" />
+                  <Animated.View
+                    style={[
+                      styles.premiumCreateCircle,
+                      { backgroundColor: theme.colors.accent, shadowColor: theme.colors.shadow },
+                      animatedCreateStyle,
+                    ]}
+                  >
+                    <Ionicons name="add" size={26} color={theme.colors.accentForeground} />
                   </Animated.View>
                 </Pressable>
               );
@@ -88,7 +104,7 @@ function PremiumFloatingTabBar({ state, descriptors, navigation }: CustomTabBarP
                 animatedStyle={animatedIconStyle}
               >
                 {options.tabBarIcon && options.tabBarIcon({
-                  color: isFocused ? '#1C1917' : '#78716C',
+                  color: isFocused ? theme.colors.accent : theme.colors.textSecondary,
                   focused: isFocused,
                   size: 24
                 })}
@@ -102,6 +118,8 @@ function PremiumFloatingTabBar({ state, descriptors, navigation }: CustomTabBarP
 }
 
 export default function TabsLayout() {
+  const { t } = useLanguage();
+
   return (
     <Tabs
       tabBar={(props) => <PremiumFloatingTabBar {...props} />}
@@ -113,6 +131,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="home"
         options={{
+          tabBarAccessibilityLabel: t('tabs.tabBar.home'),
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? "home" : "home-outline"} size={22} color={color} />
           ),
@@ -121,6 +140,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="closet"
         options={{
+          tabBarAccessibilityLabel: t('tabs.tabBar.closet'),
           tabBarIcon: ({ color, focused }) => (
             <MaterialCommunityIcons name="hanger" size={24} color={color} />
           ),
@@ -128,11 +148,14 @@ export default function TabsLayout() {
       />
       <Tabs.Screen
         name="create"
-        options={{}}
+        options={{
+          tabBarAccessibilityLabel: t('tabs.tabBar.create'),
+        }}
       />
       <Tabs.Screen
         name="calendar"
         options={{
+          tabBarAccessibilityLabel: t('tabs.tabBar.calendar'),
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? "calendar" : "calendar-outline"} size={22} color={color} />
           ),
@@ -141,6 +164,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="profile"
         options={{
+          tabBarAccessibilityLabel: t('tabs.tabBar.profile'),
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? "person" : "person-outline"} size={22} color={color} />
           ),
@@ -159,7 +183,6 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     ...Platform.select({
       ios: {
-        shadowColor: '#1C1917',
         shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.08,
         shadowRadius: 16,
@@ -172,9 +195,7 @@ const styles = StyleSheet.create({
   blurWrapper: {
     borderRadius: 32,
     overflow: 'hidden',
-    backgroundColor: 'rgba(255, 255, 255, 0.88)',
     borderWidth: 1,
-    borderColor: 'rgba(231, 229, 228, 0.6)', 
   },
   tabContentRow: {
     flexDirection: 'row',
@@ -200,10 +221,8 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#1C1917',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#1C1917',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 6,

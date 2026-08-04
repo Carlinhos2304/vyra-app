@@ -6,6 +6,9 @@ import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { SectionTitle } from '../../components/ui/SectionTitle';
 import { PremiumLoader } from '../../components/ui/PremiumLoader';
 import { supabase } from '../../lib/supabase';
+import { useTheme } from '../../theme';
+import { useLanguage } from '../../i18n';
+import { STYLE_OPTIONS } from '../../constants/garmentTaxonomy';
 
 // React Native Reanimated 3
 import Animated, {
@@ -16,7 +19,8 @@ import Animated, {
   withDelay,
 } from 'react-native-reanimated';
 
-const STYLE_OPTIONS = ['Casual', 'Minimal', 'Streetwear', 'Elegant', 'Sport', 'Old Money', 'Vintage', 'Business'];
+// STYLE_OPTIONS now comes from constants/garmentTaxonomy.ts (single source of
+// truth shared with garment-level style tagging, including AI analysis).
 const COLOR_OPTIONS = [
   { name: 'Monochrome', hex: '#1C1917' },
   { name: 'Warm Stone', hex: '#E7E5E4' },
@@ -50,6 +54,7 @@ interface StyleChipProps {
 }
 
 function StyleChip({ styleName, isActive, onPress }: StyleChipProps) {
+  const { theme } = useTheme();
   const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -62,9 +67,13 @@ function StyleChip({ styleName, isActive, onPress }: StyleChipProps) {
         onPressIn={() => (scale.value = withSpring(0.97, CHIP_SPRING))}
         onPressOut={() => (scale.value = withSpring(1, CHIP_SPRING))}
         onPress={onPress}
-        style={[styles.chipSelectionItem, isActive && styles.chipSelectionItemActive]}
+        style={[
+          styles.chipSelectionItem,
+          { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+          isActive && { backgroundColor: theme.colors.accent, borderColor: theme.colors.accent }
+        ]}
       >
-        <Text style={[styles.chipText, isActive && styles.chipTextActive]}>{styleName}</Text>
+        <Text style={[styles.chipText, { color: theme.colors.textPrimary }, isActive && { color: theme.colors.accentForeground }]}>{styleName}</Text>
       </Pressable>
     </Animated.View>
   );
@@ -78,6 +87,7 @@ interface ColorCircleProps {
 }
 
 function ColorCircle({ colorName, hex, isSelected, onPress }: ColorCircleProps) {
+  const { theme } = useTheme();
   const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -92,9 +102,10 @@ function ColorCircle({ colorName, hex, isSelected, onPress }: ColorCircleProps) 
         onPress={onPress}
         style={[
           styles.colorCircleOuterBorder,
-          isSelected && styles.colorCircleOuterBorderActive
+          isSelected && { borderColor: theme.colors.accent }
         ]}
       >
+        {/* Swatch fill is a literal selectable color, not app chrome — stays fixed across themes */}
         <View
           style={[
             styles.colorCircleInnerFill,
@@ -113,6 +124,7 @@ interface ClimateChipProps {
 }
 
 function ClimateChip({ climateName, isActive, onPress }: ClimateChipProps) {
+  const { theme } = useTheme();
   const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -125,9 +137,13 @@ function ClimateChip({ climateName, isActive, onPress }: ClimateChipProps) {
         onPressIn={() => (scale.value = withSpring(0.97, CHIP_SPRING))}
         onPressOut={() => (scale.value = withSpring(1, CHIP_SPRING))}
         onPress={onPress}
-        style={[styles.chipSelectionItem, isActive && styles.chipSelectionItemActive]}
+        style={[
+          styles.chipSelectionItem,
+          { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+          isActive && { backgroundColor: theme.colors.accent, borderColor: theme.colors.accent }
+        ]}
       >
-        <Text style={[styles.chipText, isActive && styles.chipTextActive]}>{climateName}</Text>
+        <Text style={[styles.chipText, { color: theme.colors.textPrimary }, isActive && { color: theme.colors.accentForeground }]}>{climateName}</Text>
       </Pressable>
     </Animated.View>
   );
@@ -138,7 +154,9 @@ function ClimateChip({ climateName, isActive, onPress }: ClimateChipProps) {
 // ==========================================
 
 export default function PersonalizationScreen() {
+  const { theme } = useTheme();
   const router = useRouter();
+  const { t } = useLanguage();
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null);
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
   const [selectedClimate, setSelectedClimate] = useState<string | null>(null);
@@ -221,21 +239,21 @@ export default function PersonalizationScreen() {
   }));
 
   const toggleColorSelection = (colorName: string) => {
-    setSelectedColors(prev => 
+    setSelectedColors(prev =>
       prev.includes(colorName) ? prev.filter(c => c !== colorName) : [...prev, colorName]
     );
   };
 
   const handleSavePreferences = async () => {
     if (!selectedStyle || selectedColors.length === 0 || !selectedClimate) {
-      Alert.alert('Personalization Partial', 'Please select style, climate and at least one core color.');
+      Alert.alert(t('onboarding.personalization.incompleteAlertTitle'), t('onboarding.personalization.incompleteAlertMessage'));
       return;
     }
 
     try {
       setIsSubmitting(true);
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Unassigned identity context tracking coordinates.');
+      if (!user) throw new Error(t('onboarding.personalization.noUserError'));
 
       const { error } = await supabase
         .from('profiles')
@@ -250,7 +268,7 @@ export default function PersonalizationScreen() {
       if (error) throw error;
       router.push('/onboarding/first-garment');
     } catch (err: any) {
-      Alert.alert('Sync Fault', err.message || 'Could not serialize setup matrices to public profiles endpoints.');
+      Alert.alert(t('onboarding.personalization.syncFaultAlertTitle'), err.message || t('onboarding.personalization.syncFaultAlertFallback'));
     } finally {
       setIsSubmitting(false);
     }
@@ -260,25 +278,25 @@ export default function PersonalizationScreen() {
   // Placed down here so React executes all above top-level hooks without skipping.
   if (isSubmitting) {
     return (
-      <PremiumScreen style={styles.centerBox}>
-        <PremiumLoader label="Serializing curation attributes..." />
+      <PremiumScreen style={[styles.centerBox, { backgroundColor: theme.colors.background }]}>
+        <PremiumLoader label={t('onboarding.personalization.loadingLabel')} />
       </PremiumScreen>
     );
   }
 
   return (
     <PremiumScreen>
-      <SafeAreaView style={styles.rootContainer} edges={['top', 'bottom']}>
+      <SafeAreaView style={[styles.rootContainer, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollPadding}>
-          
+
           {/* MAIN HEADING */}
           <Animated.View style={animatedHeadingStyle}>
-            <Text style={styles.formMainHeading}>Let's personalize your wardrobe.</Text>
+            <Text style={[styles.formMainHeading, { color: theme.colors.textPrimary }]}>{t('onboarding.personalization.heading')}</Text>
           </Animated.View>
-          
+
           {/* SECTION 1: STYLE CONFIGURATION MATRIX */}
           <Animated.View style={[styles.formSection, animatedStyleSecStyle]}>
-            <SectionTitle withBottomMargin>Favorite Style</SectionTitle>
+            <SectionTitle withBottomMargin>{t('onboarding.personalization.styleSectionTitle')}</SectionTitle>
             <View style={styles.gridContainerRow}>
               {STYLE_OPTIONS.map(style => (
                 <StyleChip
@@ -293,7 +311,7 @@ export default function PersonalizationScreen() {
 
           {/* SECTION 2: COLOR CONFIGURATION CIRCLES */}
           <Animated.View style={[styles.formSection, animatedColorSecStyle]}>
-            <SectionTitle withBottomMargin>Favorite Colors</SectionTitle>
+            <SectionTitle withBottomMargin>{t('onboarding.personalization.colorsSectionTitle')}</SectionTitle>
             <View style={styles.colorsSelectionRow}>
               {COLOR_OPTIONS.map(color => (
                 <ColorCircle
@@ -309,7 +327,7 @@ export default function PersonalizationScreen() {
 
           {/* SECTION 3: CLIMATE */}
           <Animated.View style={[styles.formSection, animatedClimateSecStyle]}>
-            <SectionTitle withBottomMargin>Climate Zone</SectionTitle>
+            <SectionTitle withBottomMargin>{t('onboarding.personalization.climateSectionTitle')}</SectionTitle>
             <View style={styles.gridContainerRow}>
               {CLIMATE_OPTIONS.map(climate => (
                 <ClimateChip
@@ -323,31 +341,31 @@ export default function PersonalizationScreen() {
           </Animated.View>
 
           {/* SECTION 4: NOTIFICATIONS */}
-          <Animated.View style={[styles.formSection, styles.toggleRowSpace, animatedNotifySecStyle]}>
+          <Animated.View style={[styles.formSection, styles.toggleRowSpace, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }, animatedNotifySecStyle]}>
             <View style={styles.toggleTextLeftColumn}>
-              <Text style={styles.toggleMainLabelText}>Outfit Reminders</Text>
-              <Text style={styles.toggleSubLabelText}>Receive premium styling schedule updates.</Text>
+              <Text style={[styles.toggleMainLabelText, { color: theme.colors.textPrimary }]}>{t('onboarding.personalization.notificationsTitle')}</Text>
+              <Text style={[styles.toggleSubLabelText, { color: theme.colors.textSecondary }]}>{t('onboarding.personalization.notificationsSubtitle')}</Text>
             </View>
             <Switch
               value={notificationsEnabled}
               onValueChange={setNotificationsEnabled}
-              trackColor={{ false: '#D6D3D1', true: '#1C1917' }}
-              thumbColor="#FFFFFF"
-              ios_backgroundColor="#D6D3D1"
+              trackColor={{ false: theme.colors.border, true: theme.colors.accent }}
+              thumbColor={theme.colors.surface}
+              ios_backgroundColor={theme.colors.border}
             />
           </Animated.View>
 
         </ScrollView>
 
         {/* STICKY FOOTER */}
-        <Animated.View style={[styles.stickyFooterActionButton, animatedFooterStyle]}>
+        <Animated.View style={[styles.stickyFooterActionButton, { backgroundColor: theme.colors.background, borderColor: theme.colors.divider }, animatedFooterStyle]}>
           <Pressable
             onPressIn={() => (buttonPressScale.value = withSpring(0.96, { damping: 12, stiffness: 150 }))}
             onPressOut={() => (buttonPressScale.value = withSpring(1, PREMIUM_SPRING))}
             onPress={handleSavePreferences}
-            style={styles.primaryPremiumButton}
+            style={[styles.primaryPremiumButton, { backgroundColor: theme.colors.accent }]}
           >
-            <Text style={styles.primaryButtonText}>Save Preferences</Text>
+            <Text style={[styles.primaryButtonText, { color: theme.colors.accentForeground }]}>{t('onboarding.personalization.saveButton')}</Text>
           </Pressable>
         </Animated.View>
       </SafeAreaView>
@@ -358,7 +376,6 @@ export default function PersonalizationScreen() {
 const styles = StyleSheet.create({
   rootContainer: {
     flex: 1,
-    backgroundColor: '#FAFAF9',
   },
   centerBox: {
     flex: 1,
@@ -373,7 +390,6 @@ const styles = StyleSheet.create({
   formMainHeading: {
     fontSize: 26,
     fontWeight: '300',
-    color: '#1C1917',
     letterSpacing: -0.5,
     marginBottom: 32,
   },
@@ -386,24 +402,14 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   chipSelectionItem: {
-    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E7E5E4',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
-  chipSelectionItemActive: {
-    backgroundColor: '#1C1917',
-    borderColor: '#1C1917',
-  },
   chipText: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#44403C',
-  },
-  chipTextActive: {
-    color: '#FAFAF9',
   },
   colorsSelectionRow: {
     flexDirection: 'row',
@@ -419,9 +425,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  colorCircleOuterBorderActive: {
-    borderColor: '#1C1917',
-  },
   colorCircleInnerFill: {
     width: 32,
     height: 32,
@@ -434,8 +437,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#E7E5E4',
-    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 16,
   },
@@ -446,35 +447,29 @@ const styles = StyleSheet.create({
   toggleMainLabelText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#1C1917',
     marginBottom: 2,
   },
   toggleSubLabelText: {
     fontSize: 12,
-    color: '#78716C',
   },
   stickyFooterActionButton: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#FAFAF9',
     paddingHorizontal: 24,
     paddingTop: 12,
     paddingBottom: 24,
     borderTopWidth: 1,
-    borderColor: '#F5F5F4',
   },
   primaryPremiumButton: {
     width: '100%',
     height: 54,
-    backgroundColor: '#1C1917',
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
   primaryButtonText: {
-    color: '#FAFAF9',
     fontSize: 14,
     fontWeight: '600',
     textTransform: 'uppercase',

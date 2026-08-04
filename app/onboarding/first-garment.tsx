@@ -6,6 +6,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { PremiumLoader } from '../../components/ui/PremiumLoader';
 import { supabase } from '../../lib/supabase';
+import { useTheme } from '../../theme';
+import { useLanguage } from '../../i18n';
 
 // React Native Reanimated 3
 import Animated, {
@@ -31,7 +33,9 @@ const BUTTON_SPRING = {
 };
 
 export default function FirstGarmentScreen() {
+  const { theme } = useTheme();
   const router = useRouter();
+  const { t } = useLanguage();
   const [isFinalizing, setIsFinalizing] = useState<boolean>(false);
 
   // --- Animation Shared Values ---
@@ -83,7 +87,7 @@ export default function FirstGarmentScreen() {
     try {
       setIsFinalizing(true);
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Session authentication missing context parameters.');
+      if (!user) throw new Error(t('onboarding.firstGarment.noSessionError'));
 
       const { error } = await supabase
         .from('profiles')
@@ -94,7 +98,7 @@ export default function FirstGarmentScreen() {
 
       router.replace('/clothing/add-garment');
     } catch (err: any) {
-      Alert.alert('Finalization Blocked', err.message || 'Could not close out sequence safely.');
+      Alert.alert(t('onboarding.firstGarment.blockedAlertTitle'), err.message || t('onboarding.firstGarment.blockedAlertFallback'));
       setIsFinalizing(false);
     }
   };
@@ -102,40 +106,40 @@ export default function FirstGarmentScreen() {
   // ✅ FIXED: Conditional return moved safely below all hooks
   if (isFinalizing) {
     return (
-      <PremiumScreen style={styles.centerBox}>
-        <PremiumLoader label="Committing archival access parameters..." />
+      <PremiumScreen style={[styles.centerBox, { backgroundColor: theme.colors.background }]}>
+        <PremiumLoader label={t('onboarding.firstGarment.loadingLabel')} />
       </PremiumScreen>
     );
   }
 
   return (
     <PremiumScreen>
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
+
         {/* GRAPHIC FRAME */}
         <View style={styles.illustrationFrame}>
-          <Animated.View style={[styles.abstractCanvasGraphic, animatedIllustrationStyle]}>
-            <MaterialCommunityIcons name="plus-box-outline" size={64} color="#1C1917" />
+          <Animated.View style={[styles.abstractCanvasGraphic, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }, animatedIllustrationStyle]}>
+            <MaterialCommunityIcons name="plus-box-outline" size={64} color={theme.colors.textPrimary} />
           </Animated.View>
         </View>
 
         {/* COPY */}
         <Animated.View style={[styles.textContainer, animatedTextStyle]}>
-          <Text style={styles.editorialTitleText}>Let's build your wardrobe</Text>
-          <Text style={styles.editorialSubtitleText}>
-            Start by adding your first garment.
+          <Text style={[styles.editorialTitleText, { color: theme.colors.textPrimary }]}>{t('onboarding.firstGarment.title')}</Text>
+          <Text style={[styles.editorialSubtitleText, { color: theme.colors.textSecondary }]}>
+            {t('onboarding.firstGarment.subtitle')}
           </Text>
         </Animated.View>
 
         {/* BOTTOM ACTION */}
         <Animated.View style={[styles.actionContainer, animatedActionStyle]}>
-          <Pressable 
+          <Pressable
             onPressIn={() => (buttonPressScale.value = withSpring(0.96, BUTTON_SPRING))}
             onPressOut={() => (buttonPressScale.value = withSpring(1, PREMIUM_SPRING))}
             onPress={completeOnboardingAndNavigateToCreation}
-            style={styles.primaryPremiumButton}
+            style={[styles.primaryPremiumButton, { backgroundColor: theme.colors.accent }]}
           >
-            <Text style={styles.primaryButtonText}>Add First Garment</Text>
+            <Text style={[styles.primaryButtonText, { color: theme.colors.accentForeground }]}>{t('onboarding.firstGarment.addButton')}</Text>
           </Pressable>
         </Animated.View>
 
@@ -147,7 +151,6 @@ export default function FirstGarmentScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAFAF9',
     justifyContent: 'space-between',
     paddingHorizontal: 24,
   },
@@ -165,12 +168,9 @@ const styles = StyleSheet.create({
     width: width * 0.5,
     aspectRatio: 1,
     borderRadius: 32,
-    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E7E5E4',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.02,
     shadowRadius: 8,
@@ -183,14 +183,12 @@ const styles = StyleSheet.create({
   editorialTitleText: {
     fontSize: 28,
     fontWeight: '300',
-    color: '#1C1917',
     letterSpacing: -0.5,
     textAlign: 'center',
     marginBottom: 12,
   },
   editorialSubtitleText: {
     fontSize: 14,
-    color: '#78716C',
     textAlign: 'center',
     lineHeight: 20,
     paddingHorizontal: 16,
@@ -202,13 +200,11 @@ const styles = StyleSheet.create({
   primaryPremiumButton: {
     width: '100%',
     height: 54,
-    backgroundColor: '#1C1917',
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
   primaryButtonText: {
-    color: '#FAFAF9',
     fontSize: 14,
     fontWeight: '600',
     textTransform: 'uppercase',

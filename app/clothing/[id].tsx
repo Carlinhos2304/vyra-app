@@ -18,6 +18,8 @@ import { SectionHeader } from '../../components/ui/SectionHeader';
 import { SectionTitle } from '../../components/ui/SectionTitle';
 
 import { supabase } from '../../lib/supabase';
+import { useTheme } from '../../theme';
+import { useLanguage } from '../../i18n';
 
 // High Performance Reanimated imports
 import Animated, {
@@ -49,18 +51,23 @@ const SPRING_CONFIG = {
 };
 
 export default function ClothingDetailScreen() {
+  const { theme } = useTheme();
+  const { t } = useLanguage();
   const params = useLocalSearchParams<ClothingDetailSearchParams>();
-  
-  console.log("[Detail Screen] Received incoming routing parameters:", JSON.stringify(params));
+
+  // Soft-tinted destructive surface — computed locally since it's a one-off composite
+  // pattern (not a shared semantic token), matching the approach used on create.tsx's banners.
+  const dangerSoftBg = theme.dark ? 'rgba(239, 68, 68, 0.15)' : '#FFF5F5';
+  const dangerSoftBorder = theme.dark ? 'rgba(239, 68, 68, 0.35)' : '#FCA5A5';
 
   // Initialize state
   const [garment, setGarment] = useState({
     id: params.id,
-    name: params.name || 'Unnamed Garment',
+    name: params.name || t('clothing.detail.unnamedGarment'),
     brand: params.brand || 'Unknown Brand',
-    category: params.category || 'Uncategorized', 
+    category: params.category || t('clothing.detail.uncategorized'),
     image: params.image || '',
-    color: params.color || 'N/A',
+    color: params.color || t('clothing.detail.notAvailable'),
     is_favorite: false,
   });
 
@@ -75,7 +82,7 @@ export default function ClothingDetailScreen() {
   // Entrance states
   const heroOpacity = useSharedValue(0);
   const heroScale = useSharedValue(0.96);
-  
+
   const navBarOpacity = useSharedValue(0);
   const navBarTranslateY = useSharedValue(-15);
 
@@ -87,7 +94,7 @@ export default function ClothingDetailScreen() {
 
   const cardOneOpacity = useSharedValue(0);
   const cardOneTranslateY = useSharedValue(15);
-  
+
   const cardTwoOpacity = useSharedValue(0);
   const cardTwoTranslateY = useSharedValue(15);
 
@@ -100,16 +107,14 @@ export default function ClothingDetailScreen() {
   const shareBtnScale = useSharedValue(1);
   const editBtnScale = useSharedValue(1);
   const deleteBtnScale = useSharedValue(1);
-  
+
   // Custom image loader skeleton opacity
   const skeletonOpacity = useSharedValue(1);
 
   // Helper utility to safely format IDs depending on whether your schema uses integers or UUID strings
   const getNormalizedId = (rawId: string): string | number => {
     const isNumeric = /^\d+$/.test(rawId);
-    const normalized = isNumeric ? parseInt(rawId, 10) : rawId;
-    console.log(`[ID Normalizer] Raw string "${rawId}" converted to token type [${typeof normalized}]:`, normalized);
-    return normalized;
+    return isNumeric ? parseInt(rawId, 10) : rawId;
   };
 
   // ==========================================
@@ -152,30 +157,24 @@ export default function ClothingDetailScreen() {
 
     async function fetchLatestGarmentState() {
       if (!params.id) {
-        console.warn("[Sync Engine] Terminating execution: Parameter ID mapping is missing.");
         setIsInitialLoading(false);
         return;
       }
 
       const targetedId = getNormalizedId(params.id);
-      console.log(`[Sync Engine] Initiating row synchronization fetch for primary record reference ID:`, targetedId);
 
       try {
-        const { data, error, status } = await supabase
+        const { data, error } = await supabase
           .from('clothing_items')
           .select('*')
           .eq('id', targetedId)
           .maybeSingle();
 
-        console.log(`[Sync Engine] Supabase raw server network payload response:`, { status, data, error });
-
         if (error) {
-          console.error("[Sync Engine] Supabase explicit database collection error payload:", error);
           throw error;
         }
-        
+
         if (data && isMounted) {
-          console.log("[Sync Engine] Row fetch executed successfully. Synchronizing internal UI state properties.");
           setGarment({
             id: data.id.toString(),
             name: data.name,
@@ -186,24 +185,22 @@ export default function ClothingDetailScreen() {
             is_favorite: !!data.is_favorite,
           });
         } else if (!data && isMounted) {
-          console.warn("[Sync Engine] No record row returned from Supabase. Falling back onto initial route parameter matrix.");
           setGarment({
             id: params.id,
-            name: params.name || 'Unnamed Garment',
+            name: params.name || t('clothing.detail.unnamedGarment'),
             brand: params.brand || 'Unknown Brand',
-            category: params.category || 'Uncategorized',
+            category: params.category || t('clothing.detail.uncategorized'),
             image: params.image || '',
-            color: params.color || 'N/A',
+            color: params.color || t('clothing.detail.notAvailable'),
             is_favorite: false,
           });
         }
       } catch (err: any) {
         console.error('[Sync Engine] Structural crash during network request layer execution:', err);
-        Alert.alert('Sync Disruption', 'Failed to pull updated details directly from your remote closet vault.');
+        Alert.alert(t('clothing.detail.syncError.title'), t('clothing.detail.syncError.message'));
       } finally {
         if (isMounted) {
           setIsInitialLoading(false);
-          console.log("[Sync Engine] Finished refresh synchronization cycle.");
           // Trigger animations right after loading finishes
           setTimeout(() => {
             triggerEntranceAnimations();
@@ -219,17 +216,14 @@ export default function ClothingDetailScreen() {
     };
   }, [params.id, params.refresh]);
 
-  // Toggle Favorite Action Loop with detailed tracing logs
+  // Toggle Favorite Action Loop
   const handleToggleFavorite = async () => {
     if (isFavoriteLoading || !garment.id) {
-      console.warn("[Favorite Action] Execution intercepted. Operation is currently processing or ID is null.");
       return;
     }
 
     const nextFavoriteState = !garment.is_favorite;
     const targetedId = getNormalizedId(garment.id);
-
-    console.log(`[Favorite Action] Toggling favorite state for ID: ${targetedId}. Target visual setting state:`, nextFavoriteState);
 
     // Dynamic Micro-interaction scale bounce on like
     favBtnScale.value = withSpring(1.3, SPRING_CONFIG, () => {
@@ -240,25 +234,20 @@ export default function ClothingDetailScreen() {
     setIsFavoriteLoading(true);
 
     try {
-      const { data, error, status } = await supabase
+      const { error } = await supabase
         .from('clothing_items')
         .update({ is_favorite: nextFavoriteState })
         .eq('id', targetedId)
         .select();
 
-      console.log(`[Favorite Action] Supabase update server network response details:`, { status, data, error });
-
       if (error) {
-        console.error("[Favorite Action] Supabase explicit update database write exception:", error);
         throw error;
       }
-
-      console.log("[Favorite Action] Favorite parameter committed successfully to remote persistent tables.");
     } catch (error: any) {
       console.error('[Favorite Action] Network write workflow collapsed completely:', error);
       Alert.alert(
-        'Policy Exception', 
-        `Could not save favorite configuration status. Verify that row level modifications are supported.\nDetail: ${error.message || 'RLS Lock'}`
+        t('clothing.detail.favoriteError.title'),
+        t('clothing.detail.favoriteError.message', { detail: error.message || t('clothing.detail.favoriteError.rlsLockFallback') })
       );
       setGarment(prev => ({ ...prev, is_favorite: !nextFavoriteState }));
     } finally {
@@ -268,33 +257,29 @@ export default function ClothingDetailScreen() {
 
   // Share Content Native Sheet Trigger
   const handleNativeShare = async () => {
-    console.log("[Share Action] Compiling descriptive text payload for system dialog presentation.");
     try {
-      const messagePayload = 
-        `✨ Check out this piece from my Vyra Wardrobe ✨\n\n` +
-        `• Name: ${garment.name}\n` +
-        `• Brand: ${garment.brand}\n` +
-        `• Style Classification: ${garment.category}\n` +
-        `• Tone Configuration: ${garment.color}\n` +
-        (garment.image ? `\nView Visual Asset: ${garment.image}` : '');
+      const messagePayload =
+        `${t('clothing.detail.shareMessage.header')}\n\n` +
+        `${t('clothing.detail.shareMessage.name', { name: garment.name })}\n` +
+        `${t('clothing.detail.shareMessage.brand', { brand: garment.brand })}\n` +
+        `${t('clothing.detail.shareMessage.category', { category: garment.category })}\n` +
+        `${t('clothing.detail.shareMessage.color', { color: garment.color })}\n` +
+        (garment.image ? t('clothing.detail.shareMessage.image', { image: garment.image }) : '');
 
-      const outcome = await Share.share({
+      await Share.share({
         message: messagePayload,
-        title: `Vyra Wardrobe Asset - ${garment.name}`,
+        title: t('clothing.detail.shareMessage.title', { name: garment.name }),
       });
-      
-      console.log("[Share Action] Native system display sheet sequence finalized. Outcome:", outcome);
     } catch (error: any) {
       console.error('[Share Action] Native system sharing display operation collapsed:', error);
-      Alert.alert('Share Error', 'The native share operational platform rejected payload rendering.');
+      Alert.alert(t('clothing.detail.shareError.title'), t('clothing.detail.shareError.message'));
     }
   };
 
   // Pre-fill parameters and navigate to workspace edit interface module
   const handleNavigateEdit = () => {
     if (!garment.id) return;
-    console.log("[Edit Action] Passing state parameter data directly to edit screen environment router configurations:", garment);
-    
+
     router.push({
       pathname: 'clothing/edit-garment',
       params: {
@@ -308,67 +293,51 @@ export default function ClothingDetailScreen() {
     });
   };
 
-  // Cascade Deletion Workflows with robust storage cleanup and exhaustive tracking trace telemetry
+  // Cascade Deletion Workflows with robust storage cleanup
   const handleExecuteDelete = async () => {
     if (!garment.id || isDeleting) return;
 
     Alert.alert(
-      'Confirm Permanent Deletion',
-      'This operation is irreversible. This will remove this item record from your database and wipe its uploaded photo asset from storage completely.',
+      t('clothing.detail.deleteConfirm.title'),
+      t('clothing.detail.deleteConfirm.message'),
       [
-        { text: 'Cancel', style: 'cancel', onPress: () => console.log("[Delete Action] User abandoned destruction flow.") },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Delete Permanently',
+          text: t('clothing.detail.deletePermanently'),
           style: 'destructive',
           onPress: async () => {
             const targetedId = getNormalizedId(garment.id);
-            console.log(`[Delete Action] Commencing complete destruction sequence for ID: ${targetedId}`);
-            
+
             try {
               setIsDeleting(true);
 
               // 1. Storage Asset Cleanup Layer
               if (garment.image && garment.image.includes('/storage/v1/object/public/garments/')) {
-                console.log("[Delete Action] Parsing absolute asset path string to identify bucket coordinate names.");
                 const parsedFileName = garment.image.split('/garments/').pop();
-                
+
                 if (parsedFileName) {
-                  console.log(`[Delete Action] Attempting to purge file object from bucket path target: "garments/${parsedFileName}"`);
-                  const { data: storageData, error: storagePurgeError } = await supabase.storage
+                  const { error: storagePurgeError } = await supabase.storage
                     .from('garments')
                     .remove([parsedFileName]);
 
-                  console.log("[Delete Action] Supabase Storage cloud execution response state payload:", { storageData, storagePurgeError });
-
                   if (storagePurgeError) {
                     console.error("[Delete Action] Non-blocking warn exception: Cloud object asset file could not be dropped from storage:", storagePurgeError);
-                  } else {
-                    console.log("[Delete Action] Storage asset dropped successfully. No orphaned binary remains.");
                   }
                 }
-              } else {
-                console.log("[Delete Action] Skipping bucket execution profile. Row asset does not contain a standard public cloud storage string identifier.");
               }
 
               // 2. Postgres Relational Row Extraction Layer
-              console.log(`[Delete Action] Dispatching SQL deletion statement row extraction command target ID: ${targetedId}`);
-              const { data: dbData, error: dbDeleteError, status } = await supabase
+              const { error: dbDeleteError } = await supabase
                 .from('clothing_items')
                 .delete()
                 .eq('id', targetedId)
                 .select();
 
-              console.log(`[Delete Action] Supabase database transaction table delete network server feedback:`, { status, dbData, dbDeleteError });
-
               if (dbDeleteError) {
-                console.error("[Delete Action] Core transaction abort execution error. Supabase rejected relational write rule mapping:", dbDeleteError);
                 throw dbDeleteError;
               }
 
-              console.log("[Delete Action] Database relational coordinate map tracking row removed successfully.");
-
-              // 3. Complete context validation loop and return control back with an active cache-breaking parameter token
-              console.log("[Delete Action] Re-routing user dashboard tracking back safely onto root closet view parameters.");
+              // 3. Return control back with an active cache-breaking parameter token
               router.replace({
                 pathname: '/(tabs)/closet',
                 params: { refresh: `deleted-${Date.now()}` },
@@ -376,7 +345,7 @@ export default function ClothingDetailScreen() {
 
             } catch (err: any) {
               console.error('[Delete Action] Critical processing system breakdown error during cascade deletion pipeline:', err);
-              Alert.alert('Deletion Intercepted', err.message || 'Database constraints or Row-Level security rejected table structural drop statements.');
+              Alert.alert(t('clothing.detail.deleteError.title'), err.message || t('clothing.detail.deleteError.message'));
             } finally {
               setIsDeleting(false);
             }
@@ -457,9 +426,9 @@ export default function ClothingDetailScreen() {
   if (isInitialLoading) {
     return (
       <PremiumScreen>
-        <View style={styles.centeredLoaderContainer}>
-          <ActivityIndicator size="small" color="#1C1917" />
-          <Text style={styles.loadingProgressMessageText}>Synchronizing Wardrobe Profile...</Text>
+        <View style={[styles.centeredLoaderContainer, { backgroundColor: theme.colors.background }]}>
+          <ActivityIndicator size="small" color={theme.colors.textPrimary} />
+          <Text style={[styles.loadingProgressMessageText, { color: theme.colors.textSecondary }]}>{t('clothing.detail.loading')}</Text>
         </View>
       </PremiumScreen>
     );
@@ -467,14 +436,14 @@ export default function ClothingDetailScreen() {
 
   return (
     <PremiumScreen>
-      {/* Absolute Header Navigation Overlay */}
+      {/* Absolute Header Navigation Overlay — floats on top of the garment photo, so the
+          pill background and icon colors stay fixed regardless of theme (photo-context) */}
       <Animated.View style={[styles.navBarFloatingOverlay, animatedNavBarStyle]}>
-        <Pressable 
+        <Pressable
           onPressIn={() => { backBtnScale.value = withSpring(0.9, SPRING_CONFIG); }}
           onPressOut={() => { backBtnScale.value = withSpring(1, SPRING_CONFIG); }}
-          style={styles.navCircleActionButton} 
+          style={styles.navCircleActionButton}
           onPress={() => {
-            console.log("[Navigation] Returning control focus back to home closet context.");
             router.replace({ pathname: '/(tabs)/closet', params: { refresh: `back-${Date.now()}` } });
           }}
         >
@@ -482,28 +451,28 @@ export default function ClothingDetailScreen() {
             <Ionicons name="arrow-back" size={20} color="#1C1917" />
           </Animated.View>
         </Pressable>
-        
+
         <View style={styles.navActionRightBlock}>
-          <Pressable 
+          <Pressable
             onPressIn={() => { favBtnScale.value = withSpring(0.9, SPRING_CONFIG); }}
             onPressOut={() => { favBtnScale.value = withSpring(1, SPRING_CONFIG); }}
-            style={styles.navCircleActionButton} 
+            style={styles.navCircleActionButton}
             onPress={handleToggleFavorite}
             disabled={isFavoriteLoading}
           >
             <Animated.View style={animatedFavBtnStyle}>
-              <Ionicons 
-                name={garment.is_favorite ? "heart" : "heart-outline"} 
-                size={20} 
-                color={garment.is_favorite ? "#DC2626" : "#1C1917"} 
+              <Ionicons
+                name={garment.is_favorite ? "heart" : "heart-outline"}
+                size={20}
+                color={garment.is_favorite ? "#DC2626" : "#1C1917"}
               />
             </Animated.View>
           </Pressable>
-          
-          <Pressable 
+
+          <Pressable
             onPressIn={() => { shareBtnScale.value = withSpring(0.9, SPRING_CONFIG); }}
             onPressOut={() => { shareBtnScale.value = withSpring(1, SPRING_CONFIG); }}
-            style={styles.navCircleActionButton} 
+            style={styles.navCircleActionButton}
             onPress={handleNativeShare}
           >
             <Animated.View style={animatedShareBtnStyle}>
@@ -515,67 +484,68 @@ export default function ClothingDetailScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollLayout}>
         {/* Core Hero Showcase Image Framework */}
-        <Animated.View style={[styles.heroImageFrame, animatedHeroStyle]}>
+        <Animated.View style={[styles.heroImageFrame, { backgroundColor: theme.colors.surfaceSecondary }, animatedHeroStyle]}>
           {garment.image ? (
             <>
-              <Image 
-                source={{ uri: garment.image }} 
-                style={styles.garmentCoverImage} 
+              <Image
+                source={{ uri: garment.image }}
+                style={styles.garmentCoverImage}
                 onLoadEnd={handleImageLoadComplete}
               />
               {/* Premium image loading skeleton overlay */}
               {isImageLoading && (
-                <Animated.View style={[StyleSheet.absoluteFillObject, styles.placeholderGraphicContainer, animatedSkeletonStyle]}>
-                  <ActivityIndicator size="small" color="#78716C" />
+                <Animated.View style={[StyleSheet.absoluteFillObject, styles.placeholderGraphicContainer, { backgroundColor: theme.colors.surfaceSecondary }, animatedSkeletonStyle]}>
+                  <ActivityIndicator size="small" color={theme.colors.textSecondary} />
                 </Animated.View>
               )}
             </>
           ) : (
-            <View style={[styles.garmentCoverImage, styles.placeholderGraphicContainer]}>
-              <Ionicons name="shirt-outline" size={48} color="#A8A29E" />
+            <View style={[styles.garmentCoverImage, styles.placeholderGraphicContainer, { backgroundColor: theme.colors.surfaceSecondary }]}>
+              <Ionicons name="shirt-outline" size={48} color={theme.colors.textTertiary} />
             </View>
           )}
         </Animated.View>
 
         {/* Informational Presentation Shell */}
-        <View style={styles.detailCardBody}>
+        <View style={[styles.detailCardBody, { backgroundColor: theme.colors.background }]}>
           <Animated.View style={[styles.identityHeaderRow, animatedHeaderStyle]}>
             <SectionHeader
               title={garment.name}
               subtitle={garment.brand}
               style={styles.headerFlexOverride}
             />
-            <View style={styles.categoryBadgeContainer}>
-              <Text style={styles.categoryBadgeText}>{garment.category}</Text>
+            <View style={[styles.categoryBadgeContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+              <Text style={[styles.categoryBadgeText, { color: theme.colors.textSecondary }]}>{garment.category}</Text>
             </View>
           </Animated.View>
 
           {/* Attribute Structured Parameters Data Grid */}
           <View style={styles.attributesSection}>
             <Animated.View style={animatedSpecsTitleStyle}>
-              <SectionTitle withBottomMargin>Garment Details</SectionTitle>
+              <SectionTitle withBottomMargin>{t('clothing.detail.sectionTitle')}</SectionTitle>
             </Animated.View>
-            
-            <View style={styles.attributesSpecificationGrid}>
-              <Animated.View style={[styles.gridAttributeCell, animatedCardOneStyle]}>
-                <Text style={styles.attributeLabelText}>Color</Text>
+
+            <View style={[styles.attributesSpecificationGrid, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }]}>
+              <Animated.View style={[styles.gridAttributeCell, { borderColor: theme.colors.divider }, animatedCardOneStyle]}>
+                <Text style={[styles.attributeLabelText, { color: theme.colors.textSecondary }]}>{t('clothing.detail.colorLabel')}</Text>
                 <View style={styles.colorIndicatorRow}>
-                  <View 
+                  <View
                     style={[
-                      styles.colorBlockVisual, 
+                      styles.colorBlockVisual,
+                      { borderColor: theme.colors.border },
                       { backgroundColor: garment.color.startsWith('#') ? garment.color : 'transparent' }
-                    ]} 
+                    ]}
                   />
-                  <Text style={styles.attributeValueText}>
+                  <Text style={[styles.attributeValueText, { color: theme.colors.textPrimary }]}>
                     {garment.color.startsWith('#') ? garment.color.toUpperCase() : garment.color}
                   </Text>
                 </View>
               </Animated.View>
 
-              <Animated.View style={[styles.gridAttributeCell, animatedCardTwoStyle]}>
-                <Text style={styles.attributeLabelText}>Catalog ID</Text>
-                <Text style={styles.attributeValueText} numberOfLines={1}>
-                  #{garment.id ? garment.id.toString().substring(0, 8) : 'N/A'}
+              <Animated.View style={[styles.gridAttributeCell, { borderColor: theme.colors.divider }, animatedCardTwoStyle]}>
+                <Text style={[styles.attributeLabelText, { color: theme.colors.textSecondary }]}>{t('clothing.detail.catalogIdLabel')}</Text>
+                <Text style={[styles.attributeValueText, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                  #{garment.id ? garment.id.toString().substring(0, 8) : t('clothing.detail.notAvailable')}
                 </Text>
               </Animated.View>
             </View>
@@ -583,33 +553,37 @@ export default function ClothingDetailScreen() {
 
           {/* Destructive Control Management Button Group Shelf */}
           <Animated.View style={[styles.actionButtonGroupHorizontalRow, animatedButtonsStyle]}>
-            <Pressable 
+            <Pressable
               onPressIn={() => { editBtnScale.value = withSpring(0.96, SPRING_CONFIG); }}
               onPressOut={() => { editBtnScale.value = withSpring(1, SPRING_CONFIG); }}
-              style={styles.secondaryOutlineActionButton} 
+              style={[styles.secondaryOutlineActionButton, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}
               onPress={handleNavigateEdit}
               disabled={isDeleting}
             >
               <Animated.View style={[styles.buttonInnerRow, animatedEditBtnStyle]}>
-                <Ionicons name="create-outline" size={16} color="#1C1917" style={styles.actionButtonIconStyle} />
-                <Text style={styles.secondaryButtonLabelText}>Edit Item</Text>
+                <Ionicons name="create-outline" size={16} color={theme.colors.textPrimary} style={styles.actionButtonIconStyle} />
+                <Text style={[styles.secondaryButtonLabelText, { color: theme.colors.textPrimary }]}>{t('clothing.detail.editButton')}</Text>
               </Animated.View>
             </Pressable>
 
-            <Pressable 
+            <Pressable
               onPressIn={() => { deleteBtnScale.value = withSpring(0.96, SPRING_CONFIG); }}
               onPressOut={() => { deleteBtnScale.value = withSpring(1, SPRING_CONFIG); }}
-              style={[styles.destructiveOutlineActionButton, isDeleting && styles.disabledActionOpacity]} 
+              style={[
+                styles.destructiveOutlineActionButton,
+                { borderColor: dangerSoftBorder, backgroundColor: dangerSoftBg },
+                isDeleting && styles.disabledActionOpacity
+              ]}
               onPress={handleExecuteDelete}
               disabled={isDeleting}
             >
               <Animated.View style={[styles.buttonInnerRow, animatedDeleteBtnStyle]}>
                 {isDeleting ? (
-                  <ActivityIndicator size="small" color="#DC2626" />
+                  <ActivityIndicator size="small" color={theme.colors.danger} />
                 ) : (
                   <>
-                    <Ionicons name="trash-outline" size={16} color="#DC2626" style={styles.actionButtonIconStyle} />
-                    <Text style={styles.destructiveButtonLabelText}>Delete</Text>
+                    <Ionicons name="trash-outline" size={16} color={theme.colors.danger} style={styles.actionButtonIconStyle} />
+                    <Text style={[styles.destructiveButtonLabelText, { color: theme.colors.danger }]}>{t('common.delete')}</Text>
                   </>
                 )}
               </Animated.View>
@@ -655,7 +629,6 @@ const styles = StyleSheet.create({
   heroImageFrame: {
     width: width,
     height: width * 1.25,
-    backgroundColor: '#F5F5F4',
   },
   garmentCoverImage: {
     width: '100%',
@@ -665,11 +638,9 @@ const styles = StyleSheet.create({
   placeholderGraphicContainer: {
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#E7E5E4',
   },
   detailCardBody: {
     marginTop: -24,
-    backgroundColor: '#FAFAF9',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingTop: 24,
@@ -686,9 +657,7 @@ const styles = StyleSheet.create({
     paddingRight: 16,
   },
   categoryBadgeContainer: {
-    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E7E5E4',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -697,7 +666,6 @@ const styles = StyleSheet.create({
   categoryBadgeText: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#78716C',
   },
   attributesSection: {
     marginTop: 24,
@@ -706,12 +674,9 @@ const styles = StyleSheet.create({
   attributesSpecificationGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#E7E5E4',
     padding: 4,
-    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.01,
     shadowRadius: 3,
@@ -721,11 +686,9 @@ const styles = StyleSheet.create({
     width: '50%',
     padding: 16,
     borderWidth: 0.5,
-    borderColor: '#F5F5F4',
   },
   attributeLabelText: {
     fontSize: 11,
-    color: '#78716C',
     fontWeight: '500',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -734,7 +697,6 @@ const styles = StyleSheet.create({
   attributeValueText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#1C1917',
   },
   colorIndicatorRow: {
     flexDirection: 'row',
@@ -746,7 +708,6 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     marginRight: 6,
     borderWidth: 1,
-    borderColor: '#E7E5E4',
   },
   actionButtonGroupHorizontalRow: {
     flexDirection: 'row',
@@ -765,26 +726,20 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E7E5E4',
-    backgroundColor: '#FFFFFF',
   },
   secondaryButtonLabelText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#1C1917',
   },
   destructiveOutlineActionButton: {
     flex: 1,
     height: 48,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#FCA5A5',
-    backgroundColor: '#FFF5F5',
   },
   destructiveButtonLabelText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#DC2626',
   },
   actionButtonIconStyle: {
     marginRight: 6,
@@ -796,11 +751,9 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FAFAF9',
   },
   loadingProgressMessageText: {
     fontSize: 12,
-    color: '#78716C',
     marginTop: 12,
     fontWeight: '500',
     letterSpacing: 0.3,

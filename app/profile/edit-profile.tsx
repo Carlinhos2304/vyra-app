@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  StyleSheet, 
-  View, 
-  Alert, 
-  TouchableOpacity, 
-  Text, 
-  ScrollView, 
-  ActionSheetIOS, 
-  Platform, 
-  Modal, 
+import {
+  StyleSheet,
+  View,
+  Alert,
+  TouchableOpacity,
+  Text,
+  ScrollView,
+  ActionSheetIOS,
+  Platform,
+  Modal,
   TouchableWithoutFeedback,
   ActivityIndicator
 } from 'react-native';
@@ -24,6 +24,8 @@ import { PremiumLoader } from '../../components/ui/PremiumLoader';
 import { SectionTitle } from '../../components/ui/SectionTitle';
 
 import { supabase } from '../../lib/supabase';
+import { useTheme } from '../../theme';
+import { useLanguage } from '../../i18n';
 
 interface UserProfileFormState {
   username: string;
@@ -31,9 +33,16 @@ interface UserProfileFormState {
   gender: string;
 }
 
-const GENDER_OPTIONS = ['Male', 'Female', 'Non-binary', 'Prefer not to say'];
+const GENDER_OPTIONS = [
+  { id: 'Male', labelKey: 'profile.editProfile.genderOptions.male' },
+  { id: 'Female', labelKey: 'profile.editProfile.genderOptions.female' },
+  { id: 'Non-binary', labelKey: 'profile.editProfile.genderOptions.nonBinary' },
+  { id: 'Prefer not to say', labelKey: 'profile.editProfile.genderOptions.preferNotToSay' },
+];
 
 export default function EditProfileScreen() {
+  const { theme } = useTheme();
+  const { t } = useLanguage();
   const [profileForm, setProfileForm] = useState<UserProfileFormState>({
     username: '',
     birth_date: '',
@@ -54,7 +63,7 @@ export default function EditProfileScreen() {
         const { data: { user }, error: authError } = await supabase.auth.getUser();
 
         if (authError || !user) {
-          throw new Error('User not authenticated.');
+          throw new Error(t('profile.editProfile.errors.notAuthenticated'));
         }
 
         setUserId(user.id);
@@ -77,7 +86,7 @@ export default function EditProfileScreen() {
           });
         }
       } catch (error: any) {
-        Alert.alert('Error loading profile', error.message);
+        Alert.alert(t('profile.editProfile.errors.loadProfileTitle'), error.message);
         router.back();
       } finally {
         setIsLoading(false);
@@ -105,13 +114,13 @@ export default function EditProfileScreen() {
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
         {
-          options: [...GENDER_OPTIONS, 'Cancel'],
+          options: [...GENDER_OPTIONS.map((option) => t(option.labelKey)), t('common.cancel')],
           cancelButtonIndex: GENDER_OPTIONS.length,
-          title: 'Select Gender',
+          title: t('profile.editProfile.selectGenderTitle'),
         },
         (buttonIndex) => {
           if (buttonIndex < GENDER_OPTIONS.length) {
-            handleInputChange('gender', GENDER_OPTIONS[buttonIndex]);
+            handleInputChange('gender', GENDER_OPTIONS[buttonIndex].id);
           }
         }
       );
@@ -122,7 +131,7 @@ export default function EditProfileScreen() {
 
   const handleSaveProfile = async () => {
     if (!userId) {
-      Alert.alert('Error', 'User ID not found.');
+      Alert.alert(t('profile.editProfile.errors.userIdNotFoundTitle'), t('profile.editProfile.errors.userIdNotFoundMessage'));
       return;
     }
 
@@ -137,10 +146,10 @@ export default function EditProfileScreen() {
         throw error;
       }
 
-      Alert.alert('Success', 'Profile updated successfully!');
+      Alert.alert(t('profile.editProfile.success.title'), t('profile.editProfile.success.message'));
       router.back();
     } catch (error: any) {
-      Alert.alert('Error saving profile', error.message);
+      Alert.alert(t('profile.editProfile.errors.saveProfileTitle'), error.message);
     } finally {
       setIsSaving(false);
     }
@@ -154,37 +163,40 @@ export default function EditProfileScreen() {
     return new Date(2000, 0, 1);
   };
 
+  const selectedGenderOption = GENDER_OPTIONS.find((option) => option.id === profileForm.gender);
+  const genderDisplayValue = selectedGenderOption ? t(selectedGenderOption.labelKey) : profileForm.gender;
+
   if (isLoading) {
     return (
-      <PremiumScreen style={styles.loaderContainer}>
-        <PremiumLoader label="Loading profile..." />
+      <PremiumScreen style={[styles.loaderContainer, { backgroundColor: theme.colors.background }]}>
+        <PremiumLoader label={t('profile.editProfile.loadingProfile')} />
       </PremiumScreen>
     );
   }
 
   return (
     <PremiumScreen>
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
         {/* Header Section */}
         <View style={styles.headerContainer}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton} activeOpacity={0.7}>
-            <Ionicons name="arrow-back" size={22} color="#1C1917" />
+            <Ionicons name="arrow-back" size={22} color={theme.colors.textPrimary} />
           </TouchableOpacity>
-          <SectionHeader title="Edit Profile" style={styles.sectionHeaderOverride} />
+          <SectionHeader title={t('profile.editProfile.title')} style={styles.sectionHeaderOverride} />
         </View>
 
         {/* Form Body Scroll Arena */}
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-          
+
           {/* Section 1: Profile Information Card */}
           <View style={styles.sectionBlock}>
-            <SectionTitle withBottomMargin>Profile identity</SectionTitle>
-            <View style={styles.formGroupCard}>
+            <SectionTitle withBottomMargin>{t('profile.editProfile.sectionProfileIdentity')}</SectionTitle>
+            <View style={[styles.formGroupCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }]}>
               <PremiumInput
-                label="Username"
+                label={t('profile.editProfile.usernameLabel')}
                 value={profileForm.username}
                 onChangeText={(text) => handleInputChange('username', text)}
-                placeholder="Enter your username"
+                placeholder={t('profile.editProfile.usernamePlaceholder')}
                 style={styles.inputSpacingOverride}
               />
             </View>
@@ -192,43 +204,43 @@ export default function EditProfileScreen() {
 
           {/* Section 2: Personal Information Card */}
           <View style={styles.sectionBlock}>
-            <SectionTitle withBottomMargin>Personal details</SectionTitle>
-            <View style={styles.formGroupCard}>
-              
+            <SectionTitle withBottomMargin>{t('profile.editProfile.sectionPersonalDetails')}</SectionTitle>
+            <View style={[styles.formGroupCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }]}>
+
               {/* Premium Styled Interactor for Birth Date */}
-              <TouchableOpacity 
-                onPress={() => setShowDatePicker(true)} 
+              <TouchableOpacity
+                onPress={() => setShowDatePicker(true)}
                 activeOpacity={0.8}
                 style={styles.inputSpacing}
               >
                 <View pointerEvents="none">
                   <PremiumInput
-                    label="Birth Date"
+                    label={t('profile.editProfile.birthDateLabel')}
                     value={profileForm.birth_date}
-                    placeholder="Select your birth date"
+                    placeholder={t('profile.editProfile.birthDatePlaceholder')}
                     editable={false}
                   />
                 </View>
-                <Ionicons name="calendar-outline" size={18} color="#78716C" style={styles.fieldEmbedIcon} />
+                <Ionicons name="calendar-outline" size={18} color={theme.colors.textSecondary} style={styles.fieldEmbedIcon} />
               </TouchableOpacity>
-              
-              <View style={styles.rowDividerSeparator} />
+
+              <View style={[styles.rowDividerSeparator, { backgroundColor: theme.colors.divider }]} />
 
               {/* Premium Styled Interactor for Gender */}
-              <TouchableOpacity 
-                onPress={handleGenderPress} 
+              <TouchableOpacity
+                onPress={handleGenderPress}
                 activeOpacity={0.8}
                 style={styles.inputSpacingOverride}
               >
                 <View pointerEvents="none">
                   <PremiumInput
-                    label="Gender"
-                    value={profileForm.gender}
-                    placeholder="Select your gender"
+                    label={t('profile.editProfile.genderLabel')}
+                    value={genderDisplayValue}
+                    placeholder={t('profile.editProfile.genderPlaceholder')}
                     editable={false}
                   />
                 </View>
-                <Ionicons name="chevron-down" size={18} color="#78716C" style={styles.fieldEmbedIcon} />
+                <Ionicons name="chevron-down" size={18} color={theme.colors.textSecondary} style={styles.fieldEmbedIcon} />
               </TouchableOpacity>
             </View>
           </View>
@@ -252,28 +264,30 @@ export default function EditProfileScreen() {
           animationType="fade"
           onRequestClose={() => setShowGenderModal(false)}
         >
+          {/* Modal backdrop stays fixed regardless of theme, matching PremiumModal's convention */}
           <TouchableWithoutFeedback onPress={() => setShowGenderModal(false)}>
             <View style={styles.modalOverlayContainer}>
               <TouchableWithoutFeedback>
-                <View style={styles.modalContentCard}>
-                  <Text style={styles.modalTitleText}>Select Gender</Text>
+                <View style={[styles.modalContentCard, { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }]}>
+                  <Text style={[styles.modalTitleText, { color: theme.colors.textPrimary }]}>{t('profile.editProfile.selectGenderTitle')}</Text>
                   {GENDER_OPTIONS.map((option) => (
                     <TouchableOpacity
-                      key={option}
-                      style={styles.modalOptionRow}
+                      key={option.id}
+                      style={[styles.modalOptionRow, { borderColor: theme.colors.background }]}
                       onPress={() => {
-                        handleInputChange('gender', option);
+                        handleInputChange('gender', option.id);
                         setShowGenderModal(false);
                       }}
                     >
                       <Text style={[
                         styles.modalOptionText,
-                        profileForm.gender === option && styles.modalOptionTextSelected
+                        { color: theme.colors.textSecondary },
+                        profileForm.gender === option.id && { color: theme.colors.textPrimary, fontWeight: '500' }
                       ]}>
-                        {option}
+                        {t(option.labelKey)}
                       </Text>
-                      {profileForm.gender === option && (
-                        <Ionicons name="checkmark" size={18} color="#1C1917" />
+                      {profileForm.gender === option.id && (
+                        <Ionicons name="checkmark" size={18} color={theme.colors.textPrimary} />
                       )}
                     </TouchableOpacity>
                   ))}
@@ -284,20 +298,21 @@ export default function EditProfileScreen() {
         </Modal>
 
         {/* Fixed Save Button Infrastructure with Custom Design Token Requirements */}
-        <View style={styles.saveButtonContainer}>
+        <View style={[styles.saveButtonContainer, { backgroundColor: theme.colors.background, borderColor: theme.colors.divider }]}>
           <TouchableOpacity
             onPress={handleSaveProfile}
             activeOpacity={0.85}
             disabled={isSaving}
             style={[
               styles.customPremiumButton,
+              { backgroundColor: theme.colors.accent },
               isSaving && styles.customPremiumButtonDisabled
             ]}
           >
             {isSaving ? (
-              <ActivityIndicator size="small" color="#FAFAF9" />
+              <ActivityIndicator size="small" color={theme.colors.accentForeground} />
             ) : (
-              <Text style={styles.customPremiumButtonText}>Save Changes</Text>
+              <Text style={[styles.customPremiumButtonText, { color: theme.colors.accentForeground }]}>{t('profile.editProfile.saveChanges')}</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -309,13 +324,11 @@ export default function EditProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAFAF9',
   },
   loaderContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FAFAF9',
   },
   scrollContent: {
     paddingBottom: 140, // Keeps content well above the floating dock layout boundary
@@ -342,15 +355,12 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   formGroupCard: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E7E5E4',
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 4,
     overflow: 'hidden',
-    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.02,
     shadowRadius: 2,
@@ -371,7 +381,6 @@ const styles = StyleSheet.create({
   },
   rowDividerSeparator: {
     height: 1,
-    backgroundColor: '#F5F5F4',
     marginHorizontal: 4,
     marginBottom: 16,
   },
@@ -380,17 +389,14 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#FAFAF9',
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 32,
     borderTopWidth: 1,
-    borderColor: '#F5F5F4',
   },
   customPremiumButton: {
     width: '100%',
     height: 56,
-    backgroundColor: '#1C1917',
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
@@ -399,7 +405,6 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   customPremiumButtonText: {
-    color: '#FAFAF9',
     fontSize: 16,
     fontWeight: '600',
     letterSpacing: -0.2, // Subtle tracking reduction to pair seamlessly with Vyra headers
@@ -413,12 +418,9 @@ const styles = StyleSheet.create({
   },
   modalContentCard: {
     width: '100%',
-    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#E7E5E4',
     padding: 24,
-    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.06,
     shadowRadius: 12,
@@ -427,7 +429,6 @@ const styles = StyleSheet.create({
   modalTitleText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1C1917',
     marginBottom: 16,
     letterSpacing: -0.3,
   },
@@ -437,15 +438,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderColor: '#FAFAF9',
   },
   modalOptionText: {
     fontSize: 15,
-    color: '#78716C',
     fontWeight: '400',
-  },
-  modalOptionTextSelected: {
-    color: '#1C1917',
-    fontWeight: '500',
   },
 });

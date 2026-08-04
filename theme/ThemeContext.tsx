@@ -8,6 +8,7 @@ type ThemeType = 'light' | 'dark' | 'system';
 type ThemeContextType = {
   theme: Theme;
   themeType: ThemeType;
+  isDark: boolean;
   setThemeType: (type: ThemeType) => void;
 };
 
@@ -72,7 +73,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   if (!isLoaded) return null;
 
   return (
-    <ThemeContext.Provider value={{ theme, themeType, setThemeType }}>
+    <ThemeContext.Provider value={{ theme, themeType, isDark: theme.dark, setThemeType }}>
       <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
         {children}
       </Animated.View>

@@ -21,11 +21,11 @@ export const SectionHeader: React.FC<SectionHeaderProps> = ({
   const { theme } = useTheme();
   return (
     <View style={[styles.container, style]} {...props}>
-      <Text style={[styles.title, { color: theme.colors.primary }]}>
+      <Text style={[styles.title, { color: theme.colors.accent }]}>
         {title.toUpperCase()}
       </Text>
       {subtitle && (
-        <Text style={[styles.subtitle, { color: theme.colors.text }]}>
+        <Text style={[styles.subtitle, { color: theme.colors.textPrimary }]}>
           {subtitle}
         </Text>
       )}

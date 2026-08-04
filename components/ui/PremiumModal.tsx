@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { StyleSheet, View, Animated, Pressable, Modal, Dimensions } from 'react-native';
 import { MOTION } from '../../constants/motion';
+import { useTheme } from '../../theme';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -11,6 +12,7 @@ interface PremiumModalProps {
 }
 
 export const PremiumModal: React.FC<PremiumModalProps> = ({ isVisible, onClose, children }) => {
+  const { theme } = useTheme();
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   const panelTranslateY = useRef(new Animated.Value(40)).current;
   const panelOpacity = useRef(new Animated.Value(0)).current;
@@ -73,10 +75,13 @@ export const PremiumModal: React.FC<PremiumModalProps> = ({ isVisible, onClose, 
           <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]} />
         </Pressable>
 
-        <Animated.View 
+        <Animated.View
           style={[
             styles.modalContentCard,
             {
+              backgroundColor: theme.colors.surfaceElevated,
+              borderColor: theme.colors.border,
+              shadowColor: theme.colors.shadow,
               opacity: panelOpacity,
               transform: [{ translateY: panelTranslateY }]
             }
@@ -102,12 +107,9 @@ const styles = StyleSheet.create({
   },
   modalContentCard: {
     width: '100%',
-    backgroundColor: '#FAFAF9',
     borderRadius: 24,
     padding: 24,
     borderWidth: 1,
-    borderColor: '#E7E5E4',
-    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.04,
     shadowRadius: 12,

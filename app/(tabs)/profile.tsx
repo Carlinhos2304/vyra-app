@@ -16,20 +16,22 @@ import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { SectionTitle } from '../../components/ui/SectionTitle';
 import { PremiumLoader } from '../../components/ui/PremiumLoader';
-import { useTheme } from '../../theme';
+import { PremiumTouchable } from '../../components/ui/PremiumTouchable';
 import { useNotifications } from '../../hooks/useNotifications';
+import { useTheme } from '../../theme';
+import { useLanguage, LanguageType } from '../../i18n';
 
 // Supabase client instance integration
 import { supabase } from '../../lib/supabase';
 
 // React Native Reanimated v4 Integrations
-import Animated, { 
-  useSharedValue, 
-  useAnimatedStyle, 
-  withTiming, 
-  withDelay, 
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withDelay,
   withSpring,
-  Easing 
+  Easing
 } from 'react-native-reanimated';
 
 const { width } = Dimensions.get('window');
@@ -44,35 +46,56 @@ interface UserProfileState {
   email: string;
 }
 
-const MENU_SECTIONS = [
-  {
-    title: 'My Activity',
-    items: [
-      { id: 'favs', label: 'Favorites', icon: 'heart-outline', type: 'chevron', badge: '0' },
-      { id: 'history', label: 'History Log', icon: 'history', type: 'chevron' },
-    ],
-  },
-  {
-    title: 'Preferences',
-    items: [
-      { id: 'notifications', label: 'Push Notifications', icon: 'bell-outline', type: 'toggle' },
-      { id: 'dark_mode', label: 'Dark Mode', subtitle: 'Switch between Light and Dark appearance', icon: 'theme-light-dark', type: 'theme_toggle' },
-    ],
-  },
-  {
-    title: 'Account & Security',
-    items: [
-      { id: 'edit_prof', label: 'Edit Profile', icon: 'account-edit-outline', type: 'chevron' },
-      { id: 'logout', label: 'Log Out', icon: 'logout', type: 'action', danger: true },
-    ],
-  },
-];
+function buildMenuSections(t: (key: string) => string) {
+  return [
+    {
+      title: t('profile.main.sectionMyActivity'),
+      items: [
+        { id: 'favs', label: t('profile.main.favorites'), icon: 'heart-outline', type: 'chevron', badge: '0' },
+        { id: 'history', label: t('profile.main.historyLog'), icon: 'history', type: 'chevron' },
+      ],
+    },
+    {
+      title: t('profile.main.sectionPreferences'),
+      items: [
+        { id: 'appearance', label: t('profile.main.appearance'), icon: 'theme-light-dark', type: 'segmented' },
+        { id: 'language', label: t('profile.main.language'), icon: 'translate', type: 'language-segmented' },
+        { id: 'notifications', label: t('profile.main.pushNotifications'), icon: 'bell-outline', type: 'toggle' },
+      ],
+    },
+    {
+      title: t('profile.main.sectionAccountSecurity'),
+      items: [
+        { id: 'edit_prof', label: t('profile.main.editProfile'), icon: 'account-edit-outline', type: 'chevron' },
+        { id: 'logout', label: t('profile.main.logOut'), icon: 'logout', type: 'action', danger: true },
+      ],
+    },
+  ];
+}
+
+function buildAppearanceOptions(t: (key: string) => string): { id: 'light' | 'dark' | 'system'; label: string }[] {
+  return [
+    { id: 'light', label: t('profile.main.appearanceLight') },
+    { id: 'dark', label: t('profile.main.appearanceDark') },
+    { id: 'system', label: t('profile.main.appearanceSystem') },
+  ];
+}
+
+function buildLanguageOptions(t: (key: string) => string): { id: LanguageType; label: string }[] {
+  return [
+    { id: 'en', label: t('profile.main.languageEnglish') },
+    { id: 'es', label: t('profile.main.languageSpanish') },
+  ];
+}
 
 export default function ProfileScreen() {
   const { theme, themeType, setThemeType } = useTheme();
-  const { syncNotifications } = useNotifications();
-  
+  const { t, language, setLanguage } = useLanguage();
+  const MENU_SECTIONS = buildMenuSections(t);
+  const APPEARANCE_OPTIONS = buildAppearanceOptions(t);
+  const LANGUAGE_OPTIONS = buildLanguageOptions(t);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const { syncNotifications } = useNotifications();
 
   const [profile, setProfile] = useState<UserProfileState | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -192,13 +215,12 @@ export default function ProfileScreen() {
     try {
       setIsLoading(true);
       setError(null);
-      console.log('[Profile Sync] Resolving secure active authentication token...');
 
       const { data: { user }, error: authError } = await supabase.auth.getUser();
 
       if (authError || !user) {
         console.error('[Profile Sync Error] User token evaluation failed or session missing:', authError);
-        setError('No active credentials verified.');
+        setError(t('profile.main.noActiveCredentials'));
         setIsLoading(false);
         return;
       }
@@ -230,7 +252,7 @@ export default function ProfileScreen() {
         .from('clothing_items')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user.id);
-      
+
       const stableGarmentsCount = totalGarments || 0;
       setGarmentsCount(stableGarmentsCount);
 
@@ -294,7 +316,7 @@ export default function ProfileScreen() {
 
     } catch (err: any) {
       console.error('[Profile Processing Breakdown Exception]:', err);
-      setError(err.message || 'An unhandled exception occurred while assembling profile attributes.');
+      setError(err.message || t('profile.main.unhandledException'));
     } finally {
       setIsLoading(false);
     }
@@ -306,12 +328,12 @@ export default function ProfileScreen() {
 
   const handleSystemSignOutRequest = () => {
     Alert.alert(
-      'Log Out Account',
-      'Are you sure you want to log out of your Vyra profile session?',
+      t('profile.main.logOutDialogTitle'),
+      t('profile.main.logOutDialogMessage'),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Log Out', 
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('profile.main.logOut'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -319,7 +341,7 @@ export default function ProfileScreen() {
               if (logOutError) throw logOutError;
               router.replace('/auth/login');
             } catch (err: any) {
-              Alert.alert('Session Error', 'An unexpected error occurred while processing your log-out request.');
+              Alert.alert(t('profile.main.sessionErrorTitle'), t('profile.main.sessionErrorMessage'));
             }
           }
         }
@@ -341,17 +363,13 @@ export default function ProfileScreen() {
       if (error) throw error;
       await syncNotifications(value);
     } catch (err) {
-      Alert.alert('Error', 'Could not update notification settings.');
+      Alert.alert(t('common.error'), t('profile.main.notificationsErrorMessage'));
       setNotificationsEnabled(!value);
     }
   };
 
-  const handleToggleDarkMode = (enabled: boolean) => {
-    setThemeType(enabled ? 'dark' : 'light');
-  };
-
   const handleItemNavigationTriggers = (item: any) => {
-    if (item.type === 'action' && item.label === 'Log Out') {
+    if (item.type === 'action' && item.id === 'logout') {
       handleSystemSignOutRequest();
     } else if (item.id === 'edit_prof') {
       router.push('/profile/edit-profile');
@@ -366,71 +384,69 @@ export default function ProfileScreen() {
     if (profile?.avatar_url) {
       return { uri: profile.avatar_url };
     }
+    // Not user-visible text — just the seed name ui-avatars.com uses to
+    // generate placeholder initials, so it's intentionally not translated.
     const cleanLabelFallback = profile?.username || 'User';
     return { uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(cleanLabelFallback)}&background=F5F5F4&color=1C1917&size=200` };
   };
 
   const DYNAMIC_STATS = [
-    { id: 1, label: 'Garments', value: String(garmentsCount), icon: 'hanger' },
-    { id: 2, label: 'Outfits', value: String(outfitsCount), icon: 'sparkles' },
-    { id: 3, label: 'This Week', value: String(weeklyCount), icon: 'calendar-blank' },
+    { id: 1, label: t('profile.main.statGarments'), value: String(garmentsCount), icon: 'hanger' },
+    { id: 2, label: t('profile.main.statOutfits'), value: String(outfitsCount), icon: 'sparkles' },
+    { id: 3, label: t('profile.main.statThisWeek'), value: String(weeklyCount), icon: 'calendar-blank' },
   ];
 
   const DYNAMIC_MENU_SECTIONS = MENU_SECTIONS.map(section => {
-    if (section.title === 'My Activity') {
-      return {
-        ...section,
-        items: section.items.map(item =>
-          item.label === 'Favorites' ? { ...item, badge: String(favoritesCount) } : item
-        )
-      };
-    }
-    return section;
+    return {
+      ...section,
+      items: section.items.map(item =>
+        item.id === 'favs' ? { ...item, badge: String(favoritesCount) } : item
+      )
+    };
   });
 
   return (
     <PremiumScreen>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        
+
         {/* Main Content Animated Assembly Area */}
         <Animated.View style={[styles.mainLayoutWrapper, animatedScreenStyle]}>
-          
+
           <View style={styles.headerRow}>
-            <SectionHeader 
-              title="Profile" 
+            <SectionHeader
+              title={t('profile.main.title')}
               style={styles.headerFlexOverride}
             />
             {/* Settings button with spring interactive gesture scaling */}
-            <Pressable 
-              style={styles.settingsIconButton} 
+            <Pressable
+              style={styles.settingsIconButton}
               onPressIn={() => { settingsBtnScale.value = withSpring(0.92); }}
               onPressOut={() => { settingsBtnScale.value = withSpring(1); }}
-              onPress={() => console.log('Settings Interaction Link Activated')}
             >
               <Animated.View style={animatedSettingsBtnStyle}>
-                <Ionicons name="settings-outline" size={22} color={theme.colors.text} />
+                <Ionicons name="settings-outline" size={22} color={theme.colors.textPrimary} />
               </Animated.View>
             </Pressable>
           </View>
 
           {isLoading ? (
             <View style={styles.stateCenterLoaderFrame}>
-              <PremiumLoader label="Syncing profile files..." />
+              <PremiumLoader label={t('profile.main.loadingProfile')} />
             </View>
           ) : error ? (
             <View style={styles.stateCenterLoaderFrame}>
-              <MaterialCommunityIcons name="cloud-off-outline" size={32} color="#EF4444" />
-              <Text style={[styles.errorHeaderTypography, { color: theme.colors.text }]}>Profile Load Fault</Text>
-              <Text style={[styles.errorSubTypography, { color: theme.colors.secondaryText }]}>{error}</Text>
-              
-              <Pressable 
-                style={styles.retryControlActionButton} 
+              <MaterialCommunityIcons name="cloud-off-outline" size={32} color={theme.colors.danger} />
+              <Text style={[styles.errorHeaderTypography, { color: theme.colors.textPrimary }]}>{t('profile.main.loadFaultTitle')}</Text>
+              <Text style={[styles.errorSubTypography, { color: theme.colors.textSecondary }]}>{error}</Text>
+
+              <Pressable
+                style={[styles.retryControlActionButton, { backgroundColor: theme.colors.accent }]}
                 onPressIn={() => { retryBtnScale.value = withSpring(0.95); }}
                 onPressOut={() => { retryBtnScale.value = withSpring(1); }}
                 onPress={fetchActiveUserProfileAndMetrics}
               >
                 <Animated.View style={animatedRetryBtnStyle}>
-                  <Text style={styles.retryButtonLabelText}>Retry Connection</Text>
+                  <Text style={[styles.retryButtonLabelText, { color: theme.colors.accentForeground }]}>{t('profile.main.retryConnection')}</Text>
                 </Animated.View>
               </Pressable>
             </View>
@@ -440,38 +456,38 @@ export default function ProfileScreen() {
               <Animated.View style={[styles.profileHero, animatedLogoStyle]}>
                 <Image
                   source={resolveProfileAvatarSource()}
-                  style={styles.avatarImage}
+                  style={[styles.avatarImage, { backgroundColor: theme.colors.surfaceSecondary }]}
                 />
                 <Animated.View style={[styles.metaTextWrapper, animatedNameStyle]}>
-                  <Text style={[styles.profileName, { color: theme.colors.text }]}>{profile?.username}</Text>
-                  <Text style={[styles.profileEmail, { color: theme.colors.secondaryText }]}>{profile?.email}</Text>
+                  <Text style={[styles.profileName, { color: theme.colors.textPrimary }]}>{profile?.username}</Text>
+                  <Text style={[styles.profileEmail, { color: theme.colors.textSecondary }]}>{profile?.email}</Text>
                 </Animated.View>
               </Animated.View>
 
               {/* Dynamic Stats Row Grid */}
               <Animated.View style={[styles.statsRowGrid, animatedStatsStyle]}>
                 {DYNAMIC_STATS.map((stat) => (
-                  <View key={stat.id} style={[styles.statMiniCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-                    <MaterialCommunityIcons name={stat.icon as any} size={20} color={theme.colors.secondaryText} style={styles.statIcon} />
-                    <Text style={[styles.statValueText, { color: theme.colors.text }]}>{stat.value}</Text>
-                    <Text style={[styles.statLabelText, { color: theme.colors.secondaryText }]}>{stat.label}</Text>
+                  <View key={stat.id} style={[styles.statMiniCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }]}>
+                    <MaterialCommunityIcons name={stat.icon as any} size={20} color={theme.colors.textSecondary} style={styles.statIcon} />
+                    <Text style={[styles.statValueText, { color: theme.colors.textPrimary }]}>{stat.value}</Text>
+                    <Text style={[styles.statLabelText, { color: theme.colors.textSecondary }]}>{stat.label}</Text>
                   </View>
                 ))}
               </Animated.View>
 
               {/* Style Preferences Section */}
               <Animated.View style={[styles.sectionBlock, animatedTagsStyle]}>
-                <SectionTitle withBottomMargin>Style Preferences</SectionTitle>
+                <SectionTitle withBottomMargin>{t('profile.main.stylePreferencesTitle')}</SectionTitle>
                 <View style={styles.tagsContainerRow}>
                   {stylePreferences.length > 0 ? (
                     stylePreferences.map((preference, index) => (
-                      <View key={index} style={[styles.preferenceTagBadge, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-                        <Text style={[styles.preferenceTagText, { color: theme.colors.text }]}>{preference}</Text>
+                      <View key={index} style={[styles.preferenceTagBadge, { backgroundColor: theme.colors.surfaceSecondary, borderColor: theme.colors.border }]}>
+                        <Text style={[styles.preferenceTagText, { color: theme.colors.textPrimary }]}>{preference}</Text>
                       </View>
                     ))
                   ) : (
                     <View style={styles.emptyPreferencesTagBadge}>
-                      <Text style={[styles.emptyPreferencesTagText, { color: theme.colors.secondaryText }]}>No style profile generated yet</Text>
+                      <Text style={[styles.emptyPreferencesTagText, { color: theme.colors.textSecondary }]}>{t('profile.main.noStyleProfileYet')}</Text>
                     </View>
                   )}
                 </View>
@@ -482,35 +498,121 @@ export default function ProfileScreen() {
                 {DYNAMIC_MENU_SECTIONS.map((section, sectionIdx) => (
                   <View key={sectionIdx} style={styles.menuSectionSpacer}>
                     <SectionTitle withBottomMargin>{section.title}</SectionTitle>
-                    <View style={[styles.menuGroupCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                    <View style={[styles.menuGroupCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }]}>
                       {section.items.map((item, itemIdx) => {
                         const isLastItem = itemIdx === section.items.length - 1;
+
+                        if (item.type === 'segmented') {
+                          // "Appearance" — the entry point for the theme system
+                          // built for this feature (Light / Dark / System),
+                          // driven by ThemeContext.setThemeType.
+                          return (
+                            <View key={item.id}>
+                              <View style={[styles.menuRowItem, styles.appearanceRow]}>
+                                <View style={styles.menuRowLeftBlock}>
+                                  <MaterialCommunityIcons
+                                    name={item.icon as any}
+                                    size={20}
+                                    color={theme.colors.textSecondary}
+                                    style={styles.menuItemIcon}
+                                  />
+                                  <Text style={[styles.menuItemLabel, { color: theme.colors.textPrimary }]}>
+                                    {item.label}
+                                  </Text>
+                                </View>
+                                <View style={[styles.appearanceSegmentedTrack, { backgroundColor: theme.colors.surfaceSecondary, borderColor: theme.colors.border }]}>
+                                  {APPEARANCE_OPTIONS.map((option) => {
+                                    const isActive = themeType === option.id;
+                                    return (
+                                      <PremiumTouchable
+                                        key={option.id}
+                                        onPress={() => setThemeType(option.id)}
+                                        style={[
+                                          styles.appearanceSegmentedPill,
+                                          isActive && { backgroundColor: theme.colors.accent },
+                                        ]}
+                                      >
+                                        <Text style={[
+                                          styles.appearanceSegmentedLabel,
+                                          { color: isActive ? theme.colors.accentForeground : theme.colors.textSecondary },
+                                        ]}>
+                                          {option.label}
+                                        </Text>
+                                      </PremiumTouchable>
+                                    );
+                                  })}
+                                </View>
+                              </View>
+                              {!isLastItem && <View style={[styles.rowDividerSeparator, { backgroundColor: theme.colors.surfaceSecondary }]} />}
+                            </View>
+                          );
+                        }
+
+                        if (item.type === 'language-segmented') {
+                          // "Language" — the toggle for the i18n system,
+                          // built the same way as "Appearance" above, driven
+                          // by LanguageContext.setLanguage.
+                          return (
+                            <View key={item.id}>
+                              <View style={[styles.menuRowItem, styles.appearanceRow]}>
+                                <View style={styles.menuRowLeftBlock}>
+                                  <MaterialCommunityIcons
+                                    name={item.icon as any}
+                                    size={20}
+                                    color={theme.colors.textSecondary}
+                                    style={styles.menuItemIcon}
+                                  />
+                                  <Text style={[styles.menuItemLabel, { color: theme.colors.textPrimary }]}>
+                                    {item.label}
+                                  </Text>
+                                </View>
+                                <View style={[styles.appearanceSegmentedTrack, { backgroundColor: theme.colors.surfaceSecondary, borderColor: theme.colors.border }]}>
+                                  {LANGUAGE_OPTIONS.map((option) => {
+                                    const isActive = language === option.id;
+                                    return (
+                                      <PremiumTouchable
+                                        key={option.id}
+                                        onPress={() => setLanguage(option.id)}
+                                        style={[
+                                          styles.appearanceSegmentedPill,
+                                          isActive && { backgroundColor: theme.colors.accent },
+                                        ]}
+                                      >
+                                        <Text style={[
+                                          styles.appearanceSegmentedLabel,
+                                          { color: isActive ? theme.colors.accentForeground : theme.colors.textSecondary },
+                                        ]}>
+                                          {option.label}
+                                        </Text>
+                                      </PremiumTouchable>
+                                    );
+                                  })}
+                                </View>
+                              </View>
+                              {!isLastItem && <View style={[styles.rowDividerSeparator, { backgroundColor: theme.colors.surfaceSecondary }]} />}
+                            </View>
+                          );
+                        }
+
                         return (
                           <View key={item.id}>
                             <Pressable
-                              style={[styles.menuRowItem, item.subtitle && styles.menuRowItemWithSubtitle]}
-                              onPress={() => item.type !== 'toggle' && item.type !== 'theme_toggle' && handleItemNavigationTriggers(item)}
+                              style={styles.menuRowItem}
+                              onPress={() => handleItemNavigationTriggers(item)}
                             >
                               <View style={styles.menuRowLeftBlock}>
                                 <MaterialCommunityIcons
                                   name={item.icon as any}
                                   size={20}
-                                  color={item.danger ? '#DC2626' : theme.colors.text}
+                                  color={item.danger ? theme.colors.danger : theme.colors.textSecondary}
                                   style={styles.menuItemIcon}
                                 />
-                                <View style={styles.menuRowTextStack}>
-                                  <Text style={[styles.menuItemLabel, { color: theme.colors.text }, item.danger && styles.dangerItemLabel]}>
-                                    {item.label}
-                                  </Text>
-                                  {item.subtitle && (
-                                    <Text style={[styles.menuItemSubtitle, { color: theme.colors.secondaryText }]}>
-                                      {item.subtitle}
-                                    </Text>
-                                  )}
-                                </View>
+                                <Text style={[styles.menuItemLabel, { color: item.danger ? theme.colors.danger : theme.colors.textPrimary }]}>
+                                  {item.label}
+                                </Text>
                                 {item.badge && (
-                                  <View style={[styles.counterBadge, { backgroundColor: theme.colors.surface }]}>
-                                    <Text style={[styles.counterBadgeText, { color: theme.colors.secondaryText }]}>{item.badge}</Text>
+                                  <View style={[styles.counterBadge, { backgroundColor: theme.colors.surfaceSecondary }]}>
+                                    <Text style={[styles.counterBadgeText, { color: theme.colors.textSecondary }]}>{item.badge}</Text>
                                   </View>
                                 )}
                               </View>
@@ -519,25 +621,17 @@ export default function ProfileScreen() {
                                 <Switch
                                   value={notificationsEnabled}
                                   onValueChange={handleToggleNotifications}
-                                  trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
-                                  thumbColor="#FFFFFF"
-                                />
-                              )}
-
-                              {item.type === 'theme_toggle' && (
-                                <Switch
-                                  value={themeType === 'dark'}
-                                  onValueChange={handleToggleDarkMode}
-                                  trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
-                                  thumbColor="#FFFFFF"
+                                  trackColor={{ false: theme.colors.border, true: theme.colors.accent }}
+                                  thumbColor={theme.colors.surface}
+                                  ios_backgroundColor={theme.colors.border}
                                 />
                               )}
 
                               {item.type === 'chevron' && (
-                                <Ionicons name="chevron-forward" size={18} color={theme.colors.secondaryText} />
+                                <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
                               )}
                             </Pressable>
-                            {!isLastItem && <View style={[styles.rowDividerSeparator, { backgroundColor: theme.colors.border }]} />}
+                            {!isLastItem && <View style={[styles.rowDividerSeparator, { backgroundColor: theme.colors.surfaceSecondary }]} />}
                           </View>
                         );
                       })}
@@ -548,8 +642,8 @@ export default function ProfileScreen() {
 
               {/* Bottom Layout footer text elements */}
               <Animated.View style={[styles.appFooterDetailsContainer, animatedFooterStyle]}>
-                <Text style={[styles.footerBrandText, { color: theme.colors.secondaryText }]}>VYRA v0.1.0</Text>
-                <Text style={[styles.footerSecondaryText, { color: theme.colors.secondaryText }]}>Made with love for fashion lovers</Text>
+                <Text style={[styles.footerBrandText, { color: theme.colors.textSecondary }]}>VYRA v0.1.0</Text>
+                <Text style={[styles.footerSecondaryText, { color: theme.colors.textSecondary }]}>{t('profile.main.footerTagline')}</Text>
               </Animated.View>
             </>
           )}
@@ -593,7 +687,6 @@ const styles = StyleSheet.create({
     width: 88,
     height: 88,
     borderRadius: 44,
-    backgroundColor: '#F5F5F4',
     marginBottom: 14,
   },
   profileName: {
@@ -618,7 +711,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     alignItems: 'center',
     borderWidth: 1,
-    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.02,
     shadowRadius: 3,
@@ -669,7 +761,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     overflow: 'hidden',
-    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.02,
     shadowRadius: 2,
@@ -681,19 +772,32 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 14,
     paddingHorizontal: 16,
-    minHeight: 52,
+    height: 52,
   },
-  menuRowItemWithSubtitle: {
-    paddingVertical: 12,
+  appearanceRow: {
+    height: undefined,
+    flexWrap: 'wrap',
+    rowGap: 10,
+  },
+  appearanceSegmentedTrack: {
+    flexDirection: 'row',
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 2,
+    gap: 2,
+  },
+  appearanceSegmentedPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  appearanceSegmentedLabel: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   menuRowLeftBlock: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
-  },
-  menuRowTextStack: {
-    flexDirection: 'column',
-    justifyContent: 'center',
     flex: 1,
   },
   menuItemIcon: {
@@ -704,13 +808,6 @@ const styles = StyleSheet.create({
   menuItemLabel: {
     fontSize: 14,
     fontWeight: '500',
-  },
-  menuItemSubtitle: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  dangerItemLabel: {
-    color: '#DC2626',
   },
   counterBadge: {
     paddingHorizontal: 8,
@@ -759,14 +856,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   retryControlActionButton: {
-    backgroundColor: '#1C1917',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 12,
   },
   retryButtonLabelText: {
     fontSize: 13,
-    color: '#FAFAF9',
     fontWeight: '600',
   },
 });
