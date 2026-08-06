@@ -29,6 +29,7 @@ import { SectionHeader } from '../../components/ui/SectionHeader';
 import { SectionTitle } from '../../components/ui/SectionTitle';
 import { PremiumLoader } from '../../components/ui/PremiumLoader';
 import { supabase } from '../../lib/supabase';
+import { signInWithGoogle, isGoogleSignInCancelled } from '../../lib/services/googleAuthService';
 import { useTheme } from '../../theme';
 import { useLanguage } from '../../i18n';
 
@@ -154,20 +155,20 @@ export default function LoginScreen() {
 
   const handleGoogleSignIn = async () => {
     if (isLoading) return;
+    setErrorMessage(null);
+    setIsLoading(true);
+
     try {
-      setIsLoading(true);
-      setErrorMessage(null);
-
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: Platform.OS === 'web' ? window.location.origin : 'vyra://home',
-        }
-      });
-
-      if (error) throw error;
+      await signInWithGoogle();
+      router.replace('/');
     } catch (error: any) {
-      setErrorMessage(mapAuthErrorToFriendlyMessage(error));
+      if (isGoogleSignInCancelled(error)) {
+        // User backed out of the native picker — not an error, nothing to show.
+        return;
+      }
+      console.error('[Auth Login] Google sign-in failed:', error);
+      setErrorMessage(t('auth.login.errors.googleSignInFailed'));
+    } finally {
       setIsLoading(false);
     }
   };

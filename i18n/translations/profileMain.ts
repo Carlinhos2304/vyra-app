@@ -5,6 +5,7 @@
  */
 export const profileMainEn = {
   title: 'Profile',
+  defaultUsername: 'Vyra Curator',
   loadingProfile: 'Syncing profile files...',
   loadFaultTitle: 'Profile Load Fault',
   noActiveCredentials: 'No active credentials verified.',
@@ -41,6 +42,7 @@ export const profileMainEn = {
 
 export const profileMainEs = {
   title: 'Perfil',
+  defaultUsername: 'Curador Vyra',
   loadingProfile: 'Sincronizando tu perfil...',
   loadFaultTitle: 'Error al Cargar el Perfil',
   noActiveCredentials: 'No se verificaron credenciales activas.',

@@ -29,6 +29,7 @@ import { SectionHeader } from '../../components/ui/SectionHeader';
 import { SectionTitle } from '../../components/ui/SectionTitle';
 import { PremiumLoader } from '../../components/ui/PremiumLoader';
 import { supabase } from '../../lib/supabase';
+import { signInWithGoogle, isGoogleSignInCancelled } from '../../lib/services/googleAuthService';
 import { useTheme } from '../../theme';
 import { useLanguage } from '../../i18n';
 
@@ -88,6 +89,8 @@ export default function RegisterScreen() {
   // Micro-interaction shared values
   const backBtnScale = useSharedValue(1);
   const footerOpacity = useSharedValue(1);
+  const googleButtonScale = useSharedValue(1);
+  const googleButtonOpacity = useSharedValue(1);
 
   // Soft-tinted error banner — computed locally per theme, matching the pattern
   // established on create.tsx's success/error feedback banners.
@@ -201,6 +204,26 @@ export default function RegisterScreen() {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    if (isLoading) return;
+    setErrorMessage(null);
+    setIsLoading(true);
+
+    try {
+      await signInWithGoogle();
+      router.replace('/');
+    } catch (error: any) {
+      if (isGoogleSignInCancelled(error)) {
+        // User backed out of the native picker — not an error, nothing to show.
+        return;
+      }
+      console.error('[Registration Execution] Google sign-in failed:', error);
+      setErrorMessage(t('auth.register.errors.googleSignInFailed'));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Reanimated style definitions for silent input borders
   const usernameStyle = useAnimatedStyle(() => ({
     borderColor: withTiming(usernameFocus.value === 1 ? theme.colors.accent : theme.colors.border, { duration: 200, easing: PREMIUM_EASING }),
@@ -228,6 +251,11 @@ export default function RegisterScreen() {
 
   const footerAnimatedStyle = useAnimatedStyle(() => ({
     opacity: withTiming(footerOpacity.value, { duration: 120, easing: PREMIUM_EASING }),
+  }));
+
+  const googleButtonAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: withTiming(googleButtonScale.value, { duration: 90, easing: PREMIUM_EASING }) }],
+    opacity: withTiming(googleButtonOpacity.value, { duration: 90, easing: PREMIUM_EASING }),
   }));
 
   // Display-only labels — the underlying gender values ('Male' | 'Female' |
@@ -512,10 +540,47 @@ export default function RegisterScreen() {
               )}
             </Animated.View>
           </Animated.View>
-          
-          {/* 4. Footer Navigation Link (Sequence 4: delay 120ms) */}
-          <Animated.View 
-            entering={createPremiumEntrance(120)}
+
+          {/* 4. Divider Section (Sequence 4: delay 140ms) */}
+          <Animated.View
+            entering={createPremiumEntrance(140)}
+            style={styles.dividerContainer}
+          >
+            <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
+            <Text style={[styles.dividerText, { color: theme.colors.textSecondary }]}>{t('auth.register.orDivider')}</Text>
+            <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
+          </Animated.View>
+
+          {/* 5. Google Section (Sequence 5: delay 170ms) */}
+          <Animated.View entering={createPremiumEntrance(170)}>
+            <TouchableOpacity
+              style={isLoading && styles.disabledElement}
+              activeOpacity={1}
+              onPressIn={() => {
+                googleButtonScale.value = 0.995;
+                googleButtonOpacity.value = 0.95;
+              }}
+              onPressOut={() => {
+                googleButtonScale.value = 1;
+                googleButtonOpacity.value = 1;
+              }}
+              onPress={handleGoogleSignIn}
+              disabled={isLoading}
+            >
+              <Animated.View style={[styles.googleButton, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }, googleButtonAnimatedStyle]}>
+                <View style={styles.googleContent}>
+                  <View style={[styles.envelopeIcon, { borderColor: theme.colors.textPrimary }]}>
+                    <View style={[styles.envelopeFlap, { borderColor: theme.colors.textPrimary }]} />
+                  </View>
+                  <Text style={[styles.googleButtonText, { color: theme.colors.textPrimary }]}>{t('auth.register.continueWithGoogle')}</Text>
+                </View>
+              </Animated.View>
+            </TouchableOpacity>
+          </Animated.View>
+
+          {/* 6. Footer Navigation Link (Sequence 6: delay 200ms) */}
+          <Animated.View
+            entering={createPremiumEntrance(200)}
             style={[styles.footerContainer, isLoading && styles.disabledElement]}
           >
             <Text style={[styles.footerText, { color: theme.colors.textSecondary }]}>{t('auth.register.hasAccountPrompt')}</Text>
@@ -701,6 +766,57 @@ const styles = StyleSheet.create({
   },
   disabledRegisterButton: {
     opacity: 0.35,
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 24,
+    paddingHorizontal: 4,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    fontSize: 12,
+    marginHorizontal: 12,
+    fontWeight: '500',
+  },
+  googleButton: {
+    height: 52,
+    borderWidth: 1,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+  },
+  googleContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  envelopeIcon: {
+    width: 18,
+    height: 13,
+    borderWidth: 1.5,
+    borderRadius: 1,
+    marginRight: 10,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  envelopeFlap: {
+    position: 'absolute',
+    top: -5,
+    left: 2,
+    width: 11,
+    height: 11,
+    borderBottomWidth: 1.5,
+    borderRightWidth: 1.5,
+    transform: [{ rotate: '45deg' }],
+  },
+  googleButtonText: {
+    fontSize: 15,
+    fontWeight: '500',
   },
   footerContainer: {
     flexDirection: 'row',

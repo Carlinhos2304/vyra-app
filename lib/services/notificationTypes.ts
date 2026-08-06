@@ -118,3 +118,20 @@ export interface NotificationRequest {
  * components), so each service keeps its own small `{ en, es }` templates
  * and takes the caller's current language as a plain parameter instead. */
 export type SupportedNotificationLanguage = 'en' | 'es';
+
+/**
+ * "YYYY-MM-DD" in the DEVICE's local calendar day — deliberately NOT
+ * `date.toISOString().slice(0, 10)`, which reads UTC and silently shifts by
+ * one day for any user west of UTC in the evening (or east of UTC just after
+ * midnight). Every category service that computes "today"/"this week" for
+ * dedupe keys or date-range queries must go through this one helper so that
+ * boundary math (rolling windows, weekly summaries, the daily sweep
+ * throttle) agrees on what day it is.
+ *
+ * Lives here (not in notificationService.ts, where it originated) so
+ * notificationPlanner.ts can import it too without creating a circular
+ * import — notificationService.ts imports FROM notificationPlanner.ts.
+ */
+export function toLocalISODate(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}

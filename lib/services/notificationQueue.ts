@@ -28,12 +28,25 @@ export type EnqueueOutcome =
   | { status: 'skipped-past' }
   | { status: 'error'; message: string };
 
+/**
+ * Only 'scheduled' and 'delivered' rows count as "already logged" — a
+ * 'cancelled' row (left behind by cancelByDedupeKey/cancelByDedupeKeyPrefix,
+ * which mark rather than delete, see those functions' comments) must NOT
+ * block a future re-enqueue under the same dedupe key. Editing a planner
+ * event calls cancelEventReminders() then re-schedules with the SAME dedupe
+ * keys (offset + event id don't change on an edit) — without this status
+ * filter, that cancelled row made every re-schedule look like a duplicate
+ * forever, silently killing an event's reminders on its first edit. A
+ * 'failed' row is excluded from the block for the same reason: a failure
+ * deserves a retry, not a permanent dedupe lock.
+ */
 async function alreadyLogged(userId: string, dedupeKey: string): Promise<boolean> {
   const { data, error } = await supabase
     .from('notification_log')
     .select('id')
     .eq('user_id', userId)
     .eq('dedupe_key', dedupeKey)
+    .in('status', ['scheduled', 'delivered'])
     .maybeSingle();
 
   if (error) {
@@ -102,19 +115,28 @@ export async function enqueueAndSchedule(
 
   if (!localIdentifier) return { status: 'skipped-no-permission' };
 
+  // upsert, not insert: alreadyLogged() above only blocks on 'scheduled'/
+  // 'delivered' rows, so a 'cancelled' or 'failed' row under this exact
+  // dedupe_key may already exist (unique(user_id, dedupe_key)) — a plain
+  // insert would violate that constraint and this notification would fire
+  // locally with no outbox record. Upserting on the same conflict target
+  // reuses/overwrites that stale row instead.
   const { data: logRow, error: logError } = await supabase
     .from('notification_log')
-    .insert({
-      user_id: user.id,
-      category: request.category,
-      dedupe_key: request.dedupeKey,
-      title: request.title,
-      body: request.body,
-      action_route: request.actionRoute ?? null,
-      local_identifier: localIdentifier,
-      status: 'scheduled',
-      scheduled_for: resolvedTime.toISOString(),
-    })
+    .upsert(
+      {
+        user_id: user.id,
+        category: request.category,
+        dedupe_key: request.dedupeKey,
+        title: request.title,
+        body: request.body,
+        action_route: request.actionRoute ?? null,
+        local_identifier: localIdentifier,
+        status: 'scheduled',
+        scheduled_for: resolvedTime.toISOString(),
+      },
+      { onConflict: 'user_id,dedupe_key' }
+    )
     .select('id')
     .single();
 

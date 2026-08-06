@@ -22,8 +22,26 @@ export const onboardingEn = {
     styleSectionTitle: 'Favorite Style',
     colorsSectionTitle: 'Favorite Colors',
     climateSectionTitle: 'Climate Zone',
-    notificationsTitle: 'Outfit Reminders',
-    notificationsSubtitle: 'Receive premium styling schedule updates.',
+    notificationsTitle: 'Smart Notifications',
+    notificationsSubtitle: 'Event reminders, daily outfit suggestions, and AI tips based on your closet.',
+    // Keys match the English ids stored in profiles.favorite_colors/climate
+    // exactly (see app/onboarding/personalization.tsx's COLOR_OPTIONS/
+    // CLIMATE_OPTIONS) — only the displayed chip label is translated, the
+    // same "id stays English, label gets translated" rule STYLE_OPTIONS and
+    // the gender selects already follow elsewhere in this app.
+    colorOptions: {
+      Monochrome: 'Monochrome',
+      'Warm Stone': 'Warm Stone',
+      'Sage Green': 'Sage Green',
+      'Navy Ocean': 'Navy Ocean',
+      Crimson: 'Crimson',
+      'Camel Tan': 'Camel Tan',
+    },
+    climateOptions: {
+      'Mostly Hot': 'Mostly Hot',
+      Mixed: 'Mixed',
+      'Mostly Cold': 'Mostly Cold',
+    },
     saveButton: 'Save Preferences',
     loadingLabel: 'Serializing curation attributes...',
     incompleteAlertTitle: 'Personalization Partial',
@@ -35,6 +53,7 @@ export const onboardingEn = {
   firstGarment: {
     title: "Let's build your wardrobe",
     subtitle: 'Start by adding your first garment.',
+    aiNote: "Vyra's AI will automatically detect its category, color, and style.",
     addButton: 'Add First Garment',
     loadingLabel: 'Committing archival access parameters...',
     noSessionError: 'Session authentication missing context parameters.',
@@ -42,13 +61,14 @@ export const onboardingEn = {
     blockedAlertFallback: 'Could not close out sequence safely.',
   },
   aiPreview: {
-    comingSoonBadge: 'COMING SOON',
-    title: 'AI Stylist',
-    subtitle: 'Future personalized recommendations will analyze your wardrobe, weather conditions, style aesthetics, favorite colors, and calendar schedules to curate optimal styles.',
+    activeBadge: 'LIVE NOW',
+    title: 'Meet your AI stylist',
+    subtitle: 'Vyra already suggests a full outfit every day, generates new looks from your closet, and analyzes every garment you add — all personalized to your wardrobe, the weather, and your calendar.',
+    example: 'For example: "Your daily outfit is ready — try pairing your navy blazer with the beige trousers."',
   },
   planner: {
     title: 'Plan what to wear',
-    subtitle: 'Schedule outfits directly from your calendar.',
+    subtitle: "Schedule outfits directly from your calendar — Vyra's AI can even suggest one automatically before big events.",
   },
 };
 
@@ -70,8 +90,21 @@ export const onboardingEs = {
     styleSectionTitle: 'Estilo favorito',
     colorsSectionTitle: 'Colores favoritos',
     climateSectionTitle: 'Zona climática',
-    notificationsTitle: 'Recordatorios de outfits',
-    notificationsSubtitle: 'Recibe actualizaciones premium de tu agenda de estilo.',
+    notificationsTitle: 'Notificaciones inteligentes',
+    notificationsSubtitle: 'Recordatorios de eventos, sugerencias diarias de outfit y consejos de IA según tu clóset.',
+    colorOptions: {
+      Monochrome: 'Monocromático',
+      'Warm Stone': 'Piedra Cálida',
+      'Sage Green': 'Verde Salvia',
+      'Navy Ocean': 'Azul Marino',
+      Crimson: 'Carmesí',
+      'Camel Tan': 'Camel',
+    },
+    climateOptions: {
+      'Mostly Hot': 'Mayormente Cálido',
+      Mixed: 'Mixto',
+      'Mostly Cold': 'Mayormente Frío',
+    },
     saveButton: 'Guardar preferencias',
     loadingLabel: 'Serializando atributos de curación...',
     incompleteAlertTitle: 'Personalización incompleta',
@@ -83,6 +116,7 @@ export const onboardingEs = {
   firstGarment: {
     title: 'Construyamos tu armario',
     subtitle: 'Empieza agregando tu primera prenda.',
+    aiNote: 'La IA de Vyra detectará automáticamente su categoría, color y estilo.',
     addButton: 'Agregar primera prenda',
     loadingLabel: 'Confirmando parámetros de acceso al archivo...',
     noSessionError: 'Faltan parámetros de contexto de autenticación de sesión.',
@@ -90,12 +124,13 @@ export const onboardingEs = {
     blockedAlertFallback: 'No se pudo cerrar la secuencia de forma segura.',
   },
   aiPreview: {
-    comingSoonBadge: 'PRÓXIMAMENTE',
-    title: 'Estilista IA',
-    subtitle: 'Las futuras recomendaciones personalizadas analizarán tu armario, las condiciones climáticas, tu estética de estilo, tus colores favoritos y tu calendario para diseñar looks óptimos.',
+    activeBadge: 'YA DISPONIBLE',
+    title: 'Conoce a tu estilista IA',
+    subtitle: 'Vyra ya te sugiere un outfit completo cada día, genera nuevos looks con tu armario y analiza cada prenda que agregas — todo personalizado según tu clóset, el clima y tu calendario.',
+    example: 'Por ejemplo: "Tu outfit del día está listo — prueba combinar tu blazer azul marino con el pantalón beige."',
   },
   planner: {
     title: 'Planifica qué ponerte',
-    subtitle: 'Programa outfits directamente desde tu calendario.',
+    subtitle: 'Programa outfits directamente desde tu calendario — la IA de Vyra puede sugerirte uno automáticamente antes de eventos importantes.',
   },
 };

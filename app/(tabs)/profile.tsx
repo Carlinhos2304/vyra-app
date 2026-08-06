@@ -242,7 +242,7 @@ export default function ProfileScreen() {
 
       setProfile({
         id: user.id,
-        username: dbProfile?.username || 'Vyra Curator',
+        username: dbProfile?.username || t('profile.main.defaultUsername'),
         avatar_url: dbProfile?.avatar_url,
         birth_date: dbProfile?.birth_date,
         gender: dbProfile?.gender,

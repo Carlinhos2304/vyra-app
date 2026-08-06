@@ -8,6 +8,7 @@ import { PremiumLoader } from '../../components/ui/PremiumLoader';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../theme';
 import { useLanguage } from '../../i18n';
+import { useNotifications } from '../../hooks/useNotifications';
 import { STYLE_OPTIONS } from '../../constants/garmentTaxonomy';
 
 // React Native Reanimated 3
@@ -100,6 +101,8 @@ function ColorCircle({ colorName, hex, isSelected, onPress }: ColorCircleProps) 
         onPressIn={() => (scale.value = withSpring(0.95, CHIP_SPRING))}
         onPressOut={() => (scale.value = withSpring(1, CHIP_SPRING))}
         onPress={onPress}
+        accessibilityLabel={colorName}
+        accessibilityState={{ selected: isSelected }}
         style={[
           styles.colorCircleOuterBorder,
           isSelected && { borderColor: theme.colors.accent }
@@ -157,6 +160,7 @@ export default function PersonalizationScreen() {
   const { theme } = useTheme();
   const router = useRouter();
   const { t } = useLanguage();
+  const { syncNotifications } = useNotifications();
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null);
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
   const [selectedClimate, setSelectedClimate] = useState<string | null>(null);
@@ -266,6 +270,22 @@ export default function PersonalizationScreen() {
         .eq('id', user.id);
 
       if (error) throw error;
+
+      // Fires the actual OS permission prompt right after the user opted in
+      // here, instead of leaving the switch above as a DB-only flag that
+      // silently did nothing until the user later found the toggle in
+      // Profile settings. Isolated from the save above on purpose — a
+      // denied/failed permission prompt must never block onboarding from
+      // continuing (same isolation create-event.tsx already uses around
+      // reminder scheduling).
+      if (notificationsEnabled) {
+        try {
+          await syncNotifications(true);
+        } catch (notifyErr) {
+          console.warn('[onboarding/personalization] Failed to enable notifications (non-fatal):', notifyErr);
+        }
+      }
+
       router.push('/onboarding/first-garment');
     } catch (err: any) {
       Alert.alert(t('onboarding.personalization.syncFaultAlertTitle'), err.message || t('onboarding.personalization.syncFaultAlertFallback'));
@@ -316,7 +336,7 @@ export default function PersonalizationScreen() {
               {COLOR_OPTIONS.map(color => (
                 <ColorCircle
                   key={color.name}
-                  colorName={color.name}
+                  colorName={t(`onboarding.personalization.colorOptions.${color.name}`)}
                   hex={color.hex}
                   isSelected={selectedColors.includes(color.name)}
                   onPress={() => toggleColorSelection(color.name)}
@@ -332,7 +352,7 @@ export default function PersonalizationScreen() {
               {CLIMATE_OPTIONS.map(climate => (
                 <ClimateChip
                   key={climate}
-                  climateName={climate}
+                  climateName={t(`onboarding.personalization.climateOptions.${climate}`)}
                   isActive={selectedClimate === climate}
                   onPress={() => setSelectedClimate(climate)}
                 />

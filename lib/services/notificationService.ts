@@ -187,13 +187,10 @@ import { getSmartNotifications } from './notificationAI';
 import { getWardrobeInsights } from './wardrobeInsightsService';
 import { getCurrentWeather, getWeeklyForecast } from './weatherService';
 import type { PlannerEvent } from './plannerTypes';
+import { toLocalISODate } from './notificationTypes';
 import type { NotificationPreferences, SupportedNotificationLanguage } from './notificationTypes';
 
 const SWEEP_THROTTLE_KEY = '@vyra_notification_sweep_last_run_date';
-
-function toLocalISODate(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-}
 
 function isoWeekKey(date: Date): string {
   const tmp = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -357,6 +354,22 @@ async function runSmartNotificationsSweep(
   }
 }
 
+/** Runs one sweep step in isolation — a failure here (network hiccup, a
+ * missing table because the migration hasn't been applied yet, a slow AI
+ * call) must never stop the categories that come after it, the same
+ * non-fatal posture every category service already keeps internally.
+ * Without this, one bad step used to abort the whole sweep AND skip the
+ * AsyncStorage throttle write below, causing that step's DB/AI calls to
+ * retry on every subsequent foreground for the rest of the day instead of
+ * once. */
+async function runSweepStep(label: string, step: () => Promise<void>): Promise<void> {
+  try {
+    await step();
+  } catch (err) {
+    console.error(`[notificationService] sweep step "${label}" failed (non-fatal, rest of sweep continues):`, err);
+  }
+}
+
 /**
  * The single entry point the app calls once per foreground (see
  * hooks/useNotificationSweep.ts). Cheap to call repeatedly: throttled to at
@@ -383,27 +396,39 @@ export async function runNotificationSweep(language: SupportedNotificationLangua
 
   const prefs = await getNotificationPreferences();
 
-  await resyncPlannerReminders(prefs, language);
+  // Every step below is isolated via runSweepStep and the throttle is always
+  // set at the end (see comment there) — a single failing category degrades
+  // gracefully instead of taking the rest of the day's sweep down with it.
+  await runSweepStep('resyncPlannerReminders', () => resyncPlannerReminders(prefs, language));
 
   if (prefs.plannerAiEnabled) {
-    const windowEnd = toLocalISODate(new Date(Date.now() + 7 * 86_400_000));
-    const { data: upcomingEvents } = await supabase
-      .from('events')
-      .select('id, name, event_date, start_time, end_time, category, location, outfit_id')
-      .eq('user_id', user.id)
-      .gte('event_date', todayISO)
-      .lte('event_date', windowEnd);
-    await schedulePlannerAiNudges((upcomingEvents || []) as unknown as PlannerEvent[], todayISO, prefs, language);
+    await runSweepStep('plannerAiNudges', async () => {
+      const windowEnd = toLocalISODate(new Date(Date.now() + 7 * 86_400_000));
+      const { data: upcomingEvents } = await supabase
+        .from('events')
+        .select('id, name, event_date, start_time, end_time, category, location, outfit_id')
+        .eq('user_id', user.id)
+        .gte('event_date', todayISO)
+        .lte('event_date', windowEnd);
+      await schedulePlannerAiNudges((upcomingEvents || []) as unknown as PlannerEvent[], todayISO, prefs, language);
+    });
   }
 
   if (prefs.weatherEnabled || prefs.outfitRemindersEnabled) {
-    const weather = await getCurrentWeather();
-    await scheduleTodayOutfitReminder(weather, prefs, language);
+    await runSweepStep('todayOutfitReminder', async () => {
+      const weather = await getCurrentWeather();
+      await scheduleTodayOutfitReminder(weather, prefs, language);
+    });
   }
 
-  await scheduleWardrobeTips(prefs, language);
-  await runSmartNotificationsSweep(prefs, language, todayISO);
-  await runWeeklySummarySweep(user.id, prefs, language);
+  await runSweepStep('wardrobeTips', () => scheduleWardrobeTips(prefs, language));
+  // Already self-isolated internally, but wrapped too for a consistent
+  // "one bad step never blocks the throttle write" guarantee.
+  await runSweepStep('smartNotifications', () => runSmartNotificationsSweep(prefs, language, todayISO));
+  await runSweepStep('weeklySummary', () => runWeeklySummarySweep(user.id, prefs, language));
 
+  // Always set, even if one or more steps above failed — a category that
+  // failed today gets a fresh attempt tomorrow, not five retries in the next
+  // hour every time the user reopens the app.
   await AsyncStorage.setItem(SWEEP_THROTTLE_KEY, todayISO);
 }

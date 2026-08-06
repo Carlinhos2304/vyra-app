@@ -22,7 +22,7 @@
 -- move to real push delivery a change in *who writes rows here and how they
 -- get delivered*, not a schema/architecture rewrite. It also gives:
 --   1. Dedupe — `(user_id, dedupe_key)` is unique, so re-opening the app
---      several times in one day can't schedule the same "today's outfit is
+--      several times in one day can't schedule the same "today's outfit is  
 --      ready" or weekly-summary notification twice.
 --   2. A natural home for a future server-side cron job to write into
 --      (instead of the client generating content on app foreground) without

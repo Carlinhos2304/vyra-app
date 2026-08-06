@@ -26,6 +26,7 @@ import { supabase } from '../supabase';
 import * as Queue from './notificationQueue';
 import { IMPORTANT_EVENT_CATEGORIES } from '../../constants/eventCategories';
 import type { PlannerEvent } from './plannerTypes';
+import { toLocalISODate } from './notificationTypes';
 import type { NotificationPreferences, SupportedNotificationLanguage } from './notificationTypes';
 
 /** Minutes-before-event offsets used for any event that has a start_time.
@@ -210,8 +211,11 @@ export async function resyncPlannerReminders(prefs: NotificationPreferences, lan
   } = await supabase.auth.getUser();
   if (!user) return;
 
-  const todayISO = new Date().toISOString().slice(0, 10);
-  const windowEndISO = new Date(Date.now() + ROLLING_WINDOW_DAYS * 86_400_000).toISOString().slice(0, 10);
+  // Local calendar day, not UTC — see toLocalISODate's doc for why this
+  // matters (a UTC-based cutoff here silently drops/shifts today's events by
+  // a day for any user not near UTC+0).
+  const todayISO = toLocalISODate(new Date());
+  const windowEndISO = toLocalISODate(new Date(Date.now() + ROLLING_WINDOW_DAYS * 86_400_000));
 
   const { data, error } = await supabase
     .from('events')

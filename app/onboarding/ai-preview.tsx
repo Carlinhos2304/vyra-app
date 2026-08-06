@@ -116,7 +116,7 @@ export default function AiPreviewScreen() {
             <MaterialCommunityIcons name={"sparkles" as any} size={54} color={theme.colors.textPrimary} />
 
             <Animated.View style={[styles.comingSoonBadgeContainer, animatedBadgeStyle]}>
-              <Text style={[styles.comingSoonBadge, { backgroundColor: theme.colors.accent, color: theme.colors.accentForeground }]}>{t('onboarding.aiPreview.comingSoonBadge')}</Text>
+              <Text style={[styles.comingSoonBadge, { backgroundColor: theme.colors.accent, color: theme.colors.accentForeground }]}>{t('onboarding.aiPreview.activeBadge')}</Text>
             </Animated.View>
           </Animated.View>
         </View>
@@ -130,6 +130,9 @@ export default function AiPreviewScreen() {
           <Animated.View style={animatedSubtitleStyle}>
             <Text style={[styles.editorialSubtitleText, { color: theme.colors.textSecondary }]}>
               {t('onboarding.aiPreview.subtitle')}
+            </Text>
+            <Text style={[styles.exampleCaptionText, { color: theme.colors.textTertiary }]}>
+              {t('onboarding.aiPreview.example')}
             </Text>
           </Animated.View>
         </View>
@@ -201,6 +204,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 19,
     paddingHorizontal: 8,
+  },
+  exampleCaptionText: {
+    fontSize: 12,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    lineHeight: 17,
+    paddingHorizontal: 8,
+    marginTop: 12,
   },
   actionContainer: {
     paddingBottom: 24,

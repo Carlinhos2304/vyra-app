@@ -129,6 +129,9 @@ export default function FirstGarmentScreen() {
           <Text style={[styles.editorialSubtitleText, { color: theme.colors.textSecondary }]}>
             {t('onboarding.firstGarment.subtitle')}
           </Text>
+          <Text style={[styles.aiNoteCaptionText, { color: theme.colors.textTertiary }]}>
+            {t('onboarding.firstGarment.aiNote')}
+          </Text>
         </Animated.View>
 
         {/* BOTTOM ACTION */}
@@ -192,6 +195,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
     paddingHorizontal: 16,
+  },
+  aiNoteCaptionText: {
+    fontSize: 12,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    lineHeight: 17,
+    paddingHorizontal: 16,
+    marginTop: 10,
   },
   actionContainer: {
     paddingBottom: 24,

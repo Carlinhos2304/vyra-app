@@ -44,13 +44,15 @@
           "icon": "./assets/icon_white.png",
           "color": "#1C1917"
         }
-      ]
+      ],
+      "@react-native-google-signin/google-signin"
     ],
     "extra": {
       "router": {},
       "eas": {
         "projectId": "a2b91b79-167d-42dd-984d-7f221f5c9b41"
-      }
+      },
+      "googleWebClientId": "726764972468-rikkfh0j3v9nhb5flipabkr8vvj7dujn.apps.googleusercontent.com"
     },
     "runtimeVersion": {
       "policy": "appVersion"

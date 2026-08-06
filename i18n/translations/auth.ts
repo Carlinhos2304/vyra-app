@@ -23,6 +23,7 @@ export const authEn = {
       invalidCredentials: 'Incorrect email or password.',
       connectionProblem: 'Connection problem. Please try again.',
       tooManyAttempts: 'Too many login attempts. Please wait a moment.',
+      googleSignInFailed: 'Could not sign in with Google. Please try again.',
     },
   },
   register: {
@@ -49,12 +50,15 @@ export const authEn = {
     registerButton: 'Register Wardrobe Account',
     hasAccountPrompt: 'Already have an account? ',
     signInLink: 'Sign in',
+    orDivider: 'OR',
+    continueWithGoogle: 'Continue with Google',
     errors: {
       registrationFailed: 'Registration failed. Please try again.',
       emailAlreadyRegistered: 'This email is already registered.',
       emailInvalid: 'Invalid email format.',
       connectionProblem: 'Connection problem. Please try again.',
       tooManyAttempts: 'Too many attempts. Please wait a moment.',
+      googleSignInFailed: 'Could not sign in with Google. Please try again.',
     },
   },
   splash: {
@@ -83,6 +87,7 @@ export const authEs = {
       invalidCredentials: 'Correo electrónico o contraseña incorrectos.',
       connectionProblem: 'Problema de conexión. Inténtalo de nuevo.',
       tooManyAttempts: 'Demasiados intentos de inicio de sesión. Espera un momento.',
+      googleSignInFailed: 'No se pudo iniciar sesión con Google. Inténtalo de nuevo.',
     },
   },
   register: {
@@ -109,12 +114,15 @@ export const authEs = {
     registerButton: 'Registrar Cuenta de Armario',
     hasAccountPrompt: '¿Ya tienes una cuenta? ',
     signInLink: 'Inicia sesión',
+    orDivider: 'O',
+    continueWithGoogle: 'Continuar con Google',
     errors: {
       registrationFailed: 'Registro fallido. Inténtalo de nuevo.',
       emailAlreadyRegistered: 'Este correo electrónico ya está registrado.',
       emailInvalid: 'Formato de correo electrónico inválido.',
       connectionProblem: 'Problema de conexión. Inténtalo de nuevo.',
       tooManyAttempts: 'Demasiados intentos. Espera un momento.',
+      googleSignInFailed: 'No se pudo iniciar sesión con Google. Inténtalo de nuevo.',
     },
   },
   splash: {
