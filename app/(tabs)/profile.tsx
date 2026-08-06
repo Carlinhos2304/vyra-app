@@ -647,7 +647,7 @@ export default function ProfileScreen() {
 
               {/* Bottom Layout footer text elements */}
               <Animated.View style={[styles.appFooterDetailsContainer, animatedFooterStyle]}>
-                <Text style={[styles.footerBrandText, { color: theme.colors.textSecondary }]}>VYRA v0.1.0</Text>
+                <Text style={[styles.footerBrandText, { color: theme.colors.textSecondary }]}>VYRA v1.0</Text>
                 <Text style={[styles.footerSecondaryText, { color: theme.colors.textSecondary }]}>{t('profile.main.footerTagline')}</Text>
               </Animated.View>
             </>
