@@ -18,7 +18,7 @@
  */
 
 import React from 'react';
-import { StyleSheet, Text, View, Image, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { PremiumTouchable } from '../ui/PremiumTouchable';
@@ -27,6 +27,7 @@ import { useLanguage } from '../../i18n';
 import type { PlannerEvent } from '../../lib/services/plannerTypes';
 import { useEventOutfitAssignment, type EventWeatherHint } from '../../hooks/planner/useEventOutfitAssignment';
 import { AIEventTip } from './AIEventTip';
+import { OutfitGarmentsCollage } from '../outfit/OutfitGarmentsCollage';
 
 interface EventOutfitAssignmentProps {
   event: PlannerEvent;
@@ -47,7 +48,8 @@ export function EventOutfitAssignment({ event, weatherHint, onAssigned }: EventO
   );
 
   const outfitItems = event.outfits?.outfit_items || [];
-  const coverImage = outfitItems.length > 0 && outfitItems[0].clothing_items ? outfitItems[0].clothing_items.image_url : null;
+  // Every garment's photo, not just the first — see OutfitGarmentsCollage.
+  const garmentImages = outfitItems.map((junctionRow: any) => junctionRow.clothing_items?.image_url);
 
   if (event.outfit_id && event.outfits) {
     return (
@@ -57,8 +59,8 @@ export function EventOutfitAssignment({ event, weatherHint, onAssigned }: EventO
           onPress={() => router.push({ pathname: '/outfit/[id]', params: { id: event.outfit_id! } })}
         >
           <View style={[styles.coverContainer, { backgroundColor: theme.colors.surfaceSecondary }]}>
-            {coverImage ? (
-              <Image source={{ uri: coverImage }} style={styles.coverImage} />
+            {garmentImages.some(Boolean) ? (
+              <OutfitGarmentsCollage images={garmentImages} style={styles.coverImage} />
             ) : (
               <MaterialCommunityIcons name="hanger" size={22} color={theme.colors.textTertiary} />
             )}

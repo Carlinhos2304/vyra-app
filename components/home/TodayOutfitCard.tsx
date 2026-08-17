@@ -1,5 +1,5 @@
 import React from 'react';
-import { Dimensions, Image, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
   Easing,
@@ -11,6 +11,7 @@ import Animated, {
 import { PremiumCard } from '../ui/PremiumCard';
 import { PremiumTouchable } from '../ui/PremiumTouchable';
 import { SectionHeader } from '../ui/SectionHeader';
+import { OutfitGarmentsCollage } from '../outfit/OutfitGarmentsCollage';
 import { useTheme } from '../../theme';
 import { TodayOutfitPlan } from '../../hooks/useTodayOutfit';
 import { useLanguage } from '../../i18n';
@@ -24,6 +25,11 @@ interface TodayOutfitCardProps {
   onViewOutfit: () => void;
   onRegenerate: () => void;
   onCurateLook: () => void;
+  /** Opens the weather-ranked "Recommend for Today" screen (an already-saved
+   * outfit, not a new AI generation) — shown as a second CTA alongside
+   * "Curate Look" in the empty state, since Curate Look only sends the user
+   * to the Planner to pick manually. */
+  onRecommend: () => void;
   delay?: number;
 }
 
@@ -41,6 +47,7 @@ export const TodayOutfitCard: React.FC<TodayOutfitCardProps> = ({
   onViewOutfit,
   onRegenerate,
   onCurateLook,
+  onRecommend,
   delay = 0,
 }) => {
   const { theme } = useTheme();
@@ -55,7 +62,8 @@ export const TodayOutfitCard: React.FC<TodayOutfitCardProps> = ({
 
   const outfit = todayPlan?.outfits;
   const items = outfit?.outfit_items || [];
-  const coverUrl = items.length > 0 ? items[0].clothing_items?.image_url : null;
+  // Every garment's photo, not just the first — see OutfitGarmentsCollage.
+  const garmentImages = items.map((item: any) => item.clothing_items?.image_url);
   const garmentCount = items.length;
   const confidencePercent = typeof outfit?.ai_confidence === 'number' ? Math.round(outfit.ai_confidence * 100) : null;
 
@@ -75,8 +83,8 @@ export const TodayOutfitCard: React.FC<TodayOutfitCardProps> = ({
             onPressOut={() => (scale.value = withTiming(1, { duration: 200, easing: PREMIUM_EASE_OUT }))}
           >
             <View style={styles.imageWrapper}>
-              {coverUrl ? (
-                <Image source={{ uri: coverUrl }} style={styles.image} />
+              {garmentImages.some(Boolean) ? (
+                <OutfitGarmentsCollage images={garmentImages} style={styles.image} />
               ) : (
                 <View style={[styles.fallbackContainer, { backgroundColor: theme.colors.surfaceSecondary }]}>
                   <Ionicons name="shirt-outline" size={36} color={theme.colors.textTertiary} />
@@ -129,9 +137,14 @@ export const TodayOutfitCard: React.FC<TodayOutfitCardProps> = ({
           <Text style={[styles.emptySubtitle, { color: theme.colors.textSecondary }]}>
             {t('home.todayOutfit.emptySubtitle')}
           </Text>
-          <PremiumTouchable style={[styles.ctaButton, { backgroundColor: theme.colors.accent }]} onPress={onCurateLook}>
-            <Text style={[styles.ctaButtonText, { color: theme.colors.accentForeground }]}>{t('home.todayOutfit.curateLook')}</Text>
-          </PremiumTouchable>
+          <View style={styles.emptyActionsRow}>
+            <PremiumTouchable style={[styles.ctaButton, { backgroundColor: theme.colors.accent }]} onPress={onCurateLook}>
+              <Text style={[styles.ctaButtonText, { color: theme.colors.accentForeground }]}>{t('home.todayOutfit.curateLook')}</Text>
+            </PremiumTouchable>
+            <PremiumTouchable style={[styles.ctaButtonSecondary, { borderColor: theme.colors.border }]} onPress={onRecommend}>
+              <Text style={[styles.ctaButtonSecondaryText, { color: theme.colors.textPrimary }]}>{t('home.todayOutfit.recommendButton')}</Text>
+            </PremiumTouchable>
+          </View>
         </PremiumCard>
       )}
     </Animated.View>
@@ -276,13 +289,29 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     paddingHorizontal: 16,
   },
-  ctaButton: {
+  emptyActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
     marginTop: 16,
+  },
+  ctaButton: {
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 12,
   },
   ctaButtonText: {
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  ctaButtonSecondary: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  ctaButtonSecondaryText: {
     fontSize: 11,
     fontWeight: '600',
     textTransform: 'uppercase',

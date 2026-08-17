@@ -23,6 +23,7 @@ import { StaggeredListWrapper } from '../../constants/motion/StaggeredListWrappe
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { SectionTitle } from '../../components/ui/SectionTitle';
 import { PremiumLoader } from '../../components/ui/PremiumLoader';
+import { OutfitGarmentsCollage } from '../../components/outfit/OutfitGarmentsCollage';
 import { useTheme } from '../../theme';
 import { useLanguage } from '../../i18n';
 import { useTabBarClearance } from '../../hooks/useTabBarClearance';
@@ -52,7 +53,11 @@ interface OutfitCard {
   id: string;
   name: string;
   occasion: string | null;
-  coverImage: string | null;
+  // Every garment's photo, in outfit order — replaces the old single
+  // `coverImage` (first garment only) so the card can render a Whering-style
+  // collage of the whole outfit instead of just its first piece (see
+  // OutfitGarmentsCollage).
+  garmentImages: string[];
   garmentCount: number;
   created_at: string;
 }
@@ -194,19 +199,16 @@ export default function ClosetScreen() {
 
         const transformedOutfits: OutfitCard[] = (rawOutfitsData || []).map((outfit: any) => {
           const itemsArray = outfit.outfit_items || [];
-          const garmentCount = itemsArray.length;
-
-          let coverImage: string | null = null;
-          if (garmentCount > 0 && itemsArray[0].clothing_items) {
-            coverImage = itemsArray[0].clothing_items.image_url || null;
-          }
+          const garmentImages: string[] = itemsArray
+            .map((junctionRow: any) => junctionRow.clothing_items?.image_url)
+            .filter((url: unknown): url is string => typeof url === 'string' && url.length > 0);
 
           return {
             id: outfit.id,
             name: outfit.name,
             occasion: outfit.occasion,
-            coverImage: coverImage,
-            garmentCount: garmentCount,
+            garmentImages,
+            garmentCount: itemsArray.length,
             created_at: outfit.created_at,
           };
         });
@@ -408,7 +410,10 @@ export default function ClosetScreen() {
               })
             }
           >
-            <View style={[styles.imageWrapper, { backgroundColor: theme.colors.surfaceSecondary }]}>
+            {/* Fixed white (not theme-dependent): garment photos are transparent
+                PNG cutouts now (see remove-background), so this needs its own
+                opaque backdrop regardless of the active theme. */}
+            <View style={[styles.imageWrapper, { backgroundColor: '#FFFFFF' }]}>
               <Image source={{ uri: garmentItem.image_url }} style={styles.imageGarmentImage} />
               {/* Ring color intentionally fixed (theme.colors.surface): frames the
                   garment's own data-driven color swatch, not app chrome. */}
@@ -440,9 +445,9 @@ export default function ClosetScreen() {
               params: { id: outfitItem.id }
             })}
           >
-            {outfitItem.coverImage ? (
+            {outfitItem.garmentImages.length > 0 ? (
               <View style={styles.imageWrapper}>
-                <Image source={{ uri: outfitItem.coverImage }} style={styles.imageGarmentImage} />
+                <OutfitGarmentsCollage images={outfitItem.garmentImages} />
                 {/* Fixed: floats over the outfit photo, not the app canvas. */}
                 {outfitItem.occasion && (
                   <View style={styles.occasionPillFloatingFloating}>
@@ -472,7 +477,7 @@ export default function ClosetScreen() {
                 <Text style={[styles.outfitGarmentsCountSubtitleStyle, { color: theme.colors.textSecondary }]}>
                   {outfitItem.garmentCount} {outfitItem.garmentCount === 1 ? t('tabs.closet.garmentSingular') : t('tabs.closet.garmentPlural')}
                 </Text>
-                {!outfitItem.coverImage && outfitItem.occasion && (
+                {outfitItem.garmentImages.length === 0 && outfitItem.occasion && (
                   <View style={[styles.badge, { borderColor: theme.colors.border }]}>
                     <Text style={[styles.badgeText, { color: theme.colors.textSecondary }]}>{outfitItem.occasion}</Text>
                   </View>

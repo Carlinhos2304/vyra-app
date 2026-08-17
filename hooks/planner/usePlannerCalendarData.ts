@@ -89,12 +89,14 @@ export function usePlannerCalendarData(weekDates: string[], selectedDateISO: str
         (plansData || []).forEach((row: any) => {
           if (!row.planned_date || !row.outfits) return;
           const items = row.outfits.outfit_items || [];
-          const cover = items.length > 0 && items[0].clothing_items ? items[0].clothing_items.image_url : null;
+          const garmentImages = items
+            .map((item: any) => item.clothing_items?.image_url)
+            .filter((url: unknown): url is string => typeof url === 'string' && url.length > 0);
           reducedPlansMap[row.planned_date] = {
             id: row.id,
             outfitId: row.outfit_id,
             outfitName: row.outfits.name,
-            coverImage: cover,
+            garmentImages,
             occasion: row.outfits.occasion,
           };
         });

@@ -21,7 +21,7 @@ export const PremiumModal: React.FC<PremiumModalProps> = ({ isVisible, onClose, 
     if (isVisible) {
       Animated.parallel([
         Animated.timing(backdropOpacity, {
-          toValue: 0.4,
+          toValue: 1,
           duration: MOTION.timings.subtle,
           easing: MOTION.curves.premiumEaseOut,
           useNativeDriver: true,
@@ -72,7 +72,7 @@ export const PremiumModal: React.FC<PremiumModalProps> = ({ isVisible, onClose, 
     >
       <View style={styles.fullscreenOverlay}>
         <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose}>
-          <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]} />
+          <Animated.View style={[styles.backdrop, { backgroundColor: theme.colors.overlay, opacity: backdropOpacity }]} />
         </Pressable>
 
         <Animated.View
@@ -103,7 +103,6 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#000000',
   },
   modalContentCard: {
     width: '100%',

@@ -2,6 +2,20 @@ import React from 'react';
 import { Animated, Pressable, StyleSheet, StyleProp, ViewStyle, Insets } from 'react-native';
 import { usePremiumPress } from '../../hooks/animation/usePremiumPress';
 
+// Animated wrapper around Pressable itself (not a plain View nested inside
+// it) — this is what makes `style` land on the actual flex item. Previously
+// the incoming `style` was only applied to an inner Animated.View, one level
+// below the Pressable that flexbox parents (e.g. a `flexDirection: 'row'`
+// button row) actually see as their child. A caller-supplied `flex: 1`
+// (or `height`, `alignItems`, etc.) on that inner View had no effect on the
+// row's layout, since Yoga only honors flex on direct children of the flex
+// container — the Pressable, with no size of its own, collapsed to a sliver.
+// Wrapping Pressable itself in Animated.createAnimatedComponent lets the
+// full style (layout + visuals) apply directly to the real flex item, and
+// the press scale/opacity now animates the whole button instead of just its
+// inner content.
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
 interface PremiumTouchableProps {
   children: React.ReactNode;
   onPress?: () => void;
@@ -21,24 +35,21 @@ export const PremiumTouchable: React.FC<PremiumTouchableProps> = ({
   const { pressProps, animatedStyle } = usePremiumPress();
 
   return (
-    <Pressable
+    <AnimatedPressable
       onPress={onPress}
       onPressIn={!disabled ? pressProps.onPressIn : undefined}
       onPressOut={!disabled ? pressProps.onPressOut : undefined}
       disabled={disabled}
       hitSlop={hitSlop}
-      style={styles.pressableReset}
+      style={[
+        styles.pressableReset,
+        style,
+        !disabled && animatedStyle,
+        disabled && styles.disabledOpacity,
+      ]}
     >
-      <Animated.View
-        style={[
-          style,
-          !disabled && animatedStyle,
-          disabled && styles.disabledOpacity,
-        ]}
-      >
-        {children}
-      </Animated.View>
-    </Pressable>
+      {children}
+    </AnimatedPressable>
   );
 };
 

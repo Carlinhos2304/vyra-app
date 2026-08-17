@@ -241,3 +241,59 @@ export async function planOutfitForDate(dateISO: string, outfitId: string): Prom
     throw new SaveOutfitError(insertError.message);
   }
 }
+
+/**
+ * Clears an event's assigned outfit (`events.outfit_id = null`) — the
+ * "Quitar outfit del día" action on the Planner's Selected Day Outfit card,
+ * for the case where that day's effective look was derived from a single
+ * event's own outfit (see useDaySummary.ts's sourceEventId). Mirrors
+ * planOutfitForEvent's shape exactly, just nulling instead of setting.
+ * Deliberately does NOT touch the `outfits` row itself — this only removes
+ * the assignment, never deletes the outfit (that's a separate, explicit
+ * action on the outfit detail screen).
+ */
+export async function unassignOutfitFromEvent(eventId: string): Promise<void> {
+  if (!eventId) {
+    throw new SaveOutfitError('An event id is required to remove its assigned outfit.');
+  }
+
+  const { error } = await supabase.from('events').update({ outfit_id: null }).eq('id', eventId);
+
+  if (error) {
+    throw new SaveOutfitError(error.message);
+  }
+}
+
+/**
+ * Removes a day-level outfit_plans row for the given date — the "Quitar
+ * outfit del día" action for the case where the day's look is an explicit
+ * day-level plan (not derived from an event). Deletes the row outright
+ * (rather than nulling outfit_id on it) so an unassigned day has no
+ * lingering outfit_plans row at all, matching how usePlannerCalendarData
+ * already treats "no row for this date" as "nothing planned." As with
+ * unassignOutfitFromEvent, this never touches the `outfits` row itself.
+ */
+export async function unassignOutfitFromDate(dateISO: string): Promise<void> {
+  if (!dateISO) {
+    throw new SaveOutfitError('A date is required to remove its assigned outfit.');
+  }
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    throw new SaveOutfitError('Your session has expired. Please sign in again.');
+  }
+
+  const { error } = await supabase
+    .from('outfit_plans')
+    .delete()
+    .eq('user_id', user.id)
+    .eq('planned_date', dateISO);
+
+  if (error) {
+    throw new SaveOutfitError(error.message);
+  }
+}

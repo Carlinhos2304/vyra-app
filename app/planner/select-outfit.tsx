@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { StyleSheet, Text, View, FlatList, Image, Dimensions, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, FlatList, Dimensions, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
@@ -13,11 +13,13 @@ import { supabase } from '../../lib/supabase';
 import { planOutfitForDate, planOutfitForEvent, SaveOutfitError } from '../../lib/services/outfitService';
 import { useTheme } from '../../theme';
 import { useLanguage } from '../../i18n';
+import { OutfitGarmentsCollage } from '../../components/outfit/OutfitGarmentsCollage';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 44) / 2;
 
-interface OutfitSelectionItem { id: string; name: string; occasion: string | null; coverImage: string | null; garmentCount: number; }
+// Every garment's photo, not just the first — see OutfitGarmentsCollage.
+interface OutfitSelectionItem { id: string; name: string; occasion: string | null; garmentImages: string[]; garmentCount: number; }
 
 export default function SelectOutfitScreen() {
   const { theme } = useTheme();
@@ -46,8 +48,10 @@ export default function SelectOutfitScreen() {
 
       setOutfits((rawData || []).map((outfit: any) => {
         const items = outfit.outfit_items || [];
-        const coverImage = items.length > 0 && items[0].clothing_items ? items[0].clothing_items.image_url : null;
-        return { id: outfit.id, name: outfit.name, occasion: outfit.occasion, coverImage, garmentCount: items.length };
+        const garmentImages = items
+          .map((junctionRow: any) => junctionRow.clothing_items?.image_url)
+          .filter((url: unknown): url is string => typeof url === 'string' && url.length > 0);
+        return { id: outfit.id, name: outfit.name, occasion: outfit.occasion, garmentImages, garmentCount: items.length };
       }));
     } catch (err: any) {
       setError(err.message || t('planner.selectOutfit.fetchError'));
@@ -119,7 +123,7 @@ export default function SelectOutfitScreen() {
           <AnimatedListItem index={index}>
             <PremiumTouchable onPress={() => !isSaving && handleSelectOutfit(item.id)} style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.divider }]}>
               <View style={[styles.imageWrapper, { backgroundColor: theme.colors.surfaceSecondary }]}>
-                {item.coverImage ? <Image source={{ uri: item.coverImage }} style={styles.cardImage} /> : <View style={styles.placeholderContainer}><MaterialCommunityIcons name="hanger" size={24} color={theme.colors.textTertiary} /></View>}
+                {item.garmentImages.length > 0 ? <OutfitGarmentsCollage images={item.garmentImages} style={styles.cardImage} /> : <View style={styles.placeholderContainer}><MaterialCommunityIcons name="hanger" size={24} color={theme.colors.textTertiary} /></View>}
               </View>
               <View style={styles.cardInfo}>
                 <SectionTitle numberOfLines={1} style={[styles.outfitTitle, { color: theme.colors.textPrimary }]}>{item.name}</SectionTitle>

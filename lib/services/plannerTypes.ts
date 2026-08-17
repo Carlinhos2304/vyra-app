@@ -55,7 +55,9 @@ export interface PlannerDayPlan {
   id: string;
   outfitId: string;
   outfitName: string;
-  coverImage: string | null;
+  /** Every garment's photo in this day's outfit, not just the first — see
+   * components/outfit/OutfitGarmentsCollage. */
+  garmentImages: string[];
   occasion: string | null;
   /** Set when this "day look" wasn't an explicit outfit_plans row but was
    * derived from a single event's assigned outfit — see useDaySummary.ts.

@@ -6,7 +6,6 @@ import {
   ScrollView,
   Image,
   Dimensions,
-  Alert,
   NativeSyntheticEvent,
   NativeScrollEvent,
 } from 'react-native';
@@ -20,6 +19,7 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
+import { AppAlert } from '../../lib/ui/appAlert';
 
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { PremiumButton } from '../../components/ui/PremiumButton';
@@ -237,7 +237,7 @@ export default function GenerateOutfitScreen() {
       }
     } catch (err) {
       const message = err instanceof SaveOutfitError ? err.message : t('outfitAi.generateOutfit.alerts.saveFailedMessage');
-      Alert.alert(t('outfitAi.generateOutfit.alerts.saveFailedTitle'), message);
+      AppAlert.alert(t('outfitAi.generateOutfit.alerts.saveFailedTitle'), message);
     } finally {
       setBusyIndex(null);
     }
@@ -263,7 +263,7 @@ export default function GenerateOutfitScreen() {
       router.push('/calendar');
     } catch (err) {
       const message = err instanceof SaveOutfitError ? err.message : t('outfitAi.generateOutfit.alerts.saveFailedMessage');
-      Alert.alert(t('outfitAi.generateOutfit.alerts.saveFailedTitle'), message);
+      AppAlert.alert(t('outfitAi.generateOutfit.alerts.saveFailedTitle'), message);
     } finally {
       setBusyIndex(null);
     }

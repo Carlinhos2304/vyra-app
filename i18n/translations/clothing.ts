@@ -87,6 +87,9 @@ export const clothingEn = {
       reanalyze: 'Re-analyze with AI',
       analyze: 'Analyze with AI',
     },
+    backgroundRemoval: {
+      removingLabel: 'Removing background...',
+    },
     saveButton: 'Save to Wardrobe',
     colorPicker: {
       title: 'Custom Palette Curator',
@@ -136,6 +139,9 @@ export const clothingEn = {
       brandPlaceholder: 'e.g., Loro Piana',
       category: 'Category Classification',
       color: 'Dominant Tone Profile',
+    },
+    backgroundRemoval: {
+      removingLabel: 'Removing background...',
     },
     saveButton: 'Save Changes',
     colorPicker: {
@@ -231,6 +237,9 @@ export const clothingEs = {
       reanalyze: 'Volver a analizar con IA',
       analyze: 'Analizar con IA',
     },
+    backgroundRemoval: {
+      removingLabel: 'Quitando el fondo...',
+    },
     saveButton: 'Guardar en el armario',
     colorPicker: {
       title: 'Selector de color personalizado',
@@ -280,6 +289,9 @@ export const clothingEs = {
       brandPlaceholder: 'ej., Loro Piana',
       category: 'Clasificación de categoría',
       color: 'Tono predominante',
+    },
+    backgroundRemoval: {
+      removingLabel: 'Quitando el fondo...',
     },
     saveButton: 'Guardar cambios',
     colorPicker: {

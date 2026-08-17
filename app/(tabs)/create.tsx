@@ -24,8 +24,6 @@ import Animated, {
   ZoomOut,
   SlideInRight,
   SlideOutRight,
-  interpolate,
-  Extrapolation,
 } from 'react-native-reanimated';
 import { useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -35,6 +33,7 @@ import { PremiumTouchable } from '../../components/ui/PremiumTouchable';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { SectionTitle } from '../../components/ui/SectionTitle';
 import { PremiumLoader } from '../../components/ui/PremiumLoader';
+import { OutfitCanvas } from '../../components/outfit/OutfitCanvas';
 import { useTheme } from '../../theme';
 import type { Theme } from '../../theme';
 import { useLanguage } from '../../i18n';
@@ -43,6 +42,13 @@ import { useTabBarClearance } from '../../hooks/useTabBarClearance';
 // Supabase client instance integration
 import { supabase } from '../../lib/supabase';
 import { OUTFIT_OCCASIONS } from '../../constants/garmentTaxonomy';
+import { generateOutfits, AIAnalysisError } from '../../lib/services/aiService';
+import {
+  computeDefaultCanvasPosition,
+  arrangeGarmentsOnCanvas,
+  getNextZIndex,
+  type OutfitCanvasPosition,
+} from '../../lib/services/outfitCanvasLayout';
 
 // Enable layout animations natively for Android target instances
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -50,7 +56,15 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 const { width } = Dimensions.get('window');
-const CANVAS_ITEM_SIZE = 76;
+// Outfit Canvas sizing — canvas spans the full content width (minus the
+// screen's 16px horizontal padding on each side) and is slightly taller than
+// wide, a "flat lay" portrait feel. Tile size is a fraction of canvas width
+// so a handful of garments can overlap and still each stay individually
+// draggable, per the drag-and-reorder-only interaction the user asked for
+// (see components/outfit/OutfitCanvas.tsx's header comment).
+const CANVAS_WIDTH = width - 32;
+const CANVAS_HEIGHT = CANVAS_WIDTH * 1.2;
+const CANVAS_TILE_SIZE = CANVAS_WIDTH * 0.4;
 
 // Strong Typing Strategy for Database Wardrobe Entities
 interface Garment {
@@ -102,9 +116,15 @@ export default function CreateOutfitScreen() {
 
   const [garments, setGarments] = useState<Garment[]>([]);
   const [selectedItems, setSelectedItems] = useState<Garment[]>([]);
+  // Every selected garment's spot on the Outfit Canvas, keyed by garment id
+  // — see lib/services/outfitCanvasLayout.ts for the shape and the
+  // auto-arrange-by-category fallback used when a garment doesn't have one
+  // yet (freshly picked, or a legacy outfit saved before this feature).
+  const [canvasPositions, setCanvasPositions] = useState<Record<string, OutfitCanvasPosition>>({});
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isOutfitLoading, setIsOutfitLoading] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isRecommending, setIsRecommending] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   // Inline Premium Feedback Banner States
@@ -121,6 +141,7 @@ export default function CreateOutfitScreen() {
     setOutfitName('');
     setOccasion(null);
     setSelectedItems([]);
+    setCanvasPositions({});
     setErrorMessage(null);
     setError(null);
   }, []);
@@ -173,6 +194,9 @@ export default function CreateOutfitScreen() {
                   name,
                   occasion,
                   outfit_items (
+                    position_x,
+                    position_y,
+                    z_index,
                     clothing_items (
                       id,
                       user_id,
@@ -202,6 +226,33 @@ export default function CreateOutfitScreen() {
                   .filter(Boolean);
 
                 setSelectedItems(deepParsedGarments);
+
+                // Every outfit_items row for one outfit is written together in
+                // a single save (see handleSaveOutfitWorkflow) — so either all
+                // of them have a saved canvas position or none do. A partial
+                // mix shouldn't happen, but is handled safely by falling back
+                // to auto-arrangement for everything, same as a fully legacy
+                // outfit (see outfitCanvasLayout.ts's header comment).
+                const hasSavedPositions =
+                  rawJunctionItems.length > 0 &&
+                  rawJunctionItems.every(
+                    (junction: any) => typeof junction.position_x === 'number' && typeof junction.position_y === 'number'
+                  );
+
+                if (hasSavedPositions) {
+                  const loadedPositions: Record<string, OutfitCanvasPosition> = {};
+                  rawJunctionItems.forEach((junction: any) => {
+                    if (!junction.clothing_items) return;
+                    loadedPositions[junction.clothing_items.id] = {
+                      x: junction.position_x,
+                      y: junction.position_y,
+                      zIndex: typeof junction.z_index === 'number' ? junction.z_index : 0,
+                    };
+                  });
+                  setCanvasPositions(loadedPositions);
+                } else {
+                  setCanvasPositions(arrangeGarmentsOnCanvas(deepParsedGarments));
+                }
               }
             } catch (editFetchErr: any) {
               console.error('[Outfit Edit Engine Error] Query processing collapsed:', editFetchErr);
@@ -261,11 +312,96 @@ export default function CreateOutfitScreen() {
     setSelectedItems((current) => {
       const isAlreadySelected = current.some((selected) => selected.id === item.id);
       if (isAlreadySelected) {
+        setCanvasPositions((positions) => {
+          const { [item.id]: _removed, ...rest } = positions;
+          return rest;
+        });
         return current.filter((selected) => selected.id !== item.id);
       } else {
+        setCanvasPositions((positions) => {
+          if (positions[item.id]) return positions; // Already has a position (e.g. restored from a saved outfit).
+          const sameCategoryCount = current.filter((g) => g.category === item.category).length;
+          return {
+            ...positions,
+            [item.id]: computeDefaultCanvasPosition(item.category, sameCategoryCount, sameCategoryCount + 1),
+          };
+        });
         return [...current, item];
       }
     });
+  };
+
+  // Drag lifecycle callbacks passed to OutfitCanvas — kept as stable
+  // useCallback identities so re-renders while dragging one tile don't
+  // recreate every other tile's gesture handler.
+  const handleCanvasBringToFront = useCallback((id: string) => {
+    setCanvasPositions((positions) => {
+      const current = positions[id];
+      const nextZ = getNextZIndex(positions);
+      if (current && current.zIndex >= nextZ - 1) return positions; // Already frontmost — skip the render.
+      return { ...positions, [id]: { ...(current ?? { x: 0.5, y: 0.5, zIndex: 0 }), zIndex: nextZ } };
+    });
+  }, []);
+
+  const handleCanvasPositionChange = useCallback((id: string, x: number, y: number) => {
+    setCanvasPositions((positions) => ({
+      ...positions,
+      [id]: { ...(positions[id] ?? { zIndex: 0 }), x, y },
+    }));
+  }, []);
+
+  const handleCanvasRemove = useCallback((id: string) => {
+    setSelectedItems((current) => {
+      const item = current.find((g) => g.id === id);
+      if (!item) return current;
+      setCanvasPositions((positions) => {
+        const { [id]: _removed, ...rest } = positions;
+        return rest;
+      });
+      return current.filter((g) => g.id !== id);
+    });
+  }, []);
+
+  // "Recommend" — asks the same AI outfit generator the rest of the app
+  // already uses (lib/services/aiService.generateOutfits, the Edge Function
+  // behind app/ai/generate-outfit.tsx) for a suggestion, then drops it
+  // straight onto the canvas auto-arranged by category, replacing whatever
+  // was there before. Deliberately does NOT navigate anywhere — the whole
+  // point (per the user's own framing of this feature) is that the
+  // recommendation lands in the same lienzo you're already building in,
+  // not a separate swipeable-cards screen.
+  const handleRecommend = async () => {
+    if (isRecommending) return;
+
+    if (!occasion) {
+      setErrorMessage(t('tabs.create.recommendNeedsOccasion'));
+      return;
+    }
+
+    setErrorMessage(null);
+    setIsRecommending(true);
+    try {
+      const suggestions = await generateOutfits(occasion);
+      const best = suggestions[0];
+
+      const matchedGarments = (best?.clothing_item_ids || [])
+        .map((id) => garments.find((g) => g.id === id))
+        .filter((g): g is Garment => !!g);
+
+      if (!best || matchedGarments.length === 0) {
+        setErrorMessage(t('tabs.create.recommendNoSuggestions'));
+        return;
+      }
+
+      setSelectedItems(matchedGarments);
+      setCanvasPositions(arrangeGarmentsOnCanvas(matchedGarments));
+      if (!outfitName.trim()) setOutfitName(best.title);
+    } catch (err: any) {
+      const message = err instanceof AIAnalysisError ? err.message : err?.message || t('tabs.create.recommendFailed');
+      setErrorMessage(message);
+    } finally {
+      setIsRecommending(false);
+    }
   };
 
   const handleSaveOutfitWorkflow = async () => {
@@ -346,10 +482,16 @@ export default function CreateOutfitScreen() {
 
       // Step 3: Insert look composition grid entries mapping public relational indices keys
       if (selectedItems.length > 0 && activeOutfitId) {
-        const payloadJunctionRows = selectedItems.map((item) => ({
-          outfit_id: activeOutfitId,
-          clothing_item_id: item.id,
-        }));
+        const payloadJunctionRows = selectedItems.map((item) => {
+          const position = canvasPositions[item.id];
+          return {
+            outfit_id: activeOutfitId,
+            clothing_item_id: item.id,
+            position_x: position?.x ?? null,
+            position_y: position?.y ?? null,
+            z_index: position?.zIndex ?? null,
+          };
+        });
 
         const { error: junctionInsertErr } = await supabase
           .from('outfit_items')
@@ -472,40 +614,36 @@ export default function CreateOutfitScreen() {
             <Animated.View style={[styles.countBadgeNode, { backgroundColor: theme.colors.surfaceSecondary, borderColor: theme.colors.border }]} layout={Layout.springify()}>
               <Text style={[styles.countBadgeText, { color: theme.colors.textSecondary }]}>{t('tabs.create.layeredCount', { count: selectedItems.length })}</Text>
             </Animated.View>
+
+            <PremiumTouchable
+              style={[styles.recommendButton, { backgroundColor: theme.colors.accent }, isRecommending && styles.saveExecutionDisabledOpacity]}
+              onPress={handleRecommend}
+              disabled={isRecommending}
+            >
+              {isRecommending ? (
+                <ActivityIndicator size="small" color={theme.colors.accentForeground} />
+              ) : (
+                <>
+                  <Ionicons name="sparkles" size={13} color={theme.colors.accentForeground} />
+                  <Text style={[styles.recommendButtonText, { color: theme.colors.accentForeground }]}>
+                    {t('tabs.create.recommendButton')}
+                  </Text>
+                </>
+              )}
+            </PremiumTouchable>
           </View>
 
-          <View style={[styles.outfitCanvasPreviewStageFrame, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }]}>
-            {selectedItems.length === 0 ? (
-              <View style={styles.emptyCanvasCenterFrameFallback}>
-                <MaterialCommunityIcons name="layers-triple-outline" size={32} color={theme.colors.textTertiary} />
-                <Text style={[styles.emptyCanvasTypographyFallback, { color: theme.colors.textTertiary }]}>
-                  {t('tabs.create.canvasEmptyHint')}
-                </Text>
-              </View>
-            ) : (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.canvasItemsRowSpacedLayout}>
-                {selectedItems.map((item, index) => (
-                  <Animated.View key={`${item.id}-${index}`} entering={ZoomIn.springify()} exiting={ZoomOut} layout={Layout.springify()}>
-                    <PremiumTouchable
-                      style={[styles.canvasAssetWrapperCircle, { backgroundColor: theme.colors.surfaceSecondary, borderColor: theme.colors.border }]}
-                      onPress={() => toggleGarmentSelection(item)}
-                    >
-                      {item.image_url ? (
-                        <Image source={{ uri: item.image_url }} style={styles.canvasTargetAssetImageSquare} />
-                      ) : (
-                        <View style={styles.canvasFallbackAssetCenterFrame}>
-                          <MaterialCommunityIcons name="hanger" size={18} color={theme.colors.textSecondary} />
-                        </View>
-                      )}
-                      <View style={[styles.removeAssetIndicatorBadgeMini, { backgroundColor: theme.colors.accent, borderColor: theme.colors.surface }]}>
-                        <Ionicons name="close" size={10} color={theme.colors.accentForeground} />
-                      </View>
-                    </PremiumTouchable>
-                  </Animated.View>
-                ))}
-              </ScrollView>
-            )}
-          </View>
+          <OutfitCanvas
+            items={selectedItems}
+            positions={canvasPositions}
+            onPositionChange={handleCanvasPositionChange}
+            onDragStart={handleCanvasBringToFront}
+            onRemove={handleCanvasRemove}
+            emptyLabel={t('tabs.create.canvasEmptyHint')}
+            height={CANVAS_HEIGHT}
+            tileSize={CANVAS_TILE_SIZE}
+            backgroundColor="#FAFAF9"
+          />
         </Animated.View>
 
         {/* Grid Selector Core Relational Node Rows Grouped by Category */}
@@ -604,7 +742,7 @@ const GarmentCard = ({ item, isSelected, onPress }: { item: Garment, isSelected:
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
       >
-        <View style={[styles.garmentSwiperImageContainerBoundingBox, { backgroundColor: theme.colors.surfaceSecondary }]}>
+        <View style={[styles.garmentSwiperImageContainerBoundingBox, { backgroundColor: '#FFFFFF' }]}>
           {item.image_url ? (
             <Image source={{ uri: item.image_url }} style={styles.garmentSwiperCardTargetImage} />
           ) : (
@@ -745,61 +883,21 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
   },
-  outfitCanvasPreviewStageFrame: {
-    minHeight: 112,
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 16,
-    justifyContent: 'center',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.01,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  emptyCanvasCenterFrameFallback: {
+  recommendButton: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
+    gap: 6,
+    marginLeft: 'auto',
+    paddingHorizontal: 12,
+    height: 30,
+    borderRadius: 15,
   },
-  emptyCanvasTypographyFallback: {
+  recommendButtonText: {
     fontSize: 12,
-    textAlign: 'center',
-    lineHeight: 16,
-    marginTop: 6,
+    fontWeight: '600',
   },
-  canvasItemsRowSpacedLayout: {
-    gap: 14,
-    alignItems: 'center',
-  },
-  canvasAssetWrapperCircle: {
-    width: CANVAS_ITEM_SIZE,
-    height: CANVAS_ITEM_SIZE,
-    borderRadius: CANVAS_ITEM_SIZE / 2,
-    borderWidth: 1,
-    position: 'relative',
-    overflow: 'visible',
-  },
-  canvasTargetAssetImageSquare: {
-    width: '100%',
-    height: '100%',
-    borderRadius: CANVAS_ITEM_SIZE / 2,
-    resizeMode: 'cover',
-  },
-  canvasFallbackAssetCenterFrame: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  removeAssetIndicatorBadgeMini: {
-    position: 'absolute',
-    right: -2,
-    top: -2,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
+  saveExecutionDisabledOpacity: {
+    opacity: 0.7,
   },
   emptyStateContainerBox: {
     borderRadius: 16,

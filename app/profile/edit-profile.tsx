@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
-  Alert,
   TouchableOpacity,
   Text,
   ScrollView,
@@ -17,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Animated, { FadeIn, Easing } from 'react-native-reanimated';
+import { AppAlert } from '../../lib/ui/appAlert';
 
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { SectionHeader } from '../../components/ui/SectionHeader';
@@ -87,7 +87,7 @@ export default function EditProfileScreen() {
           });
         }
       } catch (error: any) {
-        Alert.alert(t('profile.editProfile.errors.loadProfileTitle'), error.message);
+        AppAlert.alert(t('profile.editProfile.errors.loadProfileTitle'), error.message);
         router.back();
       } finally {
         setIsLoading(false);
@@ -132,7 +132,7 @@ export default function EditProfileScreen() {
 
   const handleSaveProfile = async () => {
     if (!userId) {
-      Alert.alert(t('profile.editProfile.errors.userIdNotFoundTitle'), t('profile.editProfile.errors.userIdNotFoundMessage'));
+      AppAlert.alert(t('profile.editProfile.errors.userIdNotFoundTitle'), t('profile.editProfile.errors.userIdNotFoundMessage'));
       return;
     }
 
@@ -147,10 +147,10 @@ export default function EditProfileScreen() {
         throw error;
       }
 
-      Alert.alert(t('profile.editProfile.success.title'), t('profile.editProfile.success.message'));
+      AppAlert.alert(t('profile.editProfile.success.title'), t('profile.editProfile.success.message'));
       router.back();
     } catch (error: any) {
-      Alert.alert(t('profile.editProfile.errors.saveProfileTitle'), error.message);
+      AppAlert.alert(t('profile.editProfile.errors.saveProfileTitle'), error.message);
     } finally {
       setIsSaving(false);
     }

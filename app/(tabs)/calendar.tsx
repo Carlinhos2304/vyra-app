@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View, Image } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { AppAlert } from '../../lib/ui/appAlert';
 import Animated, {
   FadeInDown,
   Easing,
@@ -21,6 +22,8 @@ import { DayTimeline } from '../../components/planner/DayTimeline';
 import { ConflictCard } from '../../components/planner/ConflictCard';
 import { UpcomingPreparations } from '../../components/planner/UpcomingPreparations';
 import { PlannerQuickActions } from '../../components/planner/PlannerQuickActions';
+import { OutfitGarmentsCollage } from '../../components/outfit/OutfitGarmentsCollage';
+import { unassignOutfitFromDate, unassignOutfitFromEvent } from '../../lib/services/outfitService';
 import { usePlannerCalendarData } from '../../hooks/planner/usePlannerCalendarData';
 import { useDaySummary } from '../../hooks/planner/useDaySummary';
 import { useDayTimeline } from '../../hooks/planner/useDayTimeline';
@@ -112,7 +115,7 @@ export default function CalendarScreen() {
   const activeWeekMatrix = generateWeeklyTrackSequence(currentPivotDate, localizedWeekDays);
   const weekDates = activeWeekMatrix.map((d) => d.isoString);
 
-  const { isLoading, error, weekPlans, weekEventDates, selectedDayEvents, upcomingEvents } = usePlannerCalendarData(
+  const { isLoading, error, weekPlans, weekEventDates, selectedDayEvents, upcomingEvents, refetch } = usePlannerCalendarData(
     weekDates,
     selectedDateISO
   );
@@ -123,6 +126,45 @@ export default function CalendarScreen() {
   const { timed, untimed } = useDayTimeline(selectedDayEvents);
   const conflicts = usePlannerConflicts(upcomingEvents, forecast, todayLocalISO);
   const preparations = useUpcomingPreparations(upcomingEvents, todayLocalISO);
+
+  const [isRemovingDayOutfit, setIsRemovingDayOutfit] = useState(false);
+
+  // "Quitar outfit del día" — unassigns whatever the day's effective look
+  // currently resolves to (see useDaySummary's deriveEffectivePlan): if it
+  // came from a single event's own outfit, clear that event's outfit_id;
+  // otherwise delete the day-level outfit_plans row. Either way this only
+  // removes the ASSIGNMENT — the outfit itself is never touched/deleted.
+  const handleRemoveDayOutfit = () => {
+    const plan = daySummary.plan;
+    if (!plan || isRemovingDayOutfit) return;
+
+    AppAlert.alert(
+      t('tabs.calendar.removeConfirmTitle'),
+      t('tabs.calendar.removeConfirmMessage'),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.remove'),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsRemovingDayOutfit(true);
+              if (plan.sourceEventId) {
+                await unassignOutfitFromEvent(plan.sourceEventId);
+              } else {
+                await unassignOutfitFromDate(selectedDateISO);
+              }
+              refetch();
+            } catch (err: any) {
+              AppAlert.alert(t('tabs.calendar.removeFailedTitle'), err.message || t('tabs.calendar.removeFailedMessage'));
+            } finally {
+              setIsRemovingDayOutfit(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const formattedMonthHeaderLabel = currentPivotDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 
@@ -209,7 +251,7 @@ export default function CalendarScreen() {
               {daySummary.plan ? (
                 <PremiumCard key={daySummary.plan.id} style={[styles.plannedOutfitCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]} onPress={() => router.push({ pathname: '/outfit/[id]', params: { id: daySummary.plan!.outfitId } })}>
                   <View style={[styles.cardImageContainer, { backgroundColor: theme.colors.surfaceSecondary }]}>
-                    {daySummary.plan.coverImage ? <Image source={{ uri: daySummary.plan.coverImage }} style={styles.outfitCoverImage} /> : <View style={styles.assetImageBlankContainer}><MaterialCommunityIcons name="hanger" size={24} color={theme.colors.textTertiary} /></View>}
+                    {daySummary.plan.garmentImages.length > 0 ? <OutfitGarmentsCollage images={daySummary.plan.garmentImages} style={styles.outfitCoverImage} /> : <View style={styles.assetImageBlankContainer}><MaterialCommunityIcons name="hanger" size={24} color={theme.colors.textTertiary} /></View>}
                   </View>
                   <View style={styles.cardDetailsPane}>
                     <View style={styles.cardMetadataRow}>
@@ -246,6 +288,14 @@ export default function CalendarScreen() {
                         }
                       >
                         <Text style={[styles.actionButtonTextSecondary, { color: theme.colors.textSecondary }]}>{t('tabs.calendar.change')}</Text>
+                      </PremiumTouchable>
+                      <PremiumTouchable
+                        style={styles.removeDayOutfitButton}
+                        onPress={handleRemoveDayOutfit}
+                        disabled={isRemovingDayOutfit}
+                        hitSlop={8}
+                      >
+                        <MaterialCommunityIcons name="trash-can-outline" size={16} color={theme.colors.danger} />
                       </PremiumTouchable>
                     </View>
                   </View>
@@ -315,6 +365,7 @@ const styles = StyleSheet.create({
   actionButtonText: { fontSize: 13, fontWeight: '600' },
   inlineActionTextButtonSecondary: { flexDirection: 'row', alignItems: 'center', paddingVertical: 2 },
   actionButtonTextSecondary: { fontSize: 12, fontWeight: '400' },
+  removeDayOutfitButton: { marginLeft: 'auto', paddingVertical: 2 },
   emptyStateCardContainer: { borderRadius: 16, borderWidth: 1, borderStyle: 'dashed', padding: 24, alignItems: 'center', justifyContent: 'center' },
   emptyStateHeading: { fontSize: 14, fontWeight: '500', marginBottom: 4 },
   assignOutfitActionBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },

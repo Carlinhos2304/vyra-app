@@ -7,16 +7,17 @@ import {
   Image,
   Dimensions,
   ActivityIndicator,
-  Alert,
   Share,
   Animated,
   Pressable,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
+import { AppAlert } from '../../lib/ui/appAlert';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { PremiumTouchable } from '../../components/ui/PremiumTouchable';
 import { SectionTitle } from '../../components/ui/SectionTitle';
+import { OutfitGarmentsCollage } from '../../components/outfit/OutfitGarmentsCollage';
 
 // Supabase client instance integration
 import { supabase } from '../../lib/supabase';
@@ -40,7 +41,6 @@ interface OutfitDetail {
   name: string;
   occasion: string | null;
   created_at: string;
-  coverImage: string | null;
   garments: Garment[];
 }
 
@@ -148,15 +148,11 @@ export default function OutfitDetailScreen() {
         .map((junction: any) => junction.clothing_items)
         .filter(Boolean);
 
-      // Rule: Set cover image as first available piece image path array string
-      const resolvedCoverImage = parsedGarments.length > 0 ? parsedGarments[0].image_url : null;
-
       const formattedDetail: OutfitDetail = {
         id: data.id,
         name: data.name,
         occasion: data.occasion,
         created_at: data.created_at,
-        coverImage: resolvedCoverImage,
         garments: parsedGarments,
       };
 
@@ -202,7 +198,7 @@ export default function OutfitDetailScreen() {
   const handleDeleteOutfitConfirmation = () => {
     if (!outfit) return;
 
-    Alert.alert(
+    AppAlert.alert(
       t('outfitAi.detail.deleteConfirmTitle'),
       t('outfitAi.detail.deleteConfirmMessage'),
       [
@@ -238,7 +234,7 @@ export default function OutfitDetailScreen() {
               router.replace('/closet');
             } catch (err: any) {
               console.error('[Outfit Delete Failure]:', err);
-              Alert.alert(t('outfitAi.detail.deleteFailedTitle'), err.message || t('outfitAi.detail.deleteFailedMessage'));
+              AppAlert.alert(t('outfitAi.detail.deleteFailedTitle'), err.message || t('outfitAi.detail.deleteFailedMessage'));
             } finally {
               setIsDeleting(false);
             }
@@ -302,8 +298,8 @@ export default function OutfitDetailScreen() {
 
         {/* Magazine Cover Hero Banner */}
         <Animated.View style={[styles.heroMagazineStage, { backgroundColor: theme.colors.surfaceSecondary }, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
-          {outfit.coverImage ? (
-            <Image source={{ uri: outfit.coverImage }} style={styles.heroParallaxAssetImage} />
+          {outfit.garments.some((g) => !!g.image_url) ? (
+            <OutfitGarmentsCollage images={outfit.garments.map((g) => g.image_url)} style={styles.heroParallaxAssetImage} />
           ) : (
             <View style={[styles.heroPlaceholderGraphicBase, { backgroundColor: theme.colors.surfaceSecondary }]}>
               <MaterialCommunityIcons name="hanger" size={48} color={theme.colors.textTertiary} />
@@ -386,7 +382,10 @@ export default function OutfitDetailScreen() {
                       params: { id: garment.id }
                     })}
                   >
-                    <View style={[styles.garmentImageContainerBoundingBox, { backgroundColor: theme.colors.surfaceSecondary }]}>
+                    {/* Fixed white (not theme-dependent): garment photos are
+                        transparent PNG cutouts now — need their own opaque
+                        backdrop regardless of the active theme. */}
+                    <View style={[styles.garmentImageContainerBoundingBox, { backgroundColor: '#FFFFFF' }]}>
                       {garment.image_url ? (
                         <Image source={{ uri: garment.image_url }} style={styles.garmentCardTargetImage} />
                       ) : (

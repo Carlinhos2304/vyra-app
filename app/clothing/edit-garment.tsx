@@ -7,7 +7,6 @@ import {
   ScrollView,
   Image,
   ActivityIndicator,
-  Alert,
   Modal,
   Dimensions,
   PanResponder,
@@ -18,6 +17,7 @@ import { useLocalSearchParams, router, useNavigation } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeIn, Easing } from 'react-native-reanimated';
+import { AppAlert } from '../../lib/ui/appAlert';
 
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { PremiumTouchable } from '../../components/ui/PremiumTouchable';
@@ -27,6 +27,7 @@ import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../theme';
 import { useLanguage } from '../../i18n';
 import { CREATION_CATEGORIES, PALETTE_COLORS } from '../../constants/garmentTaxonomy';
+import { removeGarmentBackground } from '../../lib/services/aiService';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 // CREATION_CATEGORIES / PALETTE_COLORS now come from constants/garmentTaxonomy.ts
@@ -76,6 +77,16 @@ export default function EditGarmentScreen() {
   const [imageUri, setImageUri] = useState<string | null>(params.image || null);
   const [isSaving, setIsSaving] = useState(false);
 
+  // A newly picked replacement photo is uploaded (and background-removed)
+  // eagerly the moment it's picked — see processPickedPhoto() — and cached
+  // here so handleSaveChanges doesn't need to re-upload a local file that's
+  // already sitting in Storage as a public URL. Cleared whenever the photo
+  // is removed or reverted so a stale cutout can never attach to a different
+  // pick.
+  const [uploadedImagePath, setUploadedImagePath] = useState<string | null>(null);
+  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
+  const [isRemovingBackground, setIsRemovingBackground] = useState(false);
+
   // Custom Color Picker Layout States
   const [isPickerVisible, setIsPickerVisible] = useState(false);
   const [customColor, setCustomColor] = useState('#7C3AED');
@@ -105,7 +116,7 @@ export default function EditGarmentScreen() {
     imageUri !== (params.image || null);
 
   const isFormValid = name.trim().length > 0 && selectedCategory.length > 0 && imageUri !== null;
-  const canSave = hasUnsavedChanges && isFormValid && !isSaving;
+  const canSave = hasUnsavedChanges && isFormValid && !isSaving && !isRemovingBackground;
 
   // Intercepting hardware/software back navigation requests
   useEffect(() => {
@@ -121,7 +132,7 @@ export default function EditGarmentScreen() {
       }
 
       e.preventDefault();
-      Alert.alert(
+      AppAlert.alert(
         t('clothing.editGarment.discardChanges.title'),
         t('clothing.editGarment.discardChanges.message'),
         [
@@ -172,7 +183,7 @@ export default function EditGarmentScreen() {
   const pickImageFromGallery = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert(t('clothing.editGarment.permissions.deniedTitle'), t('clothing.editGarment.permissions.galleryMessage'));
+      AppAlert.alert(t('clothing.editGarment.permissions.deniedTitle'), t('clothing.editGarment.permissions.galleryMessage'));
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -182,14 +193,14 @@ export default function EditGarmentScreen() {
       quality: 0.8,
     });
     if (!result.canceled && result.assets?.[0]?.uri) {
-      setImageUri(result.assets[0].uri);
+      processPickedPhoto(result.assets[0].uri);
     }
   };
 
   const capturePhotoFromCamera = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert(t('clothing.editGarment.permissions.deniedTitle'), t('clothing.editGarment.permissions.cameraMessage'));
+      AppAlert.alert(t('clothing.editGarment.permissions.deniedTitle'), t('clothing.editGarment.permissions.cameraMessage'));
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
@@ -199,7 +210,64 @@ export default function EditGarmentScreen() {
       quality: 0.8,
     });
     if (!result.canceled && result.assets?.[0]?.uri) {
-      setImageUri(result.assets[0].uri);
+      processPickedPhoto(result.assets[0].uri);
+    }
+  };
+
+  // Uploads a local photo URI to Storage. Pure function of its argument, same
+  // rationale as add-garment.tsx's twin helper — safe to call with a
+  // freshly-picked uri before imageUri's state update is visible.
+  const uploadImageToStorage = async (sourceUri: string): Promise<{ path: string; url: string }> => {
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      throw new Error(t('clothing.editGarment.errors.sessionExpiredMessage'));
+    }
+
+    const fileExtension = sourceUri.split('.').pop()?.toLowerCase() || 'jpg';
+    const cleanExtension = ['jpg', 'jpeg', 'png', 'heic'].includes(fileExtension) ? fileExtension : 'jpg';
+    const mimeType = cleanExtension === 'png' ? 'image/png' : 'image/jpeg';
+
+    const storageFileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${cleanExtension}`;
+    const targetStoragePath = `${user.id}/${storageFileName}`;
+
+    const formData = new FormData();
+    formData.append('file', { uri: sourceUri, name: storageFileName, type: mimeType } as any);
+
+    const { error: uploadError } = await supabase.storage
+      .from('garments')
+      .upload(targetStoragePath, formData, { contentType: mimeType, upsert: false });
+
+    if (uploadError) throw uploadError;
+
+    const { data: publicUrlData } = supabase.storage.from('garments').getPublicUrl(targetStoragePath);
+    return { path: targetStoragePath, url: publicUrlData.publicUrl };
+  };
+
+  // Same automatic Whering-style flow as add-garment.tsx: upload the newly
+  // picked replacement photo, then isolate it on a white background,
+  // swapping the preview over the instant the cutout is ready. Every failure
+  // here (upload OR background removal) is swallowed — replacing a photo
+  // must keep working exactly as it did before this feature existed even if
+  // remove.bg is unreachable; handleSaveChanges() below falls back to
+  // uploading straight from imageUri when no cached upload exists.
+  const processPickedPhoto = async (uri: string) => {
+    setUploadedImagePath(null);
+    setUploadedImageUrl(null);
+    setImageUri(uri);
+    setIsRemovingBackground(true);
+    try {
+      const uploaded = await uploadImageToStorage(uri);
+      setUploadedImagePath(uploaded.path);
+      setUploadedImageUrl(uploaded.url);
+
+      const cutout = await removeGarmentBackground(uploaded.path);
+      setImageUri(cutout.cutoutUrl);
+      setUploadedImagePath(cutout.cutoutPath);
+      setUploadedImageUrl(cutout.cutoutUrl);
+    } catch (error) {
+      console.warn('[Edit Garment] automatic background removal skipped (non-fatal):', error);
+    } finally {
+      setIsRemovingBackground(false);
     }
   };
 
@@ -218,7 +286,7 @@ export default function EditGarmentScreen() {
       const { data: { user }, error: authError } = await supabase.auth.getUser();
 
       if (authError || !user) {
-        Alert.alert(t('clothing.editGarment.errors.sessionExpiredTitle'), t('clothing.editGarment.errors.sessionExpiredMessage'));
+        AppAlert.alert(t('clothing.editGarment.errors.sessionExpiredTitle'), t('clothing.editGarment.errors.sessionExpiredMessage'));
         return;
       }
 
@@ -226,24 +294,16 @@ export default function EditGarmentScreen() {
       const isImageChanged = imageUri !== params.image;
 
       if (isImageChanged && imageUri) {
-        const fileExtension = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
-        const cleanExtension = ['jpg', 'jpeg', 'png', 'heic'].includes(fileExtension) ? fileExtension : 'jpg';
-        const mimeType = cleanExtension === 'png' ? 'image/png' : 'image/jpeg';
+        // processPickedPhoto() already uploaded (and likely background-removed)
+        // this photo the moment it was picked — reuse that result instead of
+        // re-uploading. Falls back to a fresh upload from imageUri only if
+        // that eager step never completed (e.g. it failed, or somehow this
+        // save fired before it finished).
+        const uploaded = uploadedImagePath && uploadedImageUrl
+          ? { path: uploadedImagePath, url: uploadedImageUrl }
+          : await uploadImageToStorage(imageUri);
 
-        const storageFileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${cleanExtension}`;
-        const targetStoragePath = `${user.id}/${storageFileName}`;
-
-        const formData = new FormData();
-        formData.append('file', { uri: imageUri, name: storageFileName, type: mimeType } as any);
-
-        const { error: uploadError } = await supabase.storage
-          .from('garments')
-          .upload(targetStoragePath, formData, { contentType: mimeType, upsert: false });
-
-        if (uploadError) throw uploadError;
-
-        const { data: publicUrlData } = supabase.storage.from('garments').getPublicUrl(targetStoragePath);
-        finalImageUrl = publicUrlData.publicUrl;
+        finalImageUrl = uploaded.url;
 
         if (params.image && params.image.includes('/storage/v1/object/public/garments/')) {
           const oldFileName = params.image.split('/garments/').pop();
@@ -279,7 +339,7 @@ export default function EditGarmentScreen() {
 
     } catch (error: any) {
       console.error('[Edit Garment Pipeline Failure]:', error);
-      Alert.alert(t('clothing.editGarment.errors.saveFailedTitle'), error.message || t('clothing.editGarment.errors.saveFailedMessage'));
+      AppAlert.alert(t('clothing.editGarment.errors.saveFailedTitle'), error.message || t('clothing.editGarment.errors.saveFailedMessage'));
     } finally {
       setIsSaving(false);
     }
@@ -308,8 +368,22 @@ export default function EditGarmentScreen() {
             {imageUri ? (
               <View style={styles.previewContainer}>
                 <Image source={{ uri: imageUri }} style={styles.previewImageRender} />
+                {/* Automatic Whering-style background removal overlay — runs
+                    the instant a replacement photo is picked/captured. */}
+                {isRemovingBackground && (
+                  <View style={styles.backgroundRemovalOverlay}>
+                    <ActivityIndicator size="small" color="#FAFAF9" />
+                    <Text style={styles.backgroundRemovalOverlayText}>
+                      {t('clothing.editGarment.backgroundRemoval.removingLabel')}
+                    </Text>
+                  </View>
+                )}
                 {/* Delete control sits on top of the garment photo — kept fixed regardless of theme (photo-context) */}
-                <PremiumTouchable style={styles.clearMediaIndicator} onPress={() => setImageUri(null)}>
+                <PremiumTouchable
+                  style={styles.clearMediaIndicator}
+                  onPress={() => { setImageUri(null); setUploadedImagePath(null); setUploadedImageUrl(null); }}
+                  disabled={isRemovingBackground}
+                >
                   <Feather name="trash-2" size={16} color="#FAFAF9" />
                 </PremiumTouchable>
               </View>
@@ -502,9 +576,14 @@ const styles = StyleSheet.create({
   mediaContextButton: { flex: 1, height: '100%', justifyContent: 'center', alignItems: 'center', gap: 6 },
   mediaContextText: { fontSize: 13, fontWeight: '500' },
   mediaSplitDivider: { width: 1, height: '40%' },
-  previewContainer: { flex: 1, position: 'relative' },
+  // Fixed white (not theme-dependent): once background removal succeeds this
+  // shows a transparent PNG cutout, which needs its own opaque backdrop
+  // regardless of the active theme (see remove-background).
+  previewContainer: { flex: 1, position: 'relative', backgroundColor: '#FFFFFF' },
   previewImageRender: { width: '100%', height: '100%', resizeMode: 'cover' },
   clearMediaIndicator: { position: 'absolute', top: 12, right: 12, backgroundColor: 'rgba(28, 25, 23, 0.75)', width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  backgroundRemovalOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(28, 25, 23, 0.55)', justifyContent: 'center', alignItems: 'center', gap: 8 },
+  backgroundRemovalOverlayText: { color: '#FAFAF9', fontSize: 13, fontWeight: '600' },
   textInputWrapperBox: { borderRadius: 12, height: 48, paddingHorizontal: 14, justifyContent: 'center', marginBottom: 4 },
   formInputCore: { fontSize: 14, width: '100%' },
   chipsContainerRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

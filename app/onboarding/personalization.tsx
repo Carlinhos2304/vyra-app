@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, Switch, Alert, Pressable } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, Switch, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AppAlert } from '../../lib/ui/appAlert';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { SectionTitle } from '../../components/ui/SectionTitle';
 import { PremiumLoader } from '../../components/ui/PremiumLoader';
@@ -250,7 +251,7 @@ export default function PersonalizationScreen() {
 
   const handleSavePreferences = async () => {
     if (!selectedStyle || selectedColors.length === 0 || !selectedClimate) {
-      Alert.alert(t('onboarding.personalization.incompleteAlertTitle'), t('onboarding.personalization.incompleteAlertMessage'));
+      AppAlert.alert(t('onboarding.personalization.incompleteAlertTitle'), t('onboarding.personalization.incompleteAlertMessage'));
       return;
     }
 
@@ -288,7 +289,7 @@ export default function PersonalizationScreen() {
 
       router.push('/onboarding/first-garment');
     } catch (err: any) {
-      Alert.alert(t('onboarding.personalization.syncFaultAlertTitle'), err.message || t('onboarding.personalization.syncFaultAlertFallback'));
+      AppAlert.alert(t('onboarding.personalization.syncFaultAlertTitle'), err.message || t('onboarding.personalization.syncFaultAlertFallback'));
     } finally {
       setIsSubmitting(false);
     }

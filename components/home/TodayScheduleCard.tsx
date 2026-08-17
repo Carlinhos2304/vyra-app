@@ -11,9 +11,11 @@ import { useLanguage } from '../../i18n';
 
 interface TodayScheduleCardProps {
   nextEvent: NextEvent | null;
-  /** AI-generated phrase from useDailySuggestion, tied to nextEvent. Null
-   * while pending or when there's nothing meaningful to add. */
-  scheduleNote: string | null;
+  /** Optional short note tied to nextEvent — omitted entirely since the AI
+   * Daily Suggestion feature that used to populate this was removed
+   * (2026-08-17, see Home's own comment). Kept as an optional prop rather
+   * than deleted outright in case a future non-AI note source wants it. */
+  scheduleNote?: string | null;
   onPress: () => void;
   delay?: number;
 }
@@ -37,8 +39,8 @@ function getRelativeDayLabel(eventDateISO: string, t: (key: string) => string, l
 
 /**
  * TodayScheduleCard — replaces the old Home's raw calendar preview with just
- * the one thing that matters day-to-day: what's next, and a short AI note
- * tied to it. Full calendar management still lives on the Calendar tab.
+ * the one thing that matters day-to-day: what's next. Full calendar
+ * management still lives on the Calendar tab.
  */
 export const TodayScheduleCard: React.FC<TodayScheduleCardProps> = ({ nextEvent, scheduleNote, onPress, delay = 0 }) => {
   const { theme } = useTheme();

@@ -3,10 +3,11 @@
  * Deliberately NOT an AI call: per the spec, the subtitle should react
  * instantly to hour/weather/calendar/outfit, and Home must load immediately
  * — a network round-trip for a one-line subtitle would work against that.
- * The AI Daily Suggestion card (useDailySuggestion) is where actual AI
- * reasoning belongs; this hook is a fast, deterministic rule set over
- * already-loaded real data (weather, today's plan, whether there's an event
- * today) — never a fixed string.
+ * A fast, deterministic, already-localized rule set over already-loaded real
+ * data (weather, today's plan, whether there's an event today) — never a
+ * fixed string. (The separate AI Daily Suggestion card that used to sit
+ * below this was removed 2026-08-17 — this hook was never that call and is
+ * unaffected.)
  */
 
 import { useEffect, useState } from 'react';

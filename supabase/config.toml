@@ -19,3 +19,6 @@ verify_jwt = true
 
 [functions.smart-notifications]
 verify_jwt = true
+
+[functions.remove-background]
+verify_jwt = true

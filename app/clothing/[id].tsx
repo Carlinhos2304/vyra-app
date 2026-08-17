@@ -8,11 +8,11 @@ import {
   Image,
   Dimensions,
   Share,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { AppAlert } from '../../lib/ui/appAlert';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { SectionTitle } from '../../components/ui/SectionTitle';
@@ -197,7 +197,7 @@ export default function ClothingDetailScreen() {
         }
       } catch (err: any) {
         console.error('[Sync Engine] Structural crash during network request layer execution:', err);
-        Alert.alert(t('clothing.detail.syncError.title'), t('clothing.detail.syncError.message'));
+        AppAlert.alert(t('clothing.detail.syncError.title'), t('clothing.detail.syncError.message'));
       } finally {
         if (isMounted) {
           setIsInitialLoading(false);
@@ -245,7 +245,7 @@ export default function ClothingDetailScreen() {
       }
     } catch (error: any) {
       console.error('[Favorite Action] Network write workflow collapsed completely:', error);
-      Alert.alert(
+      AppAlert.alert(
         t('clothing.detail.favoriteError.title'),
         t('clothing.detail.favoriteError.message', { detail: error.message || t('clothing.detail.favoriteError.rlsLockFallback') })
       );
@@ -272,7 +272,7 @@ export default function ClothingDetailScreen() {
       });
     } catch (error: any) {
       console.error('[Share Action] Native system sharing display operation collapsed:', error);
-      Alert.alert(t('clothing.detail.shareError.title'), t('clothing.detail.shareError.message'));
+      AppAlert.alert(t('clothing.detail.shareError.title'), t('clothing.detail.shareError.message'));
     }
   };
 
@@ -297,7 +297,7 @@ export default function ClothingDetailScreen() {
   const handleExecuteDelete = async () => {
     if (!garment.id || isDeleting) return;
 
-    Alert.alert(
+    AppAlert.alert(
       t('clothing.detail.deleteConfirm.title'),
       t('clothing.detail.deleteConfirm.message'),
       [
@@ -345,7 +345,7 @@ export default function ClothingDetailScreen() {
 
             } catch (err: any) {
               console.error('[Delete Action] Critical processing system breakdown error during cascade deletion pipeline:', err);
-              Alert.alert(t('clothing.detail.deleteError.title'), err.message || t('clothing.detail.deleteError.message'));
+              AppAlert.alert(t('clothing.detail.deleteError.title'), err.message || t('clothing.detail.deleteError.message'));
             } finally {
               setIsDeleting(false);
             }

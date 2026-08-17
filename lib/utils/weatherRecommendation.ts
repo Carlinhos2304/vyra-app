@@ -4,9 +4,8 @@
  * Deterministic, zero-latency mapping from a real forecast day to a short
  * outfit recommendation phrase for WeeklyForecastStrip (e.g. "Light Layers",
  * "Waterproof Jacket", "Linen Shirt"). The spec allows this to come from AI
- * ("la recomendación puede provenir de IA") but doesn't require it — since
- * Home already has one AI call in flight (useDailySuggestion) and this is a
- * simple, cheap, real-data-driven rule (never a fake value), doing it
+ * ("la recomendación puede provenir de IA") but doesn't require it — this is
+ * a simple, cheap, real-data-driven rule (never a fake value), so doing it
  * locally avoids extra AI cost/latency and an extra Edge Function round trip
  * for something this mechanical to answer well without a model.
  */

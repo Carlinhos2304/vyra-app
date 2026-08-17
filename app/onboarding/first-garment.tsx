@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, Dimensions, Alert, Pressable } from 'react-native';
+import { StyleSheet, Text, View, Dimensions, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { AppAlert } from '../../lib/ui/appAlert';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { PremiumLoader } from '../../components/ui/PremiumLoader';
 import { supabase } from '../../lib/supabase';
@@ -98,7 +99,7 @@ export default function FirstGarmentScreen() {
 
       router.replace('/clothing/add-garment');
     } catch (err: any) {
-      Alert.alert(t('onboarding.firstGarment.blockedAlertTitle'), err.message || t('onboarding.firstGarment.blockedAlertFallback'));
+      AppAlert.alert(t('onboarding.firstGarment.blockedAlertTitle'), err.message || t('onboarding.firstGarment.blockedAlertFallback'));
       setIsFinalizing(false);
     }
   };

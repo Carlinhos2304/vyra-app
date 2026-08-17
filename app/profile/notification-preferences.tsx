@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, Switch, Platform, Alert } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, Switch, Platform } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { AppAlert } from '../../lib/ui/appAlert';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { PremiumTouchable } from '../../components/ui/PremiumTouchable';
 import { PremiumLoader } from '../../components/ui/PremiumLoader';
@@ -86,7 +87,7 @@ export default function NotificationPreferencesScreen() {
       setPrefs(saved);
     } catch (err) {
       setPrefs(previous);
-      Alert.alert(t('common.error'), t('notifications.saveErrorMessage'));
+      AppAlert.alert(t('common.error'), t('notifications.saveErrorMessage'));
     }
   };
 

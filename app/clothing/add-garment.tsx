@@ -7,7 +7,6 @@ import {
   ScrollView,
   Image,
   ActivityIndicator,
-  Alert,
   Modal,
   Dimensions,
   PanResponder,
@@ -20,6 +19,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeIn, Easing } from 'react-native-reanimated';
 
+import { AppAlert } from '../../lib/ui/appAlert';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { PremiumTouchable } from '../../components/ui/PremiumTouchable';
 import { SectionHeader } from '../../components/ui/SectionHeader';
@@ -37,7 +37,7 @@ import {
   matchPaletteColor,
   matchFromList,
 } from '../../constants/garmentTaxonomy';
-import { analyzeGarmentPhoto, AIAnalysisError, GarmentAnalysisResult } from '../../lib/services/aiService';
+import { analyzeGarmentPhoto, removeGarmentBackground, AIAnalysisError, GarmentAnalysisResult } from '../../lib/services/aiService';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 // CREATION_CATEGORIES / PALETTE_COLORS now come from constants/garmentTaxonomy.ts
@@ -83,6 +83,11 @@ export default function AddGarmentScreen() {
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<GarmentAnalysisResult | null>(null);
+  // Background removal (Whering-style) runs automatically right after a photo
+  // is picked/captured — see processPickedPhoto(). This just tracks whether
+  // that's in flight so the preview can show a "Removing background..."
+  // overlay and other actions (Analyze/Save) can hold off until it settles.
+  const [isRemovingBackground, setIsRemovingBackground] = useState(false);
 
   // Fields the AI can suggest but the user always reviews/edits before saving.
   const [selectedStyle, setSelectedStyle] = useState('');
@@ -158,7 +163,7 @@ export default function AddGarmentScreen() {
   const pickImageFromGallery = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert(t('clothing.addGarment.permissions.deniedTitle'), t('clothing.addGarment.permissions.galleryMessage'));
+      AppAlert.alert(t('clothing.addGarment.permissions.deniedTitle'), t('clothing.addGarment.permissions.galleryMessage'));
       return;
     }
 
@@ -170,15 +175,14 @@ export default function AddGarmentScreen() {
     });
 
     if (!result.canceled && result.assets?.[0]?.uri) {
-      resetImageDerivedState();
-      setImageUri(result.assets[0].uri);
+      processPickedPhoto(result.assets[0].uri);
     }
   };
 
   const capturePhotoFromCamera = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert(t('clothing.addGarment.permissions.deniedTitle'), t('clothing.addGarment.permissions.cameraMessage'));
+      AppAlert.alert(t('clothing.addGarment.permissions.deniedTitle'), t('clothing.addGarment.permissions.cameraMessage'));
       return;
     }
 
@@ -190,8 +194,7 @@ export default function AddGarmentScreen() {
     });
 
     if (!result.canceled && result.assets?.[0]?.uri) {
-      resetImageDerivedState();
-      setImageUri(result.assets[0].uri);
+      processPickedPhoto(result.assets[0].uri);
     }
   };
 
@@ -201,23 +204,18 @@ export default function AddGarmentScreen() {
     setIsPickerVisible(false);
   };
 
-  // Uploads the currently selected local photo to Storage exactly once,
-  // caching the result. Both "Analyze with AI" and the final save call this,
-  // so re-pressing Analyze or saving after analyzing never re-uploads.
-  const ensureImageUploaded = async (): Promise<{ path: string; url: string }> => {
-    if (uploadedImagePath && uploadedImageUrl) {
-      return { path: uploadedImagePath, url: uploadedImageUrl };
-    }
-    if (!imageUri) {
-      throw new Error(t('clothing.addGarment.errors.missingImageMessage'));
-    }
-
+  // Uploads a local photo URI to Storage. Pure function of its argument
+  // (does NOT read/write imageUri state) so it's safe to call with a
+  // freshly-picked uri before React has re-rendered with it — see
+  // processPickedPhoto(), which needs this BEFORE imageUri's state update
+  // would be visible to a same-tick reader.
+  const uploadImageToStorage = async (sourceUri: string): Promise<{ path: string; url: string }> => {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
       throw new Error(t('clothing.addGarment.errors.authExpiredShortMessage'));
     }
 
-    const fileExtension = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
+    const fileExtension = sourceUri.split('.').pop()?.toLowerCase() || 'jpg';
     const cleanExtension = ['jpg', 'jpeg', 'png', 'heic'].includes(fileExtension) ? fileExtension : 'jpg';
     const mimeType = cleanExtension === 'png' ? 'image/png' : 'image/jpeg';
 
@@ -226,7 +224,7 @@ export default function AddGarmentScreen() {
 
     const formData = new FormData();
     formData.append('file', {
-      uri: imageUri,
+      uri: sourceUri,
       name: storageFileName,
       type: mimeType,
     } as any);
@@ -244,9 +242,61 @@ export default function AddGarmentScreen() {
       .from('garments')
       .getPublicUrl(parameterizedStoragePath);
 
-    setUploadedImagePath(parameterizedStoragePath);
-    setUploadedImageUrl(publicUrlData.publicUrl);
     return { path: parameterizedStoragePath, url: publicUrlData.publicUrl };
+  };
+
+  // Uploads the currently selected local photo to Storage exactly once,
+  // caching the result. Both "Analyze with AI" and the final save call this,
+  // so re-pressing Analyze or saving after analyzing never re-uploads. In
+  // practice this is almost always already cached by the time either of
+  // those runs, since processPickedPhoto() below uploads eagerly the moment
+  // a photo is picked/captured — this remains as the fallback path for the
+  // rare case that eager upload failed (e.g. a network hiccup right after
+  // picking a photo).
+  const ensureImageUploaded = async (): Promise<{ path: string; url: string }> => {
+    if (uploadedImagePath && uploadedImageUrl) {
+      return { path: uploadedImagePath, url: uploadedImageUrl };
+    }
+    if (!imageUri) {
+      throw new Error(t('clothing.addGarment.errors.missingImageMessage'));
+    }
+
+    const uploaded = await uploadImageToStorage(imageUri);
+    setUploadedImagePath(uploaded.path);
+    setUploadedImageUrl(uploaded.url);
+    return uploaded;
+  };
+
+  // Runs the moment a photo is picked/captured — uploads it, then asks
+  // remove-background to isolate the garment on a solid white background
+  // (see lib/services/aiService.removeGarmentBackground), swapping the
+  // preview over to the cutout the instant it's ready. Mirrors what apps
+  // like Whering do automatically on capture, with no button to press.
+  //
+  // Deliberately swallows every failure here (upload OR background removal):
+  // this is a polish step layered on top of a flow that worked fine before
+  // it existed, so a remove.bg outage/quota limit or a network hiccup must
+  // never block the user from using their original photo as-is. If the
+  // upload itself fails, uploadedImagePath/Url simply stay null and
+  // ensureImageUploaded() retries it later exactly as it always has.
+  const processPickedPhoto = async (uri: string) => {
+    resetImageDerivedState();
+    setImageUri(uri);
+    setIsRemovingBackground(true);
+    try {
+      const uploaded = await uploadImageToStorage(uri);
+      setUploadedImagePath(uploaded.path);
+      setUploadedImageUrl(uploaded.url);
+
+      const cutout = await removeGarmentBackground(uploaded.path);
+      setImageUri(cutout.cutoutUrl);
+      setUploadedImagePath(cutout.cutoutPath);
+      setUploadedImageUrl(cutout.cutoutUrl);
+    } catch (error) {
+      console.warn('[Add Garment] automatic background removal skipped (non-fatal):', error);
+    } finally {
+      setIsRemovingBackground(false);
+    }
   };
 
   // Sends the (already or newly uploaded) photo to the analyze-garment Edge
@@ -254,7 +304,7 @@ export default function AddGarmentScreen() {
   // user can still change every field before saving — nothing is persisted
   // to clothing_items by this step.
   const handleAnalyzeWithAI = async () => {
-    if (!imageUri || isAnalyzing) return;
+    if (!imageUri || isAnalyzing || isRemovingBackground) return;
 
     try {
       setIsAnalyzing(true);
@@ -286,23 +336,24 @@ export default function AddGarmentScreen() {
       const message = error instanceof AIAnalysisError
         ? error.message
         : error?.message || t('clothing.addGarment.errors.aiUnavailableMessage');
-      Alert.alert(t('clothing.addGarment.errors.aiUnavailableTitle'), message);
+      AppAlert.alert(t('clothing.addGarment.errors.aiUnavailableTitle'), message);
     } finally {
       setIsAnalyzing(false);
     }
   };
 
   const handleFormSubmission = async () => {
+    if (isRemovingBackground) return; // Let the cutout finish first — avoids saving/uploading a stale pre-cutout image.
     if (!name.trim()) {
-      Alert.alert(t('clothing.addGarment.errors.missingFieldTitle'), t('clothing.addGarment.errors.missingNameMessage'));
+      AppAlert.alert(t('clothing.addGarment.errors.missingFieldTitle'), t('clothing.addGarment.errors.missingNameMessage'));
       return;
     }
     if (!selectedCategory) {
-      Alert.alert(t('clothing.addGarment.errors.missingFieldTitle'), t('clothing.addGarment.errors.missingCategoryMessage'));
+      AppAlert.alert(t('clothing.addGarment.errors.missingFieldTitle'), t('clothing.addGarment.errors.missingCategoryMessage'));
       return;
     }
     if (!imageUri) {
-      Alert.alert(t('clothing.addGarment.errors.missingImageTitle'), t('clothing.addGarment.errors.missingImageMessage'));
+      AppAlert.alert(t('clothing.addGarment.errors.missingImageTitle'), t('clothing.addGarment.errors.missingImageMessage'));
       return;
     }
 
@@ -311,7 +362,7 @@ export default function AddGarmentScreen() {
       const { data: { user }, error: authError } = await supabase.auth.getUser();
 
       if (authError || !user) {
-        Alert.alert(
+        AppAlert.alert(
           t('clothing.addGarment.errors.authRequiredTitle'),
           t('clothing.addGarment.errors.authExpiredMessage')
         );
@@ -357,7 +408,7 @@ export default function AddGarmentScreen() {
 
     } catch (error: any) {
       console.error('[Add Garment Flow Exception]:', error);
-      Alert.alert(t('clothing.addGarment.errors.transactionFailureTitle'), error.message || t('clothing.addGarment.errors.transactionFailureMessage'));
+      AppAlert.alert(t('clothing.addGarment.errors.transactionFailureTitle'), error.message || t('clothing.addGarment.errors.transactionFailureMessage'));
     } finally {
       setIsSaving(false);
     }
@@ -389,8 +440,22 @@ export default function AddGarmentScreen() {
             {imageUri ? (
               <View style={styles.previewContainer}>
                 <Image source={{ uri: imageUri }} style={styles.previewImageRender} />
+                {/* Automatic Whering-style background removal overlay — runs
+                    the instant a photo is picked/captured, no button needed. */}
+                {isRemovingBackground && (
+                  <View style={styles.backgroundRemovalOverlay}>
+                    <ActivityIndicator size="small" color="#FAFAF9" />
+                    <Text style={styles.backgroundRemovalOverlayText}>
+                      {t('clothing.addGarment.backgroundRemoval.removingLabel')}
+                    </Text>
+                  </View>
+                )}
                 {/* Delete control sits on top of the garment photo — kept fixed dark/light regardless of theme (photo-context) */}
-                <PremiumTouchable style={styles.clearMediaIndicator} onPress={() => { resetImageDerivedState(); setImageUri(null); }}>
+                <PremiumTouchable
+                  style={styles.clearMediaIndicator}
+                  onPress={() => { resetImageDerivedState(); setImageUri(null); }}
+                  disabled={isRemovingBackground}
+                >
                   <Feather name="trash-2" size={16} color="#FAFAF9" />
                 </PremiumTouchable>
               </View>
@@ -417,7 +482,7 @@ export default function AddGarmentScreen() {
           {imageUri && (
             <PremiumTouchable
               onPress={handleAnalyzeWithAI}
-              disabled={isAnalyzing || isSaving}
+              disabled={isAnalyzing || isSaving || isRemovingBackground}
               style={[
                 styles.aiAnalyzeButton,
                 { backgroundColor: theme.colors.surfaceSecondary, borderColor: theme.colors.border },
@@ -640,9 +705,9 @@ export default function AddGarmentScreen() {
             style={[
               styles.saveExecutionButton,
               { backgroundColor: theme.colors.accent, shadowColor: theme.colors.shadow },
-              isSaving && styles.saveExecutionDisabled
+              (isSaving || isRemovingBackground) && styles.saveExecutionDisabled
             ]}
-            disabled={isSaving}
+            disabled={isSaving || isRemovingBackground}
           >
             {isSaving ? (
               <ActivityIndicator size="small" color={theme.colors.accentForeground} />
@@ -787,9 +852,14 @@ const styles = StyleSheet.create({
   mediaContextButton: { flex: 1, height: '100%', justifyContent: 'center', alignItems: 'center', gap: 6 },
   mediaContextText: { fontSize: 13, fontWeight: '500' },
   mediaSplitDivider: { width: 1, height: '40%' },
-  previewContainer: { flex: 1, position: 'relative' },
+  // Fixed white (not theme-dependent): once background removal succeeds this
+  // shows a transparent PNG cutout, which needs its own opaque backdrop
+  // regardless of the active theme (see remove-background).
+  previewContainer: { flex: 1, position: 'relative', backgroundColor: '#FFFFFF' },
   previewImageRender: { width: '100%', height: '100%', resizeMode: 'cover' },
   clearMediaIndicator: { position: 'absolute', top: 12, right: 12, backgroundColor: 'rgba(28, 25, 23, 0.75)', width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  backgroundRemovalOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(28, 25, 23, 0.55)', justifyContent: 'center', alignItems: 'center', gap: 8 },
+  backgroundRemovalOverlayText: { color: '#FAFAF9', fontSize: 13, fontWeight: '600' },
   textInputWrapperBox: { borderRadius: 12, height: 48, paddingHorizontal: 14, justifyContent: 'center' },
   descriptionInputWrapperBox: { height: 72, paddingVertical: 12 },
   formInputCore: { fontSize: 14 },

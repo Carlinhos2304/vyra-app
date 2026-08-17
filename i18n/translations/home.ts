@@ -33,9 +33,7 @@ export const homeEn = {
     emptyTitle: 'The canvas is empty',
     emptySubtitle: 'No look is assigned to today yet.',
     curateLook: 'Curate Look',
-  },
-  dailySuggestion: {
-    title: '✨ AI Daily Suggestion',
+    recommendButton: 'Recommend',
   },
   schedule: {
     title: "Today's Schedule",
@@ -99,9 +97,7 @@ export const homeEs = {
     emptyTitle: 'El lienzo está vacío',
     emptySubtitle: 'Aún no hay un look asignado para hoy.',
     curateLook: 'Curar Look',
-  },
-  dailySuggestion: {
-    title: '✨ Sugerencia Diaria de IA',
+    recommendButton: 'Recomendar',
   },
   schedule: {
     title: 'Agenda de Hoy',

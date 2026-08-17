@@ -13,10 +13,11 @@
  * existing outfits/outfit_items write path already used by the manual
  * "Create Outfit" screen (app/(tabs)/create.tsx) — this service doesn't
  * persist anything itself.
- * Phase 3 (this file, today): getDailySuggestion() — the Home redesign's AI
- * Daily Suggestion card + Today's Schedule note. Same non-blocking spirit as
- * the rest of Home: callers should treat a slow/failed call as "no AI note
- * right now", never as something that should hold up the screen.
+ * (Phase 3, getDailySuggestion() — the Home redesign's AI Daily Suggestion
+ * card, was removed 2026-08-17 at the user's request: low perceived value
+ * on top of the already-localized, deterministic greeting header, and
+ * English-only regardless of the app's language setting. The
+ * daily-suggestion Edge Function itself was left deployed but unused.)
  * Future phases (per CLAUDE.md's AI Roadmap, e.g. the AI stylist chat) will
  * add sibling functions here that call their own Edge Functions the same
  * way — the app-side pattern stays identical regardless of which AI
@@ -165,65 +166,50 @@ export async function generateOutfits(occasion: string, weather?: WeatherInput |
   return data.outfits as OutfitSuggestion[];
 }
 
-/** Same weather shape as WeatherSnapshot's relevant fields (see
- * lib/services/weatherService.ts) — declared separately here rather than
- * imported, so this file's public contract doesn't depend on the weather
- * module's internals shifting later. */
-export interface DailySuggestionWeatherInput {
-  temperatureCelsius?: number | null;
-  feelsLikeCelsius?: number | null;
-  conditionLabel?: string | null;
-  chanceOfRainPercent?: number | null;
-}
-
-export interface DailySuggestionResult {
-  /** The main "AI Daily Suggestion" editorial card text. */
-  suggestion: string;
-  /** Short phrase for the "Today's Schedule" card. Null when there's no
-   * upcoming event to speak to. */
-  scheduleNote: string | null;
+export interface BackgroundRemovalResult {
+  cutoutPath: string;
+  cutoutUrl: string;
 }
 
 /**
- * Asks the daily-suggestion Edge Function for today's editorial styling note
- * plus a short schedule-aware phrase. Wardrobe usage stats, profile, today's
- * planned outfit, and the next event are all read server-side (scoped to the
- * authenticated user) — this call only sends what the server genuinely can't
- * know itself: current weather (device GPS) and the caller's own local
- * calendar date (needed to resolve "today" without guessing a timezone).
+ * Sends an already-uploaded garment photo (by its Supabase Storage path) to
+ * the remove-background Edge Function, which forwards it to remove.bg and
+ * saves a new "<original>-cutout.jpg" back into the same "garments" bucket,
+ * isolated on a solid white background — the "photo in, clean product shot
+ * out" flow apps like Whering do automatically the moment you add a garment.
+ * Both app/clothing/add-garment.tsx and app/clothing/edit-garment.tsx call
+ * this right after a photo is picked/captured, before the user even sees the
+ * final preview.
  *
- * Never throws for "nothing interesting to say" — the Edge Function always
- * returns a graceful fallback string instead. It DOES throw AIAnalysisError
- * on a genuine request failure; callers on Home should treat that as "hide
- * the card for now", not as something to surface to the user.
+ * Deliberately non-critical by calling convention: every caller treats a
+ * thrown AIAnalysisError here as "keep the original photo, don't interrupt
+ * the flow" — cutting the background is a nice-to-have polish step, never
+ * something that should block adding or editing a garment (a remove.bg quota
+ * limit or a flaky network call must never stop someone from saving their
+ * photo as-is).
  *
- * @param todayLocalDate The caller's own local calendar day, "YYYY-MM-DD".
- * @param weather Optional — omit if weather isn't available (e.g. location permission denied).
+ * @param storagePath Path inside the "garments" bucket, e.g. "<user_id>/172...-ab12.jpg".
+ *   The image must already be uploaded before calling this — this function
+ *   does not upload anything itself.
  */
-export async function getDailySuggestion(
-  todayLocalDate: string,
-  weather?: DailySuggestionWeatherInput | null
-): Promise<DailySuggestionResult> {
-  if (!todayLocalDate) {
-    throw new AIAnalysisError('todayLocalDate is required to request a daily suggestion.');
+export async function removeGarmentBackground(storagePath: string): Promise<BackgroundRemovalResult> {
+  if (!storagePath) {
+    throw new AIAnalysisError("A storage_path is required to remove a garment photo's background.");
   }
 
-  const { data, error } = await supabase.functions.invoke('daily-suggestion', {
-    body: { todayLocalDate, weather: weather ?? null },
+  const { data, error } = await supabase.functions.invoke('remove-background', {
+    body: { storage_path: storagePath },
   });
 
   if (error) {
-    const message = await extractInvokeErrorMessage(error, 'The daily suggestion service could not process this request.');
-    console.error('[getDailySuggestion] Edge Function error:', message);
+    const message = await extractInvokeErrorMessage(error, 'The background removal service could not process this photo.');
+    console.error('[removeGarmentBackground] Edge Function error:', message);
     throw new AIAnalysisError(message);
   }
 
-  if (!data || typeof data.suggestion !== 'string') {
-    throw new AIAnalysisError('The daily suggestion service returned an unexpected response.');
+  if (!data || typeof data.cutout_url !== 'string' || typeof data.cutout_path !== 'string') {
+    throw new AIAnalysisError('The background removal service returned an unexpected response.');
   }
 
-  return {
-    suggestion: data.suggestion,
-    scheduleNote: typeof data.scheduleNote === 'string' ? data.scheduleNote : null,
-  };
+  return { cutoutPath: data.cutout_path, cutoutUrl: data.cutout_url };
 }

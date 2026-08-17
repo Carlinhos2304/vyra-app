@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated as RNAnimated, StyleSheet, Text, View, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { Animated as RNAnimated, StyleSheet, Text, View, ScrollView, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown, Easing } from 'react-native-reanimated';
+import { AppAlert } from '../../lib/ui/appAlert';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { PremiumTouchable } from '../../components/ui/PremiumTouchable';
 import { SectionHeader } from '../../components/ui/SectionHeader';
@@ -167,7 +168,7 @@ export default function EventDetailsScreen() {
   };
 
   const handleDeleteEvent = () => {
-    Alert.alert(
+    AppAlert.alert(
       t('planner.eventDetails.deleteConfirmTitle'),
       t('planner.eventDetails.deleteConfirmMessage'),
       [
@@ -191,7 +192,7 @@ export default function EventDetailsScreen() {
 
               router.back();
             } catch (err: any) {
-              Alert.alert(t('common.error'), err.message || t('planner.eventDetails.deleteError'));
+              AppAlert.alert(t('common.error'), err.message || t('planner.eventDetails.deleteError'));
               setIsDeleting(false);
             }
           },

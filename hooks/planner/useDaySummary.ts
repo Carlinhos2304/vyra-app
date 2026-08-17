@@ -56,13 +56,15 @@ function deriveEffectivePlan(dayLevelPlan: PlannerDayPlan | null, dayEvents: Pla
 
   const [event, ...rest] = eventsWithOutfits;
   const items = event.outfits?.outfit_items || [];
-  const cover = items.length > 0 && items[0].clothing_items ? items[0].clothing_items.image_url : null;
+  const garmentImages = items
+    .map((item) => item.clothing_items?.image_url)
+    .filter((url): url is string => typeof url === 'string' && url.length > 0);
 
   return {
     id: `event-${event.id}`,
     outfitId: event.outfit_id as string,
     outfitName: event.outfits?.name || '',
-    coverImage: cover,
+    garmentImages,
     occasion: event.outfits?.occasion ?? null,
     sourceEventId: event.id,
     sourceEventName: event.name,

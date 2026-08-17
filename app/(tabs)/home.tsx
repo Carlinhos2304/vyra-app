@@ -6,7 +6,6 @@ import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { GreetingHeader } from '../../components/home/GreetingHeader';
 import { WeatherCard } from '../../components/home/WeatherCard';
 import { TodayOutfitCard } from '../../components/home/TodayOutfitCard';
-import { AIDailySuggestionCard } from '../../components/home/AIDailySuggestionCard';
 import { TodayScheduleCard } from '../../components/home/TodayScheduleCard';
 import { WardrobeInsightsGrid } from '../../components/home/WardrobeInsightsGrid';
 import { WeeklyForecastStrip } from '../../components/home/WeeklyForecastStrip';
@@ -16,7 +15,6 @@ import { useWeather } from '../../hooks/useWeather';
 import { useTodayOutfit } from '../../hooks/useTodayOutfit';
 import { useNextEvent } from '../../hooks/useNextEvent';
 import { useWardrobeInsights } from '../../hooks/useWardrobeInsights';
-import { useDailySuggestion } from '../../hooks/useDailySuggestion';
 import { useHomeGreeting } from '../../hooks/useHomeGreeting';
 import { useTabBarClearance } from '../../hooks/useTabBarClearance';
 
@@ -29,11 +27,14 @@ import { useTabBarClearance } from '../../hooks/useTabBarClearance';
  *
  * Loading philosophy: base data (weather, today's outfit, next event,
  * wardrobe insights) all load in parallel and render as soon as each is
- * ready — nothing here blocks on the others. The one AI call
- * (useDailySuggestion) is explicitly decoupled from all of that: it only
- * fires once weather has settled (whether or not weather actually came back)
- * and fades its own card in whenever it resolves, so a slow or failed AI
- * call can never delay or break the rest of Home.
+ * ready — nothing here blocks on the others.
+ *
+ * The AI Daily Suggestion card (useDailySuggestion/getDailySuggestion) was
+ * removed 2026-08-17 at the user's request — it read as low-value on top of
+ * the greeting header's own weather-aware line (useHomeGreeting, a separate,
+ * deterministic, already-localized rule set — see that hook's comment) and
+ * was English-only regardless of the app's language setting. TodayScheduleCard's
+ * `scheduleNote` prop (previously fed by this) is now just omitted.
  */
 export default function HomeScreen() {
   const router = useRouter();
@@ -43,7 +44,6 @@ export default function HomeScreen() {
   const { todayPlan, isLoading: isTodayOutfitLoading } = useTodayOutfit();
   const { nextEvent, isLoading: isNextEventLoading } = useNextEvent();
   const { insights, isLoading: isInsightsLoading } = useWardrobeInsights();
-  const dailySuggestion = useDailySuggestion(weather.current, weather.isReady);
 
   const todayLocalISO = (() => {
     const d = new Date();
@@ -72,33 +72,31 @@ export default function HomeScreen() {
             if (todayPlan?.outfit_id) router.push(`../outfit/${todayPlan.outfit_id}`);
           }}
           onRegenerate={() => {
+            // Repurposed 2026-08-13: "other recommendations" from the user's
+            // own already-saved outfits, ranked by today's weather — not a
+            // brand-new AI generation from scratch. The full AI Stylist stays
+            // reachable elsewhere (Quick Actions, Planner's Generate Outfit).
             router.push({
-              pathname: '/ai/generate-outfit',
-              params: { occasion: todayPlan?.outfits?.occasion || 'Casual', forToday: '1' },
+              pathname: '/outfit/recommend-today',
+              params: { excludeOutfitId: todayPlan?.outfit_id || '' },
             });
           }}
           onCurateLook={() => router.push('/calendar')}
-        />
-
-        <AIDailySuggestionCard
-          suggestion={dailySuggestion.suggestion}
-          isLoading={dailySuggestion.isLoading}
-          delay={320}
+          onRecommend={() => router.push('/outfit/recommend-today')}
         />
 
         <TodayScheduleCard
           nextEvent={isNextEventLoading ? null : nextEvent}
-          scheduleNote={dailySuggestion.suggestion?.scheduleNote ?? null}
           onPress={() => router.push('/calendar')}
-          delay={380}
+          delay={320}
         />
 
-        <WardrobeInsightsGrid insights={insights} isLoading={isInsightsLoading} delay={440} />
+        <WardrobeInsightsGrid insights={insights} isLoading={isInsightsLoading} delay={380} />
 
-        <WeeklyForecastStrip forecast={weather.forecast} isLoading={weather.isLoading} delay={500} />
+        <WeeklyForecastStrip forecast={weather.forecast} isLoading={weather.isLoading} delay={440} />
 
         <QuickActionsRow
-          delay={560}
+          delay={500}
           onAddGarment={() => router.push('/clothing/add-garment')}
           onGenerateOutfit={() => router.push({ pathname: '/ai/generate-outfit', params: { occasion: 'Casual' } })}
           onCalendar={() => router.push('/calendar')}

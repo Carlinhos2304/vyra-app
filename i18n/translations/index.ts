@@ -8,6 +8,7 @@ import { plannerEn, plannerEs } from './planner';
 import { clothingEn, clothingEs } from './clothing';
 import { tabsCoreEn, tabsCoreEs } from './tabsCore';
 import { outfitAiEn, outfitAiEs } from './outfitAi';
+import { outfitRecommendEn, outfitRecommendEs } from './outfitRecommend';
 import { notificationsEn, notificationsEs } from './notifications';
 
 /**
@@ -34,6 +35,7 @@ export const translations = {
     clothing: clothingEn,
     tabs: tabsCoreEn,
     outfitAi: outfitAiEn,
+    outfitRecommend: outfitRecommendEn,
     notifications: notificationsEn,
   },
   es: {
@@ -49,6 +51,7 @@ export const translations = {
     clothing: clothingEs,
     tabs: tabsCoreEs,
     outfitAi: outfitAiEs,
+    outfitRecommend: outfitRecommendEs,
     notifications: notificationsEs,
   },
 };

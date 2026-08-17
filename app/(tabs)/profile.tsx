@@ -8,10 +8,10 @@ import {
   Image,
   Switch,
   Dimensions,
-  Alert,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { AppAlert } from '../../lib/ui/appAlert';
 import { PremiumScreen } from '../../components/ui/PremiumScreen';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { SectionTitle } from '../../components/ui/SectionTitle';
@@ -330,7 +330,7 @@ export default function ProfileScreen() {
   }, []);
 
   const handleSystemSignOutRequest = () => {
-    Alert.alert(
+    AppAlert.alert(
       t('profile.main.logOutDialogTitle'),
       t('profile.main.logOutDialogMessage'),
       [
@@ -344,7 +344,7 @@ export default function ProfileScreen() {
               if (logOutError) throw logOutError;
               router.replace('/auth/login');
             } catch (err: any) {
-              Alert.alert(t('profile.main.sessionErrorTitle'), t('profile.main.sessionErrorMessage'));
+              AppAlert.alert(t('profile.main.sessionErrorTitle'), t('profile.main.sessionErrorMessage'));
             }
           }
         }
@@ -366,7 +366,7 @@ export default function ProfileScreen() {
       if (error) throw error;
       await syncNotifications(value);
     } catch (err) {
-      Alert.alert(t('common.error'), t('profile.main.notificationsErrorMessage'));
+      AppAlert.alert(t('common.error'), t('profile.main.notificationsErrorMessage'));
       setNotificationsEnabled(!value);
     }
   };
@@ -647,7 +647,7 @@ export default function ProfileScreen() {
 
               {/* Bottom Layout footer text elements */}
               <Animated.View style={[styles.appFooterDetailsContainer, animatedFooterStyle]}>
-                <Text style={[styles.footerBrandText, { color: theme.colors.textSecondary }]}>VYRA v1.0</Text>
+                <Text style={[styles.footerBrandText, { color: theme.colors.textSecondary }]}>VYRA v0.1.0</Text>
                 <Text style={[styles.footerSecondaryText, { color: theme.colors.textSecondary }]}>{t('profile.main.footerTagline')}</Text>
               </Animated.View>
             </>
