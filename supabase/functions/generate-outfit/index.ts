@@ -27,6 +27,12 @@
  *   - Return suggestions only. Saving a chosen outfit reuses the EXISTING
  *     outfits / outfit_items write path already in app/(tabs)/create.tsx —
  *     this function never writes to those tables itself.
+ *   - Enforce MONTHLY_GENERATION_LIMIT per user (see
+ *     increment_ai_generation_usage() in supabase/migrations) BEFORE reading
+ *     any wardrobe/profile context or calling the AI provider — a cost
+ *     guardrail while Vyra has no paid plan yet, not a paywall. Checked here
+ *     (service role, server-side) rather than trusted from the client, so it
+ *     can't be bypassed by calling this function directly with a valid JWT.
  * ============================================================================
  */
 
@@ -46,6 +52,11 @@ const RECENT_OUTFITS_LIMIT = 15;
 // recently added items (most likely to be missing AI analysis / most top of
 // mind) rather than silently truncating in an arbitrary order.
 const MAX_WARDROBE_ITEMS = 300;
+// Quiet cost guardrail, not a paywall — Vyra has no paid plan yet. Generous
+// enough that normal use (a few outfits a week) never hits it. Bump this
+// single constant if it needs tuning; no migration required, the limit is
+// passed as a parameter into increment_ai_generation_usage() each call.
+const MONTHLY_GENERATION_LIMIT = 10;
 
 function jsonResponse(body: unknown, status: number) {
   return new Response(JSON.stringify(body), {
@@ -89,6 +100,29 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: 'Unauthorized. A valid session is required.' }, 401);
     }
     userId = userData.user.id;
+
+    // --- Monthly cost guardrail (see file header) — checked before parsing
+    // the body or touching the wardrobe, so a user over their limit never
+    // triggers those reads either. ---
+    const { data: usageResult, error: usageError } = await supabaseAdmin.rpc('increment_ai_generation_usage', {
+      p_user_id: userId,
+      p_monthly_limit: MONTHLY_GENERATION_LIMIT,
+    });
+
+    if (usageError) {
+      // Fail OPEN: a broken quota check must never block a working feature
+      // for everyone. The cost risk from a transient DB error here is far
+      // smaller than the support/trust cost of a working feature going down.
+      console.error('[generate-outfit] usage check failed, allowing request:', usageError.message);
+    } else {
+      const usage = Array.isArray(usageResult) ? usageResult[0] : usageResult;
+      if (usage && usage.allowed === false) {
+        return jsonResponse(
+          { error: 'AI_MONTHLY_LIMIT_REACHED', limit: usage.monthly_limit },
+          429
+        );
+      }
+    }
 
     let body: { occasion?: string; weather?: { temperatureCelsius?: number; condition?: string } | null };
     try {

@@ -61,6 +61,8 @@ export const outfitAiEn = {
     error: {
       title: "Couldn't generate an outfit",
       genericMessage: 'Something went wrong while generating your outfit.',
+      monthlyLimitTitle: "You've reached this month's limit",
+      monthlyLimitMessage: "You've used all {{limit}} AI-generated outfits for this month. It resets next month — you can still build outfits manually in the meantime.",
     },
     actions: {
       generateAgain: 'Generate Again',
@@ -138,6 +140,8 @@ export const outfitAiEs = {
     error: {
       title: 'No se pudo generar un look',
       genericMessage: 'Ocurrió un error al generar tu look.',
+      monthlyLimitTitle: 'Llegaste al límite de este mes',
+      monthlyLimitMessage: 'Ya usaste tus {{limit}} outfits generados con IA de este mes. Se reinicia el próximo mes — mientras tanto podés seguir armando outfits manualmente.',
     },
     actions: {
       generateAgain: 'Generar de Nuevo',

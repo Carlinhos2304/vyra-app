@@ -29,7 +29,7 @@ import { SectionHeader } from '../../components/ui/SectionHeader';
 import { useTheme } from '../../theme';
 import { useLanguage } from '../../i18n';
 import { MOTION } from '../../constants/motion';
-import { generateOutfits, AIAnalysisError, OutfitSuggestion } from '../../lib/services/aiService';
+import { generateOutfits, AIAnalysisError, AIQuotaExceededError, OutfitSuggestion } from '../../lib/services/aiService';
 import { getClothingItemsByIds } from '../../lib/services/clothingServices';
 import { saveOutfit, planOutfitForToday, SaveOutfitError } from '../../lib/services/outfitService';
 
@@ -130,6 +130,7 @@ export default function GenerateOutfitScreen() {
   const [stepIndex, setStepIndex] = useState(0);
   const [outfits, setOutfits] = useState<OutfitSuggestion[]>([]);
   const [errorMessage, setErrorMessage] = useState('');
+  const [errorTitle, setErrorTitle] = useState('');
   const [generationKey, setGenerationKey] = useState(0);
 
   const [garmentsById, setGarmentsById] = useState<Record<string, any>>({});
@@ -166,8 +167,13 @@ export default function GenerateOutfitScreen() {
       } catch (err) {
         if (cancelled) return;
         if (stepTimer) clearInterval(stepTimer);
-        const message = err instanceof AIAnalysisError ? err.message : t('outfitAi.generateOutfit.error.genericMessage');
-        setErrorMessage(message);
+        if (err instanceof AIQuotaExceededError) {
+          setErrorTitle(t('outfitAi.generateOutfit.error.monthlyLimitTitle'));
+          setErrorMessage(t('outfitAi.generateOutfit.error.monthlyLimitMessage', { limit: err.limit }));
+        } else {
+          setErrorTitle(t('outfitAi.generateOutfit.error.title'));
+          setErrorMessage(err instanceof AIAnalysisError ? err.message : t('outfitAi.generateOutfit.error.genericMessage'));
+        }
         setPhase('error');
       }
     }
@@ -329,7 +335,7 @@ export default function GenerateOutfitScreen() {
       {phase === 'error' && (
         <Animated.View entering={FadeIn.duration(500)} style={styles.centerPhaseContainer}>
           <Ionicons name="alert-circle-outline" size={28} color={theme.colors.textSecondary} />
-          <Text style={[styles.phaseTitle, { color: theme.colors.textPrimary }]}>{t('outfitAi.generateOutfit.error.title')}</Text>
+          <Text style={[styles.phaseTitle, { color: theme.colors.textPrimary }]}>{errorTitle || t('outfitAi.generateOutfit.error.title')}</Text>
           <Text style={[styles.phaseSubtitle, { color: theme.colors.textSecondary }]}>{errorMessage}</Text>
           <PremiumButton label={t('outfitAi.generateOutfit.actions.tryAgain')} onPress={handleRegenerate} style={styles.phaseActionButton} />
         </Animated.View>

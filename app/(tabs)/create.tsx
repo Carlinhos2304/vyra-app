@@ -42,7 +42,7 @@ import { useTabBarClearance } from '../../hooks/useTabBarClearance';
 // Supabase client instance integration
 import { supabase } from '../../lib/supabase';
 import { OUTFIT_OCCASIONS } from '../../constants/garmentTaxonomy';
-import { generateOutfits, AIAnalysisError } from '../../lib/services/aiService';
+import { generateOutfits, AIAnalysisError, AIQuotaExceededError } from '../../lib/services/aiService';
 import {
   computeDefaultCanvasPosition,
   arrangeGarmentsOnCanvas,
@@ -397,7 +397,11 @@ export default function CreateOutfitScreen() {
       setCanvasPositions(arrangeGarmentsOnCanvas(matchedGarments));
       if (!outfitName.trim()) setOutfitName(best.title);
     } catch (err: any) {
-      const message = err instanceof AIAnalysisError ? err.message : err?.message || t('tabs.create.recommendFailed');
+      const message = err instanceof AIQuotaExceededError
+        ? t('tabs.create.recommendMonthlyLimitReached', { limit: err.limit })
+        : err instanceof AIAnalysisError
+          ? err.message
+          : err?.message || t('tabs.create.recommendFailed');
       setErrorMessage(message);
     } finally {
       setIsRecommending(false);

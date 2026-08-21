@@ -50,6 +50,22 @@ export interface GarmentAnalysisResult {
 
 export class AIAnalysisError extends Error {}
 
+/** Thrown specifically by generateOutfits() when the generate-outfit Edge
+ * Function blocks the request under its monthly per-user generation cap
+ * (see MONTHLY_GENERATION_LIMIT there, and increment_ai_generation_usage()
+ * in supabase/migrations) — a quiet cost guardrail while Vyra has no paid
+ * plan yet, not a paywall. A subclass of AIAnalysisError, so any existing
+ * `catch` that only checks `instanceof AIAnalysisError` still works
+ * unchanged; callers that want a friendlier, specific message (rather than
+ * this error's plain English fallback text) can check
+ * `instanceof AIQuotaExceededError` first and use `.limit`, which is always
+ * the server's actual configured limit — never hardcoded on the client. */
+export class AIQuotaExceededError extends AIAnalysisError {
+  constructor(public readonly limit: number) {
+    super(`You've reached this month's limit of ${limit} AI-generated outfits. It resets next month.`);
+  }
+}
+
 export interface WeatherInput {
   temperatureCelsius?: number;
   condition?: string;
@@ -154,7 +170,24 @@ export async function generateOutfits(occasion: string, weather?: WeatherInput |
   });
 
   if (error) {
-    const message = await extractInvokeErrorMessage(error, 'The outfit generator could not process this request.');
+    // Read the response body once (a Response can only be consumed once) so
+    // we can both detect the monthly-limit sentinel and, failing that, fall
+    // back to the generic message path — extractInvokeErrorMessage() isn't
+    // reused here for that reason.
+    let body: { error?: string; limit?: number } | null = null;
+    if (error instanceof FunctionsHttpError) {
+      try {
+        body = await error.context.json();
+      } catch {
+        body = null;
+      }
+    }
+
+    if (body?.error === 'AI_MONTHLY_LIMIT_REACHED') {
+      throw new AIQuotaExceededError(typeof body.limit === 'number' ? body.limit : 0);
+    }
+
+    const message = body?.error || (error as { message?: string })?.message || 'The outfit generator could not process this request.';
     console.error('[generateOutfits] Edge Function error:', message);
     throw new AIAnalysisError(message);
   }
